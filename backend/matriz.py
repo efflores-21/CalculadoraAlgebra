@@ -1,69 +1,113 @@
 """
-Módulo de operaciones con matrices
-Funciones para manipular, mostrar y operar con matrices
-sin usar librerías como NumPy.
-Ahora utiliza Fraction para exactitud.
+Módulo de operaciones con matrices.
+Contiene la representación de una matriz aumentada y funciones auxiliares.
 """
 
 from fractions import Fraction
 
 
+def _a_fraction(valor):
+    if isinstance(valor, Fraction):
+        return valor
+    if isinstance(valor, int):
+        return Fraction(valor, 1)
+    if isinstance(valor, float):
+        return Fraction(str(valor))
+    if isinstance(valor, str):
+        valor = valor.strip()
+        if valor == "":
+            return Fraction(0, 1)
+        return Fraction(valor)
+    return Fraction(valor)
+
+
+class MatrizAumentada:
+    """Representa una matriz aumentada [A | b]."""
+
+    def __init__(self, filas):
+        self.datos = [[_a_fraction(valor) for valor in fila] for fila in filas]
+        self.filas = len(self.datos)
+        self.n_variables = len(self.datos[0]) - 1 if self.datos else 0
+
+    def copiar(self):
+        return MatrizAumentada([fila[:] for fila in self.datos])
+
+    def intercambiar_filas(self, i, j):
+        self.datos[i], self.datos[j] = self.datos[j], self.datos[i]
+
+    def escalar_fila(self, i, escalar):
+        escalar = _a_fraction(escalar)
+        if escalar == 0:
+            return
+        self.datos[i] = [valor * escalar for valor in self.datos[i]]
+
+    def sumar_multiplo_fila(self, i, j, multiplicador):
+        multiplicador = _a_fraction(multiplicador)
+        fila_i = self.datos[i]
+        fila_j = self.datos[j]
+        for k in range(len(fila_i)):
+            fila_i[k] += multiplicador * fila_j[k]
+
+    def mostrar(self, mensaje="Matriz"):
+        print(f"\n{mensaje}:")
+        for fila in self.datos:
+            print("  ".join(formatear_valor(v) for v in fila))
+
+    def __len__(self):
+        return len(self.datos)
+
+    def __getitem__(self, index):
+        return self.datos[index]
+
+    def __iter__(self):
+        return iter(self.datos)
+
+
 def crear_matriz_aumentada(m, n, coeficientes, terminos):
-    """
-    Crea la matriz aumentada [A|b] a partir de los coeficientes y términos independientes.
-    Args:
-        m: número de ecuaciones (filas)
-        n: número de variables (columnas)
-        coeficientes: lista de listas con los coeficientes de A (Fraction)
-        terminos: lista con los términos independientes b (Fraction)
-    Returns:
-        matriz_aumentada: lista de listas representando [A|b]
-    """
-    matriz_aumentada = []
+    """Crea la matriz aumentada [A | b] desde coeficientes y términos independientes."""
+    matriz = []
     for i in range(m):
-        fila = coeficientes[i][:] + [terminos[i]]
-        matriz_aumentada.append(fila)
-    return matriz_aumentada
+        fila = [_a_fraction(valor) for valor in coeficientes[i]] + [_a_fraction(terminos[i])]
+        matriz.append(fila)
+    return matriz
 
 
 def mostrar_matriz(matriz, mensaje="Matriz"):
-    """
-    Imprime la matriz en formato visual (para consola, pero se puede reutilizar en GUI).
-    """
     print(f"\n{mensaje}:")
     for fila in matriz:
-        print("  ".join(f"{str(elem):>10}" for elem in fila))
+        print("  ".join(formatear_valor(valor) for valor in fila))
 
 
 def intercambiar_filas(matriz, i, j):
-    """
-    Intercambia dos filas de la matriz.
-    Operación elemental: Fila_i ↔ Fila_j
-    """
+    if i == j:
+        return
     matriz[i], matriz[j] = matriz[j], matriz[i]
 
 
 def multiplicar_fila(matriz, i, escalar):
-    """
-    Multiplica una fila por un escalar no nulo.
-    Operación elemental: Fila_i → escalar * Fila_i
-    """
-    if escalar != 0:
-        for j in range(len(matriz[i])):
-            matriz[i][j] *= escalar
+    escalar = _a_fraction(escalar)
+    if escalar == 0:
+        return
+    for j in range(len(matriz[i])):
+        matriz[i][j] = _a_fraction(matriz[i][j]) * escalar
 
 
 def sumar_filas(matriz, i, j, multiplicador):
-    """
-    Suma a una fila, otra fila multiplicada por un escalar.
-    Operación elemental: Fila_i → Fila_i + multiplicador * Fila_j
-    """
+    multiplicador = _a_fraction(multiplicador)
     for k in range(len(matriz[i])):
-        matriz[i][k] += multiplicador * matriz[j][k]
+        matriz[i][k] = _a_fraction(matriz[i][k]) + multiplicador * _a_fraction(matriz[j][k])
 
 
 def es_cero(valor):
-    """
-    Verifica si un valor es exactamente cero (usando Fraction).
-    """
-    return valor == Fraction(0, 1)
+    return _a_fraction(valor) == Fraction(0, 1)
+
+
+def formatear_valor(valor):
+    valor = _a_fraction(valor)
+    if valor.denominator == 1:
+        return str(valor.numerator)
+    return f"{valor.numerator}/{valor.denominator}"
+
+
+def formatear_fila(fila):
+    return "[" + " ".join(formatear_valor(v) for v in fila) + "]"

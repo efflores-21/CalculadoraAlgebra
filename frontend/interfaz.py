@@ -70,9 +70,22 @@ class InterfazCalculadora:
         ttk.Button(frame_botones, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
         ttk.Button(frame_botones, text="Salir", command=self.root.quit).pack(side=tk.LEFT, padx=10)
 
-        # Área de resultados (texto)
-        self.text_resultados = tk.Text(self.root, height=18, width=100, state=tk.DISABLED)
-        self.text_resultados.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+        # Área de resultados (texto) con scrollbar
+        frame_resultados = ttk.Frame(self.root)
+        frame_resultados.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        self.text_resultados = tk.Text(frame_resultados, height=18, width=100, state=tk.DISABLED,
+                                      wrap=tk.WORD, yscrollcommand=self._actualizar_scroll_resultados)
+        self.text_resultados.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.scrollbar_resultados = ttk.Scrollbar(frame_resultados, orient="vertical",
+                                                 command=self.text_resultados.yview)
+        self.scrollbar_resultados.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def _actualizar_scroll_resultados(self, *args):
+        """Sincroniza el desplazamiento del texto con la barra lateral."""
+        if hasattr(self, 'scrollbar_resultados'):
+            self.scrollbar_resultados.set(*args)
 
     def actualizar_tabla(self):
         """Reconstruye la tabla de entradas según m y n."""
