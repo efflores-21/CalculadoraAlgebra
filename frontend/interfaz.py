@@ -1,215 +1,230 @@
+"""
+Módulo de interfaz gráfica de usuario (GUI) usando tkinter.
+Permite ingresar los datos, resolver y mostrar resultados con fracciones.
+"""
+
 import tkinter as tk
-import tkinter.ttk as ttk
-import tkinter.scrolledtext as scrolledtext
-import tkinter.messagebox as messagebox
+from tkinter import ttk, messagebox
 from fractions import Fraction
 
-from backend.matriz import MatrizAumentada, formatear_valor
-from backend.eliminacion import EliminacionGaussiana
-from backend.clasificador import Clasificador
+from backend.matriz import crear_matriz_aumentada
+from backend.eliminacion import resolver_sistema
+from backend.clasificador import clasificar_sistema
 
 
 class InterfazCalculadora:
-    """Interfaz gráfica con Tkinter para la calculadora de sistemas lineales."""
-
     def __init__(self, root):
         self.root = root
-        self.root.title("Calculadora de Álgebra Lineal - Eliminación Gaussiana")
-        self.root.geometry("1100x820")
-        self.root.resizable(True, True)
-        self.root.configure(bg="#edf3ff")
+        self.root.title("Calculadora de Álgebra Lineal")
+        self.root.geometry("1000x750")
 
-        self._aplicar_estilo()
+        # Variables para dimensiones
+        self.m_var = tk.IntVar(value=2)
+        self.n_var = tk.IntVar(value=2)
 
-        # Variables de control
-        self.m = tk.IntVar(value=2)
-        self.n = tk.IntVar(value=2)
-        self.matriz_entries = []  # lista de listas de Entry
+        # Contenedores para entradas
+        self.entradas_coef = []   # lista de listas de Entry
+        self.entradas_b = []      # lista de Entry
 
-        self._crear_widgets()
+        self.crear_widgets()
+        self.actualizar_tabla()
 
-    def _aplicar_estilo(self):
-        """Configura un tema visual limpio para la interfaz."""
-        style = ttk.Style(self.root)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
+    def crear_widgets(self):
+        # Frame superior: dimensiones
+        frame_dim = ttk.LabelFrame(self.root, text="Dimensiones del sistema")
+        frame_dim.pack(pady=10, padx=10, fill=tk.X)
 
-        style.configure("TFrame", background="#edf3ff")
-        style.configure("TLabelframe", background="#edf3ff", foreground="#173a5e")
-        style.configure("TLabelframe.Label", background="#edf3ff", foreground="#173a5e", font=("Segoe UI", 10, "bold"))
-        style.configure("TButton", font=("Segoe UI", 10, "bold"), padding=(12, 8))
-        style.map("TButton", background=[("active", "#dfeeff")], foreground=[("active", "#0f172a")])
-        style.configure("TEntry", fieldbackground="#ffffff", foreground="#0f172a")
-        style.configure("TLabel", background="#edf3ff", foreground="#1f2937")
+        ttk.Label(frame_dim, text="Ecuaciones (m):").grid(row=0, column=0, padx=5, pady=5)
+        spin_m = ttk.Spinbox(frame_dim, from_=1, to=10, textvariable=self.m_var, width=5,
+                             command=self.actualizar_tabla)
+        spin_m.grid(row=0, column=1, padx=5)
 
-    def _crear_widgets(self):
-        """Crea todos los elementos de la interfaz."""
-        main_frame = ttk.Frame(self.root, padding="16")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frame_dim, text="Variables (n):").grid(row=0, column=2, padx=5, pady=5)
+        spin_n = ttk.Spinbox(frame_dim, from_=1, to=10, textvariable=self.n_var, width=5,
+                             command=self.actualizar_tabla)
+        spin_n.grid(row=0, column=3, padx=5)
 
-        titulo = ttk.Label(main_frame, text="Calculadora de Álgebra Lineal", font=("Segoe UI", 18, "bold"), foreground="#173a5e")
-        titulo.pack(anchor=tk.W, pady=(0, 10))
+        # Frame para la tabla de coeficientes (con scroll)
+        self.frame_tabla = ttk.LabelFrame(self.root, text="Matriz aumentada [A | b] (ingrese fracciones o decimales)")
+        self.frame_tabla.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
 
-        subtitulo = ttk.Label(main_frame, text="Solución de sistemas lineales por eliminación por filas", foreground="#44576a")
-        subtitulo.pack(anchor=tk.W, pady=(0, 12))
+        self.canvas = tk.Canvas(self.frame_tabla)
+        self.scrollbar = ttk.Scrollbar(self.frame_tabla, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
 
-        # --- Frame: Dimensiones ---
-        dim_frame = ttk.LabelFrame(main_frame, text="Dimensiones del sistema", padding="10")
-        dim_frame.pack(fill=tk.X, pady=5)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        ttk.Label(dim_frame, text="Número de ecuaciones (m):", font=("Segoe UI", 10)).grid(row=0, column=0, padx=5, pady=8, sticky=tk.W)
-        ttk.Entry(dim_frame, textvariable=self.m, width=6, font=("Segoe UI", 10)).grid(row=0, column=1, padx=5, pady=8, sticky=tk.W)
-        ttk.Label(dim_frame, text="Número de variables (n):", font=("Segoe UI", 10)).grid(row=0, column=2, padx=15, pady=8, sticky=tk.W)
-        ttk.Entry(dim_frame, textvariable=self.n, width=6, font=("Segoe UI", 10)).grid(row=0, column=3, padx=5, pady=8, sticky=tk.W)
-        ttk.Button(dim_frame, text="Generar tabla", command=self._generar_tabla, style="Accent.TButton").grid(row=0, column=4, padx=15, pady=8)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
 
-        # --- Frame: Matriz aumentada ---
-        self.tabla_frame = ttk.LabelFrame(main_frame, text="Matriz aumentada [A | b]", padding="10")
-        self.tabla_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Botones
+        frame_botones = ttk.Frame(self.root)
+        frame_botones.pack(pady=10)
 
-        # Canvas con scroll para la tabla
-        self.tabla_canvas = tk.Canvas(self.tabla_frame, bg="#ffffff", highlightthickness=1, highlightbackground="#d8e5f5")
-        self.tabla_scroll_y = ttk.Scrollbar(self.tabla_frame, orient="vertical", command=self.tabla_canvas.yview)
-        self.tabla_scroll_x = ttk.Scrollbar(self.tabla_frame, orient="horizontal", command=self.tabla_canvas.xview)
-        self.tabla_canvas.configure(yscrollcommand=self.tabla_scroll_y.set, xscrollcommand=self.tabla_scroll_x.set)
+        ttk.Button(frame_botones, text="Resolver", command=self.resolver).pack(side=tk.LEFT, padx=10)
+        ttk.Button(frame_botones, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
+        ttk.Button(frame_botones, text="Salir", command=self.root.quit).pack(side=tk.LEFT, padx=10)
 
-        self.tabla_interior = ttk.Frame(self.tabla_canvas)
-        self.tabla_canvas.create_window((0, 0), window=self.tabla_interior, anchor="nw")
+        # Área de resultados (texto)
+        self.text_resultados = tk.Text(self.root, height=18, width=100, state=tk.DISABLED)
+        self.text_resultados.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
 
-        self.tabla_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.tabla_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tabla_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.tabla_interior.bind("<Configure>",
-                                 lambda e: self.tabla_canvas.configure(scrollregion=self.tabla_canvas.bbox("all")))
-
-        # --- Botones ---
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(btn_frame, text="Resolver sistema", command=self._resolver).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Limpiar", command=self._limpiar).pack(side=tk.LEFT, padx=5)
-
-        # --- Frame: Resultados ---
-        result_frame = ttk.LabelFrame(main_frame, text="Resultados", padding="10")
-        result_frame.pack(fill=tk.BOTH, expand=True, pady=8)
-
-        self.result_text = scrolledtext.ScrolledText(result_frame, height=14, wrap=tk.WORD, font=("Consolas", 10), bg="#ffffff", fg="#0f172a")
-        self.result_text.pack(fill=tk.BOTH, expand=True)
-
-        # Inicializar tabla vacía
-        self._generar_tabla()
-
-    def _generar_tabla(self):
-        """Crea la tabla de entradas según m y n."""
-        for widget in self.tabla_interior.winfo_children():
+    def actualizar_tabla(self):
+        """Reconstruye la tabla de entradas según m y n."""
+        # Limpiar frame anterior
+        for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-        self.matriz_entries = []
 
-        m = self.m.get()
-        n = self.n.get()
-        if m <= 0 or n <= 0:
-            messagebox.showwarning("Dimensiones inválidas", "Ingrese valores positivos para m y n.")
-            return
+        self.entradas_coef = []
+        self.entradas_b = []
+
+        m = self.m_var.get()
+        n = self.n_var.get()
 
         # Encabezados
         for j in range(n):
-            ttk.Label(self.tabla_interior, text=f"x{j+1}", font=('Segoe UI', 10, 'bold'), foreground="#173a5e").grid(row=0, column=j, padx=4, pady=6, sticky=tk.EW)
-        ttk.Label(self.tabla_interior, text="|", font=('Segoe UI', 10, 'bold'), foreground="#173a5e").grid(row=0, column=n, padx=8, pady=6)
-        ttk.Label(self.tabla_interior, text="b", font=('Segoe UI', 10, 'bold'), foreground="#173a5e").grid(row=0, column=n+1, padx=4, pady=6, sticky=tk.EW)
+            ttk.Label(self.scrollable_frame, text=f"x{j+1}", font=('Arial', 10, 'bold')).grid(
+                row=0, column=j, padx=2, pady=2)
+        ttk.Label(self.scrollable_frame, text="|  b", font=('Arial', 10, 'bold')).grid(
+            row=0, column=n, padx=5, pady=2)
 
-        # Entradas
+        # Filas de entrada
         for i in range(m):
             fila_entries = []
-            for j in range(n+1):
-                entry = ttk.Entry(self.tabla_interior, width=10, justify=tk.CENTER)
-                entry.grid(row=i+1, column=j, padx=4, pady=4)
+            for j in range(n):
+                entry = ttk.Entry(self.scrollable_frame, width=10)
+                entry.grid(row=i+1, column=j, padx=2, pady=2)
+                entry.insert(0, "0")
                 fila_entries.append(entry)
-            self.matriz_entries.append(fila_entries)
+            self.entradas_coef.append(fila_entries)
 
-        for j in range(n+2):
-            self.tabla_interior.columnconfigure(j, weight=1, uniform="col")
+            entry_b = ttk.Entry(self.scrollable_frame, width=10)
+            entry_b.grid(row=i+1, column=n, padx=5, pady=2)
+            entry_b.insert(0, "0")
+            self.entradas_b.append(entry_b)
 
-    def _leer_matriz(self):
-        """Lee los valores de la tabla y retorna una MatrizAumentada."""
-        m = self.m.get()
-        n = self.n.get()
-        datos = []
+    def leer_datos(self):
+        """Lee los valores de las entradas y los convierte a Fraction."""
+        m = self.m_var.get()
+        n = self.n_var.get()
+        coeficientes = []
+        terminos = []
+
         try:
             for i in range(m):
                 fila = []
-                for j in range(n+1):
-                    val = self.matriz_entries[i][j].get().strip()
-                    if val == "":
-                        raise ValueError(f"Celda vacía en fila {i+1}, columna {j+1}")
-                    valor = val.replace(',', '.')
-                    fila.append(Fraction(valor))
-                datos.append(fila)
-        except (ValueError, ZeroDivisionError) as e:
-            messagebox.showerror("Error de entrada", f"Revise los datos ingresados.\n{e}")
-            return None
-        return MatrizAumentada(datos)
+                for j in range(n):
+                    texto = self.entradas_coef[i][j].get().strip()
+                    if texto == "":
+                        texto = "0"
+                    # Convertir a Fraction (acepta "1/2", "0.5", etc.)
+                    fila.append(Fraction(texto))
+                coeficientes.append(fila)
 
-    def _resolver(self):
-        """Ejecuta la eliminación y muestra resultados."""
-        mat_original = self._leer_matriz()
-        if mat_original is None:
-            return
-
-        resultado = ""
-
-        # Mostrar matriz original
-        resultado += "=== Matriz aumentada original ===\n"
-        resultado += mat_original.mostrar() + "\n\n"
-
-        # Crear eliminador y escalonar
-        eliminador = EliminacionGaussiana(mat_original)
-        try:
-            mat_escalonada = eliminador.escalonar(mostrar_pasos=False)
+                texto_b = self.entradas_b[i].get().strip()
+                if texto_b == "":
+                    texto_b = "0"
+                terminos.append(Fraction(texto_b))
         except Exception as e:
-            messagebox.showerror("Error en eliminación", f"Ocurrió un error: {e}")
+            messagebox.showerror("Error de entrada", f"Dato inválido: {e}\nUse fracciones como 1/2 o decimales.")
+            return None, None, None, None
+
+        return m, n, coeficientes, terminos
+
+    def resolver(self):
+        """Ejecuta la resolución y muestra los resultados."""
+        self.text_resultados.config(state=tk.NORMAL)
+        self.text_resultados.delete(1.0, tk.END)
+
+        datos = self.leer_datos()
+        if datos[0] is None:
+            self.text_resultados.config(state=tk.DISABLED)
             return
 
-        resultado += "=== Matriz escalonada ===\n"
-        resultado += mat_escalonada.mostrar() + "\n\n"
+        m, n, coeficientes, terminos = datos
 
-        # Clasificar
-        clasif = Clasificador(mat_escalonada)
-        tipo, sol, libres = clasif.clasificar()
+        try:
+            matriz_aum = crear_matriz_aumentada(m, n, coeficientes, terminos)
+            resultado = resolver_sistema(matriz_aum)
+            clasificacion = clasificar_sistema(resultado['matriz_escalonada'], resultado['rango'])
 
-        if tipo == 'inconsistente':
-            resultado += "Clasificación: **Sistema Inconsistente** (Sin solución)\n"
-            resultado += "Se detectó una fila del tipo [0 ... 0 | k] con k ≠ 0.\n"
-        elif tipo == 'determinado':
-            resultado += "Clasificación: **Sistema Consistente Determinado** (Solución única)\n"
-            resultado += "Solución:\n"
-            for i, val in enumerate(sol):
-                valor_texto = formatear_valor(val)
-                valor_lineas = valor_texto.split("\n")
-                resultado += f"  x{i+1} = {valor_lineas[0]}\n"
-                for linea in valor_lineas[1:]:
-                    resultado += f"          {linea}\n"
-            errores = Clasificador.verificar_solucion(mat_original, sol)
-            if errores is not None:
-                resultado += "\nVerificación (error absoluto por ecuación):\n"
-                for i, err in enumerate(errores):
-                    valor_texto = formatear_valor(err)
-                    valor_lineas = valor_texto.split("\n")
-                    resultado += f"  Ec {i+1}: {valor_lineas[0]}\n"
-                    for linea in valor_lineas[1:]:
-                        resultado += f"          {linea}\n"
-        else:  # indeterminado
-            resultado += "Clasificación: **Sistema Consistente Indeterminado** (Infinitas soluciones)\n"
-            resultado += "Variables libres (índices): " + ", ".join(f"x{idx+1}" for idx in libres) + "\n"
-            resultado += "\n(Solución paramétrica no calculada automáticamente)\n"
+            self.mostrar_resultados(clasificacion, resultado, coeficientes, terminos)
 
-        self.result_text.delete(1.0, tk.END)
-        self.result_text.insert(tk.END, resultado)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al resolver: {e}")
 
-    def _limpiar(self):
-        """Limpia el área de resultados y las entradas de la tabla."""
-        self.result_text.delete(1.0, tk.END)
-        for fila in self.matriz_entries:
+        self.text_resultados.config(state=tk.DISABLED)
+
+    def mostrar_resultados(self, clasificacion, resultado, coeficientes, terminos):
+        """Vuelca la información en el área de texto."""
+        texto = self.text_resultados
+        texto.insert(tk.END, "="*70 + "\n")
+        texto.insert(tk.END, "CLASIFICACIÓN DEL SISTEMA\n")
+        texto.insert(tk.END, f"Tipo: {clasificacion['tipo']}\n")
+        texto.insert(tk.END, f"Descripción: {clasificacion['descripcion']}\n")
+        texto.insert(tk.END, "="*70 + "\n\n")
+
+        if clasificacion['tipo'] != 'Inconsistente':
+            texto.insert(tk.END, "SOLUCIÓN:\n")
+            soluciones = resultado['soluciones']
+            n = len(coeficientes[0])
+            for var in range(n):
+                if var in resultado['variables_libres']:
+                    texto.insert(tk.END, f"  x{var+1} = t_{var+1} (variable libre)\n")
+                else:
+                    valor = soluciones.get(var, Fraction(0,1))
+                    # Si el denominador es 1, mostrar solo el numerador
+                    if valor.denominator == 1:
+                        texto.insert(tk.END, f"  x{var+1} = {valor.numerator}\n")
+                    else:
+                        texto.insert(tk.END, f"  x{var+1} = {valor}\n")
+            texto.insert(tk.END, "\n")
+
+            # Verificación
+            texto.insert(tk.END, "VERIFICACIÓN (sustituyendo en el sistema original):\n")
+            sols_verif = soluciones.copy()
+            for var in resultado['variables_libres']:
+                sols_verif[var] = Fraction(0, 1)
+
+            todas_ok = True
+            for i, fila in enumerate(coeficientes):
+                suma = Fraction(0, 1)
+                for j, coef in enumerate(fila):
+                    suma += coef * sols_verif.get(j, Fraction(0, 1))
+                esperado = terminos[i]
+                ok = (suma == esperado)
+                if not ok:
+                    todas_ok = False
+                texto.insert(tk.END, f"  Ecuación {i+1}: {suma} = {esperado}  {'[OK]' if ok else '[ERROR]'}\n")
+            texto.insert(tk.END, f"\nResultado de la verificación: {'TODAS LAS ECUACIONES OK' if todas_ok else 'ALGUNAS ECUACIONES NO COINCIDEN'}\n")
+
+            # Mostrar matriz escalonada
+            texto.insert(tk.END, "\nMATRIZ ESCALONADA FINAL:\n")
+            for fila in resultado['matriz_escalonada']:
+                fila_str = "  ".join(str(elem) for elem in fila)
+                texto.insert(tk.END, f"  {fila_str}\n")
+        else:
+            texto.insert(tk.END, "No hay solución que verificar.\n")
+
+        texto.insert(tk.END, "\n" + "="*70 + "\n")
+
+    def limpiar(self):
+        """Limpia el área de resultados y reinicia las entradas a 0."""
+        self.text_resultados.config(state=tk.NORMAL)
+        self.text_resultados.delete(1.0, tk.END)
+        self.text_resultados.config(state=tk.DISABLED)
+
+        # Reiniciar entradas a 0
+        for fila in self.entradas_coef:
             for entry in fila:
                 entry.delete(0, tk.END)
+                entry.insert(0, "0")
+        for entry in self.entradas_b:
+            entry.delete(0, tk.END)
+            entry.insert(0, "0")
+
