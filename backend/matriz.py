@@ -111,3 +111,8 @@ def formatear_valor(valor):
 
 def formatear_fila(fila):
     return "[" + " ".join(formatear_valor(v) for v in fila) + "]"
+
+
+def subindice(n):
+    """Devuelve el carácter Unicode subíndice para el número n (0-9)."""
+    return str(int(n)).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
