@@ -140,6 +140,49 @@ def sustitucion_hacia_atras(matriz, rango):
     return soluciones, variables_libres
 
 
+def solucion_general(matriz, rango):
+    """Construye soluciones afines: (constante, {variable_libre: coeficiente})."""
+    n = len(matriz[0]) - 1
+    pivotes = []
+    for i in range(rango):
+        pivote = next((c for c in range(n) if not es_cero(matriz[i][c])), None)
+        if pivote is not None:
+            pivotes.append(pivote)
+
+    libres = [c for c in range(n) if c not in pivotes]
+    expresiones = {
+        libre: (Fraction(0, 1), {libre: Fraction(1, 1)})
+        for libre in libres
+    }
+    pasos = []
+
+    for i in range(rango - 1, -1, -1):
+        pivote = next((c for c in range(n) if not es_cero(matriz[i][c])), None)
+        if pivote is None:
+            continue
+
+        constante = matriz[i][n]
+        coeficientes = {}
+        for c in range(pivote + 1, n):
+            factor = matriz[i][c]
+            if es_cero(factor) or c not in expresiones:
+                continue
+            constante_c, terminos_c = expresiones[c]
+            constante -= factor * constante_c
+            for libre, coeficiente in terminos_c.items():
+                coeficientes[libre] = coeficientes.get(libre, Fraction(0, 1)) - factor * coeficiente
+
+        coeficientes = {k: v for k, v in coeficientes.items() if not es_cero(v)}
+        divisor = matriz[i][pivote]
+        constante /= divisor
+        coeficientes = {k: v / divisor for k, v in coeficientes.items()}
+        expresiones[pivote] = (constante, coeficientes)
+        pasos.append((pivote, constante, coeficientes))
+
+    pasos.reverse()
+    return expresiones, libres, pasos
+
+
 def resolver_sistema(matriz_aumentada, metodo='gauss'):
     """Resuelve el sistema usando el método elegido."""
     if isinstance(matriz_aumentada, MatrizAumentada):
@@ -149,11 +192,14 @@ def resolver_sistema(matriz_aumentada, metodo='gauss'):
 
     matriz_final, rango, pasos = eliminacion_con_pasos(datos, metodo=metodo, verbose=True)
 
+    soluciones_generales, variables_libres, pasos_solucion = solucion_general(
+        matriz_final, rango
+    )
+
     if metodo.lower() == 'gauss':
-        soluciones, variables_libres = sustitucion_hacia_atras(matriz_final, rango)
+        soluciones, _ = sustitucion_hacia_atras(matriz_final, rango)
     else:
         soluciones = {}
-        variables_libres = []
         n = len(matriz_final[0]) - 1
         for i in range(rango):
             pivote_col = -1
@@ -163,16 +209,8 @@ def resolver_sistema(matriz_aumentada, metodo='gauss'):
                     break
             if pivote_col != -1:
                 soluciones[pivote_col] = matriz_final[i][n]
-
-        pivotes = []
-        for i in range(rango):
-            for c in range(n):
-                if not es_cero(matriz_final[i][c]) and c not in pivotes:
-                    pivotes.append(c)
-        for c in range(n):
-            if c not in pivotes:
-                variables_libres.append(c)
-                soluciones[c] = None
+        for libre in variables_libres:
+            soluciones[libre] = None
 
     return {
         'matriz_escalonada': matriz_final,
@@ -180,6 +218,8 @@ def resolver_sistema(matriz_aumentada, metodo='gauss'):
         'soluciones': soluciones,
         'variables_libres': variables_libres,
         'pasos': pasos,
+        'soluciones_generales': soluciones_generales,
+        'pasos_solucion': pasos_solucion,
     }
 
 
@@ -203,4 +243,3 @@ def eliminacion_gaussiana(matriz, verbose=False):
     """Wrapper legacy para Gauss."""
     matriz_final, rango, _ = eliminacion_con_pasos(matriz, metodo='gauss', verbose=verbose)
     return matriz_final, rango
-

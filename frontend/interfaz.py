@@ -387,6 +387,81 @@ class InterfazCalculadora(ctk.CTk):
 
         return "\n".join(lineas)
 
+    def _formatear_expresion(self, constante, terminos):
+        partes = []
+        if constante != 0 or not terminos:
+            partes.append(formatear_valor(constante))
+        for variable, coeficiente in sorted(terminos.items()):
+            signo = "+" if coeficiente >= 0 else "-"
+            valor = abs(coeficiente)
+            factor = "" if valor == 1 else f"{formatear_valor(valor)}·"
+            termino = f"{factor}t{subindice(variable + 1)}"
+            partes.append(f"{signo} {termino}")
+        return " ".join(partes).replace("+ -", "- ")
+
+    def _insertar_verificacion(self, coeficientes, terminos, soluciones, variables_libres):
+        self.txt_resultados.insert("end", "\nVERIFICACIÓN PASO A PASO:\n")
+        self.txt_resultados.insert("end", "Se asigna 0 a las variables libres para comprobar una solución.\n\n")
+
+        valores = {}
+        for variable, expresion in soluciones.items():
+            valores[variable] = expresion[0]
+
+        for i, fila in enumerate(coeficientes):
+            acumulado = Fraction(0, 1)
+            partes = []
+            for j, coeficiente in enumerate(fila):
+                valor = valores.get(j, Fraction(0, 1))
+                producto = coeficiente * valor
+                acumulado += producto
+                partes.append(
+                    f"{formatear_valor(coeficiente)}·({formatear_valor(valor)})"
+                    f" = {formatear_valor(producto)}"
+                )
+                self.txt_resultados.insert(
+                    "end",
+                    f"  Ecuación {i + 1}, término x{subindice(j + 1)}: "
+                    f"{partes[-1]}; acumulado = {formatear_valor(acumulado)}\n"
+                )
+
+            esperado = terminos[i]
+            estado = "[OK]" if acumulado == esperado else "[ERROR]"
+            self.txt_resultados.insert(
+                "end",
+                f"  Ecuación {i + 1}: {formatear_valor(acumulado)} = "
+                f"{formatear_valor(esperado)} {estado}\n\n"
+            )
+
+    def _insertar_solucion_general(self, resultado, n):
+        soluciones = resultado["soluciones_generales"]
+        libres = resultado["variables_libres"]
+        self.txt_resultados.insert("end", "\nSOLUCIÓN GENERAL PARAMETRIZADA:\n")
+
+        if libres:
+            nombres = ", ".join(f"t{subindice(v + 1)}" for v in libres)
+            self.txt_resultados.insert("end", f"Parámetros libres: {nombres}\n")
+        else:
+            self.txt_resultados.insert("end", "No hay parámetros libres.\n")
+
+        self.txt_resultados.insert("end", "\nDespeje paso a paso:\n")
+        for paso, (variable, constante, terminos) in enumerate(resultado["pasos_solucion"], 1):
+            expresion = self._formatear_expresion(constante, terminos)
+            self.txt_resultados.insert(
+                "end",
+                f"  Paso {paso}: x{subindice(variable + 1)} = {expresion}\n"
+            )
+
+        self.txt_resultados.insert("end", "\nForma final:\n")
+        for variable in range(n):
+            constante, terminos = soluciones.get(
+                variable, (Fraction(0, 1), {})
+            )
+            expresion = self._formatear_expresion(constante, terminos)
+            self.txt_resultados.insert(
+                "end",
+                f"  x{subindice(variable + 1)} = {expresion}\n"
+            )
+
     def resolver(self):
         self.txt_resultados.configure(state="normal")
         self.txt_resultados.delete("1.0", "end")
@@ -424,6 +499,16 @@ class InterfazCalculadora(ctk.CTk):
                     else:
                         val = soluciones.get(var, Fraction(0, 1))
                         self.txt_resultados.insert("end", f"  • x{subindice(var + 1)} = {formatear_valor(val)}\n")
+
+                self._insertar_solucion_general(resultado, n)
+                self._insertar_verificacion(
+                    coeficientes,
+                    terminos,
+                    resultado["soluciones_generales"],
+                    resultado["variables_libres"],
+                )
+
+                self.txt_resultados.see("end")
 
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error en el cálculo: {e}")
