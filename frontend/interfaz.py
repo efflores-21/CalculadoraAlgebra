@@ -6,9 +6,21 @@ import customtkinter as ctk
 from tkinter import messagebox
 from fractions import Fraction
 
-from backend.matriz import crear_matriz_aumentada, formatear_valor, subindice
+from backend.matriz import crear_matriz_aumentada, formatear_valor, subindice, _a_fraction
 from backend.eliminacion import resolver_sistema
 from backend.clasificador import clasificar_sistema
+from backend.vectores import (
+    suma_vectores,
+    resta_vectores,
+    multiplicar_escalar_vector,
+    es_combinacion_lineal,
+)
+from backend.operaciones_matriciales import (
+    suma_matrices,
+    resta_matrices,
+    multiplicar_escalar_matriz,
+    multiplicar_matrices,
+)
 
 # Configuración del tema visual
 ctk.set_appearance_mode("Dark")
@@ -36,22 +48,47 @@ class InterfazCalculadora(ctk.CTk):
         self.entradas_coef = []
         self.entradas_b = []
 
-        self._configurar_grid()
-        self._crear_sidebar()
-        self._crear_panel_matriz()
-        self._crear_panel_resultados()
+        self.vec_n_var = ctk.IntVar(value=DIM_POR_DEFECTO)
+        self.vec_k_var = ctk.IntVar(value=2)
+        self.entradas_vectores = []
+        self.entradas_b_vec = []
 
-        self.actualizar_tabla()
+        self.mat_am_var = ctk.IntVar(value=2)
+        self.mat_an_var = ctk.IntVar(value=3)
+        self.mat_bm_var = ctk.IntVar(value=3)
+        self.mat_bn_var = ctk.IntVar(value=2)
+        self.entradas_A = []
+        self.entradas_B = []
+
+        self._configurar_grid()
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        self.tabs.add("Sistemas lineales")
+        self.tabs.add("Vectores")
+        self.tabs.add("Matrices")
+
+        self._construir_pestana_sistemas()
+        self._construir_pestana_vectores()
+        self._construir_pestana_matrices()
 
     def _configurar_grid(self):
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
+
+    def _construir_pestana_sistemas(self):
+        padre = self.tabs.tab("Sistemas lineales")
+        padre.grid_columnconfigure(1, weight=1)
+        padre.grid_rowconfigure(0, weight=1)
+        self._crear_sidebar(padre)
+        self._crear_panel_matriz(padre)
+        self._crear_panel_resultados()
+        self.actualizar_tabla()
 
     # ------------------------------------------------------------------
     # SIDEBAR
     # ------------------------------------------------------------------
-    def _crear_sidebar(self):
-        sidebar = ctk.CTkFrame(self, width=250, corner_radius=0)
+    def _crear_sidebar(self, padre):
+        sidebar = ctk.CTkFrame(padre, width=250, corner_radius=0)
         sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         sidebar.grid_rowconfigure(9, weight=1)
 
@@ -173,8 +210,8 @@ class InterfazCalculadora(ctk.CTk):
     # ------------------------------------------------------------------
     # PANEL DE MATRIZ (entrada de datos)
     # ------------------------------------------------------------------
-    def _crear_panel_matriz(self):
-        self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
+    def _crear_panel_matriz(self, padre):
+        self.main_frame = ctk.CTkFrame(padre, fg_color="transparent")
         self.main_frame.grid(row=0, column=1, sticky="nsew", padx=25, pady=25)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(1, weight=1)
@@ -523,3 +560,527 @@ class InterfazCalculadora(ctk.CTk):
         for entry in self.entradas_b:
             entry.delete(0, "end")
             entry.insert(0, "0")
+
+    # ------------------------------------------------------------------
+    # PESTAÑA VECTORES
+    # ------------------------------------------------------------------
+    def _construir_pestana_vectores(self):
+        padre = self.tabs.tab("Vectores")
+        padre.grid_columnconfigure(0, weight=1)
+        padre.grid_rowconfigure(2, weight=1)
+        padre.grid_rowconfigure(4, weight=2)
+
+        controles = ctk.CTkFrame(padre, fg_color="transparent")
+        controles.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
+
+        ctk.CTkLabel(controles, text="Dimensión n:").grid(row=0, column=0, padx=(0, 6))
+        self.entry_vec_n = ctk.CTkEntry(controles, width=70, justify="center")
+        self.entry_vec_n.insert(0, str(self.vec_n_var.get()))
+        self.entry_vec_n.grid(row=0, column=1, padx=(0, 16))
+        self.entry_vec_n.bind("<Return>", self._on_dim_vectores)
+        self.entry_vec_n.bind("<FocusOut>", self._on_dim_vectores)
+
+        ctk.CTkLabel(controles, text="Número de vectores k:").grid(row=0, column=2, padx=(0, 6))
+        self.entry_vec_k = ctk.CTkEntry(controles, width=70, justify="center")
+        self.entry_vec_k.insert(0, str(self.vec_k_var.get()))
+        self.entry_vec_k.grid(row=0, column=3, padx=(0, 16))
+        self.entry_vec_k.bind("<Return>", self._on_dim_vectores)
+        self.entry_vec_k.bind("<FocusOut>", self._on_dim_vectores)
+
+        ctk.CTkLabel(controles, text="Escalar k:").grid(row=0, column=4, padx=(0, 6))
+        self.entry_vec_escalar = ctk.CTkEntry(controles, width=80, justify="center")
+        self.entry_vec_escalar.insert(0, "2")
+        self.entry_vec_escalar.grid(row=0, column=5, padx=(0, 16))
+
+        ctk.CTkLabel(
+            padre,
+            text="Escribe k vectores de Rⁿ (columnas) y el vector b. Suma/resta usan v₁ y v₂.",
+            font=ctk.CTkFont(size=12),
+            text_color="#94A3B8",
+        ).grid(row=1, column=0, sticky="w", padx=10, pady=(0, 6))
+
+        self.scroll_vectores = ctk.CTkScrollableFrame(padre, height=180)
+        self.scroll_vectores.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
+
+        botones = ctk.CTkFrame(padre, fg_color="transparent")
+        botones.grid(row=3, column=0, sticky="ew", padx=10, pady=8)
+        ctk.CTkButton(botones, text="Suma v₁+v₂", command=self._op_suma_vectores).grid(
+            row=0, column=0, padx=4, pady=4
+        )
+        ctk.CTkButton(botones, text="Resta v₁−v₂", command=self._op_resta_vectores).grid(
+            row=0, column=1, padx=4, pady=4
+        )
+        ctk.CTkButton(botones, text="Escalar · v₁", command=self._op_escalar_vector).grid(
+            row=0, column=2, padx=4, pady=4
+        )
+        ctk.CTkButton(
+            botones,
+            text="¿b es combinación lineal?",
+            command=self._op_combinacion_lineal,
+        ).grid(row=0, column=3, padx=4, pady=4)
+
+        ctk.CTkLabel(
+            padre,
+            text="Resultado",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).grid(row=4, column=0, sticky="nw", padx=10)
+        self.txt_vectores = ctk.CTkTextbox(
+            padre,
+            font=ctk.CTkFont(family="Consolas", size=13),
+            activate_scrollbars=True,
+        )
+        self.txt_vectores.grid(row=5, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        padre.grid_rowconfigure(5, weight=2)
+
+        self._actualizar_tabla_vectores()
+
+    def _on_dim_vectores(self, event=None):
+        nuevo_n = self._validar_entero(self.entry_vec_n.get())
+        nuevo_k = self._validar_entero(self.entry_vec_k.get())
+        if nuevo_n is None or nuevo_k is None:
+            self.entry_vec_n.delete(0, "end")
+            self.entry_vec_n.insert(0, str(self.vec_n_var.get()))
+            self.entry_vec_k.delete(0, "end")
+            self.entry_vec_k.insert(0, str(self.vec_k_var.get()))
+            messagebox.showwarning(
+                "Dimensión inválida",
+                f"n y k deben ser enteros entre {DIM_MINIMA} y {DIM_MAXIMA}.",
+            )
+            return
+        if nuevo_n != self.vec_n_var.get() or nuevo_k != self.vec_k_var.get():
+            self.vec_n_var.set(nuevo_n)
+            self.vec_k_var.set(nuevo_k)
+            self._actualizar_tabla_vectores()
+
+    def _actualizar_tabla_vectores(self):
+        for widget in self.scroll_vectores.winfo_children():
+            widget.destroy()
+
+        n = self.vec_n_var.get()
+        k = self.vec_k_var.get()
+        self.entradas_vectores = [[] for _ in range(k)]
+        self.entradas_b_vec = []
+
+        for j in range(k):
+            ctk.CTkLabel(
+                self.scroll_vectores,
+                text=f"v{subindice(j + 1)}",
+                font=ctk.CTkFont(weight="bold"),
+            ).grid(row=0, column=j, padx=5, pady=5)
+
+        ctk.CTkLabel(
+            self.scroll_vectores,
+            text="│  b",
+            font=ctk.CTkFont(weight="bold"),
+            text_color="#3B82F6",
+        ).grid(row=0, column=k, padx=10, pady=5)
+
+        for i in range(n):
+            for j in range(k):
+                entry = ctk.CTkEntry(
+                    self.scroll_vectores,
+                    width=64,
+                    height=32,
+                    justify="center",
+                    font=ctk.CTkFont(family="Consolas", size=13),
+                )
+                entry.grid(row=i + 1, column=j, padx=3, pady=3)
+                entry.insert(0, "0")
+                entry.bind("<FocusIn>", lambda e, ent=entry: ent.select_range(0, "end"))
+                self.entradas_vectores[j].append(entry)
+
+            entry_b = ctk.CTkEntry(
+                self.scroll_vectores,
+                width=64,
+                height=32,
+                justify="center",
+                font=ctk.CTkFont(family="Consolas", size=13),
+                fg_color="#1E293B",
+            )
+            entry_b.grid(row=i + 1, column=k, padx=10, pady=3)
+            entry_b.insert(0, "0")
+            entry_b.bind("<FocusIn>", lambda e, ent=entry_b: ent.select_range(0, "end"))
+            self.entradas_b_vec.append(entry_b)
+
+    def _leer_escalar(self, entry):
+        texto = entry.get().strip() or "0"
+        return _a_fraction(texto)
+
+    def _leer_vectores_tab(self):
+        n = self.vec_n_var.get()
+        k = self.vec_k_var.get()
+        vectores = []
+        for j in range(k):
+            vector = []
+            for i in range(n):
+                texto = self.entradas_vectores[j][i].get().strip() or "0"
+                vector.append(_a_fraction(texto))
+            vectores.append(vector)
+        b = []
+        for i in range(n):
+            texto = self.entradas_b_vec[i].get().strip() or "0"
+            b.append(_a_fraction(texto))
+        return vectores, b
+
+    def _formatear_vector(self, vector):
+        interiores = ", ".join(formatear_valor(v) for v in vector)
+        return f"({interiores})"
+
+    def _mostrar_en(self, textbox, texto):
+        textbox.configure(state="normal")
+        textbox.delete("1.0", "end")
+        textbox.insert("end", texto)
+
+    def _formatear_matriz_corchetes(self, matriz):
+        """Muestra una matriz con corchetes [ ] alineados por columnas."""
+        if not matriz:
+            return "[ ]"
+        filas_str = [[formatear_valor(val) for val in fila] for fila in matriz]
+        anchos = [max(len(fila[j]) for fila in filas_str) for j in range(len(matriz[0]))]
+        lineas = []
+        for fila in filas_str:
+            contenido = "   ".join(f"{val:>{anchos[j]}}" for j, val in enumerate(fila))
+            lineas.append(f"[ {contenido} ]")
+        return "\n".join(lineas)
+
+    def _op_suma_vectores(self):
+        try:
+            vectores, _b = self._leer_vectores_tab()
+            if len(vectores) < 2:
+                raise ValueError("Se necesitan al menos dos vectores (k ≥ 2) para v₁ + v₂.")
+            resultado = suma_vectores(vectores[0], vectores[1])
+            self._mostrar_en(
+                self.txt_vectores,
+                "SUMA DE VECTORES  v₁ + v₂\n"
+                "Algebraicamente: (u + v)_i = u_i + v_i\n\n"
+                f"v₁ = {self._formatear_vector(vectores[0])}\n"
+                f"v₂ = {self._formatear_vector(vectores[1])}\n"
+                f"v₁ + v₂ = {self._formatear_vector(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_resta_vectores(self):
+        try:
+            vectores, _b = self._leer_vectores_tab()
+            if len(vectores) < 2:
+                raise ValueError("Se necesitan al menos dos vectores (k ≥ 2) para v₁ − v₂.")
+            resultado = resta_vectores(vectores[0], vectores[1])
+            self._mostrar_en(
+                self.txt_vectores,
+                "RESTA DE VECTORES  v₁ − v₂\n"
+                "Algebraicamente: (u − v)_i = u_i − v_i\n\n"
+                f"v₁ = {self._formatear_vector(vectores[0])}\n"
+                f"v₂ = {self._formatear_vector(vectores[1])}\n"
+                f"v₁ − v₂ = {self._formatear_vector(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_escalar_vector(self):
+        try:
+            vectores, _b = self._leer_vectores_tab()
+            escalar = self._leer_escalar(self.entry_vec_escalar)
+            resultado = multiplicar_escalar_vector(escalar, vectores[0])
+            self._mostrar_en(
+                self.txt_vectores,
+                "MULTIPLICACIÓN POR ESCALAR  k · v₁\n"
+                "Algebraicamente: (k·v)_i = k · v_i\n\n"
+                f"k = {formatear_valor(escalar)}\n"
+                f"v₁ = {self._formatear_vector(vectores[0])}\n"
+                f"k · v₁ = {self._formatear_vector(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_combinacion_lineal(self):
+        try:
+            vectores, b = self._leer_vectores_tab()
+            matriz_aum = es_combinacion_lineal(b, vectores)
+            resultado = resolver_sistema(matriz_aum, metodo="Gauss-Jordan")
+            clasificacion = clasificar_sistema(
+                resultado["matriz_escalonada"], resultado["rango"]
+            )
+
+            lineas = [
+                "¿b ES COMBINACIÓN LINEAL DE {v₁, ..., vₖ}?",
+                "Se resuelve A·c = b, donde las columnas de A son los vectores dados.",
+                "",
+                "Matriz aumentada [A | b]:",
+                self._formatear_matriz_corchetes(matriz_aum),
+                "",
+            ]
+
+            if clasificacion["tipo"] == "Inconsistente":
+                lineas.append("b NO es combinación lineal")
+                lineas.append(clasificacion["descripcion"])
+            else:
+                lineas.append("b SÍ es combinación lineal")
+                lineas.append(clasificacion["descripcion"])
+                lineas.append("")
+                lineas.append("Coeficientes:")
+                k = len(vectores)
+                soluciones = resultado["soluciones"]
+                libres = set(resultado["variables_libres"])
+                for j in range(k):
+                    if j in libres:
+                        lineas.append(f"  c{subindice(j + 1)} = t{subindice(j + 1)}  (libre)")
+                    else:
+                        val = soluciones.get(j, Fraction(0, 1))
+                        lineas.append(f"  c{subindice(j + 1)} = {formatear_valor(val)}")
+
+                if resultado.get("soluciones_generales"):
+                    lineas.append("")
+                    lineas.append("Solución general (si hay parámetros):")
+                    for j in range(k):
+                        constante, terminos = resultado["soluciones_generales"].get(
+                            j, (Fraction(0, 1), {})
+                        )
+                        expresion = self._formatear_expresion(constante, terminos)
+                        lineas.append(f"  c{subindice(j + 1)} = {expresion}")
+
+            self._mostrar_en(self.txt_vectores, "\n".join(lineas) + "\n")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    # ------------------------------------------------------------------
+    # PESTAÑA MATRICES
+    # ------------------------------------------------------------------
+    def _construir_pestana_matrices(self):
+        padre = self.tabs.tab("Matrices")
+        padre.grid_columnconfigure(0, weight=1)
+        padre.grid_columnconfigure(1, weight=1)
+        padre.grid_rowconfigure(2, weight=1)
+        padre.grid_rowconfigure(5, weight=2)
+
+        controles = ctk.CTkFrame(padre, fg_color="transparent")
+        controles.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
+
+        ctk.CTkLabel(controles, text="A (m×n):").grid(row=0, column=0, padx=(0, 4))
+        self.entry_am = ctk.CTkEntry(controles, width=50, justify="center")
+        self.entry_am.insert(0, str(self.mat_am_var.get()))
+        self.entry_am.grid(row=0, column=1)
+        ctk.CTkLabel(controles, text="×").grid(row=0, column=2, padx=4)
+        self.entry_an = ctk.CTkEntry(controles, width=50, justify="center")
+        self.entry_an.insert(0, str(self.mat_an_var.get()))
+        self.entry_an.grid(row=0, column=3, padx=(0, 16))
+
+        ctk.CTkLabel(controles, text="B (filas×cols):").grid(row=0, column=4, padx=(0, 4))
+        self.entry_bm = ctk.CTkEntry(controles, width=50, justify="center")
+        self.entry_bm.insert(0, str(self.mat_bm_var.get()))
+        self.entry_bm.grid(row=0, column=5)
+        ctk.CTkLabel(controles, text="×").grid(row=0, column=6, padx=4)
+        self.entry_bn = ctk.CTkEntry(controles, width=50, justify="center")
+        self.entry_bn.insert(0, str(self.mat_bn_var.get()))
+        self.entry_bn.grid(row=0, column=7, padx=(0, 16))
+
+        ctk.CTkLabel(controles, text="Escalar k:").grid(row=0, column=8, padx=(0, 4))
+        self.entry_mat_escalar = ctk.CTkEntry(controles, width=70, justify="center")
+        self.entry_mat_escalar.insert(0, "2")
+        self.entry_mat_escalar.grid(row=0, column=9)
+
+        for entry in (self.entry_am, self.entry_an, self.entry_bm, self.entry_bn):
+            entry.bind("<Return>", self._on_dim_matrices)
+            entry.bind("<FocusOut>", self._on_dim_matrices)
+
+        ctk.CTkLabel(
+            padre,
+            text="A+B y A−B requieren el mismo tamaño. A·B requiere columnas(A) = filas(B). "
+            "La ecuación Ax = b se resuelve en la pestaña Sistemas lineales.",
+            font=ctk.CTkFont(size=12),
+            text_color="#94A3B8",
+            wraplength=900,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 6))
+
+        self.scroll_A = ctk.CTkScrollableFrame(padre, height=200)
+        self.scroll_A.grid(row=2, column=0, sticky="nsew", padx=(10, 5), pady=5)
+        self.scroll_B = ctk.CTkScrollableFrame(padre, height=200)
+        self.scroll_B.grid(row=2, column=1, sticky="nsew", padx=(5, 10), pady=5)
+
+        botones = ctk.CTkFrame(padre, fg_color="transparent")
+        botones.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=8)
+        ctk.CTkButton(botones, text="A+B", command=self._op_suma_matrices).grid(
+            row=0, column=0, padx=4, pady=4
+        )
+        ctk.CTkButton(botones, text="A−B", command=self._op_resta_matrices).grid(
+            row=0, column=1, padx=4, pady=4
+        )
+        ctk.CTkButton(botones, text="k·A", command=self._op_escalar_matriz).grid(
+            row=0, column=2, padx=4, pady=4
+        )
+        ctk.CTkButton(botones, text="A·B", command=self._op_multiplicar_matrices).grid(
+            row=0, column=3, padx=4, pady=4
+        )
+
+        ctk.CTkLabel(
+            padre,
+            text="Resultado",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=10)
+        self.txt_matrices = ctk.CTkTextbox(
+            padre,
+            font=ctk.CTkFont(family="Consolas", size=13),
+            activate_scrollbars=True,
+        )
+        self.txt_matrices.grid(
+            row=5, column=0, columnspan=2, sticky="nsew", padx=10, pady=(0, 10)
+        )
+
+        self._actualizar_tablas_matrices()
+
+    def _on_dim_matrices(self, event=None):
+        am = self._validar_entero(self.entry_am.get())
+        an = self._validar_entero(self.entry_an.get())
+        bm = self._validar_entero(self.entry_bm.get())
+        bn = self._validar_entero(self.entry_bn.get())
+        if None in (am, an, bm, bn):
+            self.entry_am.delete(0, "end")
+            self.entry_am.insert(0, str(self.mat_am_var.get()))
+            self.entry_an.delete(0, "end")
+            self.entry_an.insert(0, str(self.mat_an_var.get()))
+            self.entry_bm.delete(0, "end")
+            self.entry_bm.insert(0, str(self.mat_bm_var.get()))
+            self.entry_bn.delete(0, "end")
+            self.entry_bn.insert(0, str(self.mat_bn_var.get()))
+            messagebox.showwarning(
+                "Dimensión inválida",
+                f"Las dimensiones deben ser enteros entre {DIM_MINIMA} y {DIM_MAXIMA}.",
+            )
+            return
+        if (
+            am != self.mat_am_var.get()
+            or an != self.mat_an_var.get()
+            or bm != self.mat_bm_var.get()
+            or bn != self.mat_bn_var.get()
+        ):
+            self.mat_am_var.set(am)
+            self.mat_an_var.set(an)
+            self.mat_bm_var.set(bm)
+            self.mat_bn_var.set(bn)
+            self._actualizar_tablas_matrices()
+
+    def _construir_tabla_matriz(self, scroll, filas, columnas, titulo):
+        for widget in scroll.winfo_children():
+            widget.destroy()
+        ctk.CTkLabel(
+            scroll,
+            text=titulo,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).grid(row=0, column=0, columnspan=max(columnas, 1), sticky="w", padx=4, pady=(0, 6))
+        entradas = []
+        for i in range(filas):
+            fila_entries = []
+            for j in range(columnas):
+                entry = ctk.CTkEntry(
+                    scroll,
+                    width=64,
+                    height=32,
+                    justify="center",
+                    font=ctk.CTkFont(family="Consolas", size=13),
+                )
+                entry.grid(row=i + 1, column=j, padx=3, pady=3)
+                entry.insert(0, "0")
+                entry.bind("<FocusIn>", lambda e, ent=entry: ent.select_range(0, "end"))
+                fila_entries.append(entry)
+            entradas.append(fila_entries)
+        return entradas
+
+    def _actualizar_tablas_matrices(self):
+        self.entradas_A = self._construir_tabla_matriz(
+            self.scroll_A,
+            self.mat_am_var.get(),
+            self.mat_an_var.get(),
+            f"Matriz A  ({self.mat_am_var.get()}×{self.mat_an_var.get()})",
+        )
+        self.entradas_B = self._construir_tabla_matriz(
+            self.scroll_B,
+            self.mat_bm_var.get(),
+            self.mat_bn_var.get(),
+            f"Matriz B  ({self.mat_bm_var.get()}×{self.mat_bn_var.get()})",
+        )
+
+    def _leer_matriz_entries(self, entradas):
+        matriz = []
+        for fila in entradas:
+            fila_vals = []
+            for entry in fila:
+                texto = entry.get().strip() or "0"
+                fila_vals.append(_a_fraction(texto))
+            matriz.append(fila_vals)
+        return matriz
+
+    def _op_suma_matrices(self):
+        try:
+            A = self._leer_matriz_entries(self.entradas_A)
+            B = self._leer_matriz_entries(self.entradas_B)
+            resultado = suma_matrices(A, B)
+            self._mostrar_en(
+                self.txt_matrices,
+                "SUMA DE MATRICES  A + B\n"
+                "Algebraicamente: (A + B)[i][j] = A[i][j] + B[i][j]\n\n"
+                "A =\n"
+                f"{self._formatear_matriz_corchetes(A)}\n\n"
+                "B =\n"
+                f"{self._formatear_matriz_corchetes(B)}\n\n"
+                "A + B =\n"
+                f"{self._formatear_matriz_corchetes(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_resta_matrices(self):
+        try:
+            A = self._leer_matriz_entries(self.entradas_A)
+            B = self._leer_matriz_entries(self.entradas_B)
+            resultado = resta_matrices(A, B)
+            self._mostrar_en(
+                self.txt_matrices,
+                "RESTA DE MATRICES  A − B\n"
+                "Algebraicamente: (A − B)[i][j] = A[i][j] − B[i][j]\n\n"
+                "A =\n"
+                f"{self._formatear_matriz_corchetes(A)}\n\n"
+                "B =\n"
+                f"{self._formatear_matriz_corchetes(B)}\n\n"
+                "A − B =\n"
+                f"{self._formatear_matriz_corchetes(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_escalar_matriz(self):
+        try:
+            A = self._leer_matriz_entries(self.entradas_A)
+            escalar = self._leer_escalar(self.entry_mat_escalar)
+            resultado = multiplicar_escalar_matriz(escalar, A)
+            self._mostrar_en(
+                self.txt_matrices,
+                "MULTIPLICACIÓN POR ESCALAR  k · A\n"
+                "Algebraicamente: (k·A)[i][j] = k · A[i][j]\n\n"
+                f"k = {formatear_valor(escalar)}\n\n"
+                "A =\n"
+                f"{self._formatear_matriz_corchetes(A)}\n\n"
+                "k · A =\n"
+                f"{self._formatear_matriz_corchetes(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _op_multiplicar_matrices(self):
+        try:
+            A = self._leer_matriz_entries(self.entradas_A)
+            B = self._leer_matriz_entries(self.entradas_B)
+            resultado = multiplicar_matrices(A, B)
+            self._mostrar_en(
+                self.txt_matrices,
+                "PRODUCTO DE MATRICES  A · B\n"
+                "Algebraicamente: C[i][j] = Σ_k A[i][k] · B[k][j]\n\n"
+                "A =\n"
+                f"{self._formatear_matriz_corchetes(A)}\n\n"
+                "B =\n"
+                f"{self._formatear_matriz_corchetes(B)}\n\n"
+                "A · B =\n"
+                f"{self._formatear_matriz_corchetes(resultado)}\n",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
