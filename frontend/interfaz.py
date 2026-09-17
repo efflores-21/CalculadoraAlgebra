@@ -438,7 +438,12 @@ class InterfazCalculadora(ctk.CTk):
 
     def _insertar_verificacion(self, coeficientes, terminos, soluciones, variables_libres):
         self.txt_resultados.insert("end", "\nVERIFICACIÓN PASO A PASO:\n")
-        self.txt_resultados.insert("end", "Se asigna 0 a las variables libres para comprobar una solución.\n\n")
+        self.txt_resultados.insert(
+            "end",
+            "Se sustituyen los valores en cada ecuación y se suman los productos.\n"
+            "Si hay variables libres, se asigna 0 a sus parámetros para obtener "
+            "una solución particular comprobable.\n\n",
+        )
 
         valores = {}
         for variable, expresion in soluciones.items():
@@ -457,8 +462,8 @@ class InterfazCalculadora(ctk.CTk):
                 )
                 self.txt_resultados.insert(
                     "end",
-                    f"  Ecuación {i + 1}, término x{subindice(j + 1)}: "
-                    f"{partes[-1]}; acumulado = {formatear_valor(acumulado)}\n"
+                    f"  Ecuación {i + 1}, paso {j + 1}: "
+                    f"{partes[-1]}; suma parcial = {formatear_valor(acumulado)}\n"
                 )
 
             esperado = terminos[i]
@@ -515,9 +520,22 @@ class InterfazCalculadora(ctk.CTk):
             resultado = resolver_sistema(matriz_aum, metodo=metodo)
 
             self.txt_resultados.insert("end", f"=== MÉTODO SELECCIONADO: {metodo.upper()} ===\n\n")
+            self.txt_resultados.insert(
+                "end",
+                "GUÍA DE LECTURA:\n"
+                "1. Se parte de la matriz aumentada [A | b].\n"
+                "2. Cada operación indicada conserva el mismo sistema de ecuaciones.\n"
+                "3. Se busca un pivote, se normaliza y se hacen ceros en su columna.\n"
+                "4. La última matriz permite clasificar y resolver el sistema.\n\n"
+                "ELIMINACIÓN PASO A PASO:\n\n",
+            )
 
             for i, paso in enumerate(resultado['pasos']):
-                self.txt_resultados.insert("end", f"Paso {i + 1}: {paso['descripcion']}\n")
+                self.txt_resultados.insert(
+                    "end",
+                    f"Paso {i + 1}: {paso['descripcion']}\n"
+                    f"  Explicación: {self._explicar_paso_eliminacion(paso)}\n"
+                )
                 self.txt_resultados.insert("end", self.formatear_matriz(paso['matriz']) + "\n\n")
 
             clasificacion = clasificar_sistema(resultado['matriz_escalonada'], resultado['rango'])
@@ -525,6 +543,12 @@ class InterfazCalculadora(ctk.CTk):
             self.txt_resultados.insert("end", "═" * 60 + "\n")
             self.txt_resultados.insert("end", f"DIAGNÓSTICO: {clasificacion['tipo']}\n")
             self.txt_resultados.insert("end", f"DETALLE: {clasificacion['descripcion']}\n")
+            self.txt_resultados.insert(
+                "end",
+                "Interpretación: "
+                "una fila [0 0 ... 0 | número distinto de 0] es imposible; "
+                "si no aparece, se cuentan los pivotes y las variables libres.\n"
+            )
             self.txt_resultados.insert("end", "═" * 60 + "\n\n")
 
             if clasificacion['tipo'] != 'Inconsistente':
@@ -726,6 +750,41 @@ class InterfazCalculadora(ctk.CTk):
         interiores = ", ".join(formatear_valor(v) for v in vector)
         return f"({interiores})"
 
+    def _paso_vector_componente(self, v1, v2, resultado, operador):
+        """Explica el cálculo de cada componente de una suma o resta de vectores."""
+        lineas = ["DESARROLLO COMPONENTE POR COMPONENTE:"]
+        for i in range(len(resultado)):
+            lineas.append(
+                f"  Componente {i + 1}: "
+                f"{formatear_valor(v1[i])} {operador} {formatear_valor(v2[i])} "
+                f"= {formatear_valor(resultado[i])}"
+            )
+        return "\n".join(lineas)
+
+    def _paso_escalar_vector(self, escalar, vector, resultado):
+        """Explica la multiplicación del escalar por cada componente del vector."""
+        lineas = ["DESARROLLO COMPONENTE POR COMPONENTE:"]
+        for i in range(len(vector)):
+            lineas.append(
+                f"  Componente {i + 1}: "
+                f"{formatear_valor(escalar)} · {formatear_valor(vector[i])} "
+                f"= {formatear_valor(resultado[i])}"
+            )
+        return "\n".join(lineas)
+
+    def _explicar_paso_eliminacion(self, paso):
+        """Traduce una operación elemental a una explicación algebraica clara."""
+        descripcion = paso["descripcion"]
+        if descripcion.startswith("Intercambio"):
+            return "Se intercambian las filas para colocar un pivote no nulo."
+        if descripcion.startswith("Normalizar"):
+            return "Se divide toda la fila entre el pivote para convertirlo en 1."
+        if "←" in descripcion:
+            return "Se suma/resta un múltiplo de la fila pivote para producir un cero."
+        if "inconsistencia" in descripcion.lower():
+            return "Se detecta una ecuación imposible: todos los coeficientes son 0, pero el término independiente no es 0."
+        return "Se revisa la siguiente columna porque no tiene pivote."
+
     def _mostrar_en(self, textbox, texto):
         textbox.configure(state="normal")
         textbox.delete("1.0", "end")
@@ -755,6 +814,8 @@ class InterfazCalculadora(ctk.CTk):
                 "Algebraicamente: (u + v)_i = u_i + v_i\n\n"
                 f"v₁ = {self._formatear_vector(vectores[0])}\n"
                 f"v₂ = {self._formatear_vector(vectores[1])}\n"
+                "\nPASO 1. Se suman las componentes que ocupan la misma posición.\n"
+                f"{self._paso_vector_componente(vectores[0], vectores[1], resultado, '+')}\n\n"
                 f"v₁ + v₂ = {self._formatear_vector(resultado)}\n",
             )
         except Exception as e:
@@ -772,6 +833,8 @@ class InterfazCalculadora(ctk.CTk):
                 "Algebraicamente: (u − v)_i = u_i − v_i\n\n"
                 f"v₁ = {self._formatear_vector(vectores[0])}\n"
                 f"v₂ = {self._formatear_vector(vectores[1])}\n"
+                "\nPASO 1. Se restan las componentes que ocupan la misma posición.\n"
+                f"{self._paso_vector_componente(vectores[0], vectores[1], resultado, '-')}\n\n"
                 f"v₁ − v₂ = {self._formatear_vector(resultado)}\n",
             )
         except Exception as e:
@@ -788,6 +851,8 @@ class InterfazCalculadora(ctk.CTk):
                 "Algebraicamente: (k·v)_i = k · v_i\n\n"
                 f"k = {formatear_valor(escalar)}\n"
                 f"v₁ = {self._formatear_vector(vectores[0])}\n"
+                "\nPASO 1. Se multiplica k por cada componente de v₁.\n"
+                f"{self._paso_escalar_vector(escalar, vectores[0], resultado)}\n\n"
                 f"k · v₁ = {self._formatear_vector(resultado)}\n",
             )
         except Exception as e:
@@ -810,6 +875,16 @@ class InterfazCalculadora(ctk.CTk):
                 self._formatear_matriz_corchetes(matriz_aum),
                 "",
             ]
+            lineas.extend([
+                "ELIMINACIÓN GAUSSIANA PASO A PASO:",
+                "En cada paso se modifica una fila completa; la matriz mostrada es el nuevo estado.",
+                "",
+            ])
+            for indice, paso in enumerate(resultado["pasos"], 1):
+                lineas.append(f"Paso {indice}. {paso['descripcion']}")
+                lineas.append(f"  Explicación: {self._explicar_paso_eliminacion(paso)}")
+                lineas.append(self._formatear_matriz_corchetes(paso["matriz"]))
+                lineas.append("")
 
             if clasificacion["tipo"] == "Inconsistente":
                 lineas.append("b NO es combinación lineal")
@@ -1015,6 +1090,18 @@ class InterfazCalculadora(ctk.CTk):
             A = self._leer_matriz_entries(self.entradas_A)
             B = self._leer_matriz_entries(self.entradas_B)
             resultado = suma_matrices(A, B)
+            pasos = [
+                "PASO 1. Verificar dimensiones: ambas matrices deben ser del mismo tamaño.",
+                f"  A es {len(A)}×{len(A[0])} y B es {len(B)}×{len(B[0])}.",
+                "PASO 2. Sumar las entradas que ocupan la misma posición:",
+            ]
+            for i in range(len(A)):
+                for j in range(len(A[0])):
+                    pasos.append(
+                        f"  c{i + 1},{j + 1} = A{i + 1},{j + 1} + B{i + 1},{j + 1} "
+                        f"= {formatear_valor(A[i][j])} + {formatear_valor(B[i][j])} "
+                        f"= {formatear_valor(resultado[i][j])}"
+                    )
             self._mostrar_en(
                 self.txt_matrices,
                 "SUMA DE MATRICES  A + B\n"
@@ -1023,7 +1110,8 @@ class InterfazCalculadora(ctk.CTk):
                 f"{self._formatear_matriz_corchetes(A)}\n\n"
                 "B =\n"
                 f"{self._formatear_matriz_corchetes(B)}\n\n"
-                "A + B =\n"
+                + "\n".join(pasos)
+                + "\n\nA + B =\n"
                 f"{self._formatear_matriz_corchetes(resultado)}\n",
             )
         except Exception as e:
@@ -1034,6 +1122,18 @@ class InterfazCalculadora(ctk.CTk):
             A = self._leer_matriz_entries(self.entradas_A)
             B = self._leer_matriz_entries(self.entradas_B)
             resultado = resta_matrices(A, B)
+            pasos = [
+                "PASO 1. Verificar dimensiones: ambas matrices deben ser del mismo tamaño.",
+                f"  A es {len(A)}×{len(A[0])} y B es {len(B)}×{len(B[0])}.",
+                "PASO 2. Restar las entradas que ocupan la misma posición:",
+            ]
+            for i in range(len(A)):
+                for j in range(len(A[0])):
+                    pasos.append(
+                        f"  c{i + 1},{j + 1} = A{i + 1},{j + 1} - B{i + 1},{j + 1} "
+                        f"= {formatear_valor(A[i][j])} - {formatear_valor(B[i][j])} "
+                        f"= {formatear_valor(resultado[i][j])}"
+                    )
             self._mostrar_en(
                 self.txt_matrices,
                 "RESTA DE MATRICES  A − B\n"
@@ -1042,7 +1142,8 @@ class InterfazCalculadora(ctk.CTk):
                 f"{self._formatear_matriz_corchetes(A)}\n\n"
                 "B =\n"
                 f"{self._formatear_matriz_corchetes(B)}\n\n"
-                "A − B =\n"
+                + "\n".join(pasos)
+                + "\n\nA − B =\n"
                 f"{self._formatear_matriz_corchetes(resultado)}\n",
             )
         except Exception as e:
@@ -1053,6 +1154,15 @@ class InterfazCalculadora(ctk.CTk):
             A = self._leer_matriz_entries(self.entradas_A)
             escalar = self._leer_escalar(self.entry_mat_escalar)
             resultado = multiplicar_escalar_matriz(escalar, A)
+            pasos = [
+                "PASO 1. Multiplicar el escalar por cada entrada de A:",
+            ]
+            for i in range(len(A)):
+                for j in range(len(A[0])):
+                    pasos.append(
+                        f"  c{i + 1},{j + 1} = {formatear_valor(escalar)} · "
+                        f"{formatear_valor(A[i][j])} = {formatear_valor(resultado[i][j])}"
+                    )
             self._mostrar_en(
                 self.txt_matrices,
                 "MULTIPLICACIÓN POR ESCALAR  k · A\n"
@@ -1060,7 +1170,8 @@ class InterfazCalculadora(ctk.CTk):
                 f"k = {formatear_valor(escalar)}\n\n"
                 "A =\n"
                 f"{self._formatear_matriz_corchetes(A)}\n\n"
-                "k · A =\n"
+                + "\n".join(pasos)
+                + "\n\nk · A =\n"
                 f"{self._formatear_matriz_corchetes(resultado)}\n",
             )
         except Exception as e:
@@ -1070,7 +1181,32 @@ class InterfazCalculadora(ctk.CTk):
         try:
             A = self._leer_matriz_entries(self.entradas_A)
             B = self._leer_matriz_entries(self.entradas_B)
+            if len(A[0]) != len(B):
+                raise ValueError(
+                    f"No se puede multiplicar: A tiene {len(A[0])} columnas "
+                    f"y B tiene {len(B)} filas."
+                )
             resultado = multiplicar_matrices(A, B)
+            pasos = [
+                "PASO 1. Verificar dimensiones:",
+                f"  A es {len(A)}×{len(A[0])} y B es {len(B)}×{len(B[0])}.",
+                "  Como columnas(A) = filas(B), el producto está definido.",
+                "PASO 2. Para cada entrada, multiplicar una fila de A por una columna de B y sumar:",
+            ]
+            for i in range(len(A)):
+                for j in range(len(B[0])):
+                    productos = []
+                    suma = Fraction(0, 1)
+                    for k in range(len(A[0])):
+                        producto = A[i][k] * B[k][j]
+                        suma += producto
+                        productos.append(
+                            f"({formatear_valor(A[i][k])}·{formatear_valor(B[k][j])})"
+                        )
+                    pasos.append(
+                        f"  c{i + 1},{j + 1} = {' + '.join(productos)} "
+                        f"= {formatear_valor(suma)}"
+                    )
             self._mostrar_en(
                 self.txt_matrices,
                 "PRODUCTO DE MATRICES  A · B\n"
@@ -1079,7 +1215,8 @@ class InterfazCalculadora(ctk.CTk):
                 f"{self._formatear_matriz_corchetes(A)}\n\n"
                 "B =\n"
                 f"{self._formatear_matriz_corchetes(B)}\n\n"
-                "A · B =\n"
+                + "\n".join(pasos)
+                + "\n\nA · B =\n"
                 f"{self._formatear_matriz_corchetes(resultado)}\n",
             )
         except Exception as e:
