@@ -6,6 +6,7 @@ Calculadora educativa para practicar:
 - combinaciones lineales;
 - operaciones matriciales;
 - resolución y verificación de sistemas `Ax = b`.
+- verificación de propiedades del producto matriz-vector.
 
 La aplicación conserva una interfaz gráfica desarrollada con
 **CustomTkinter**. Los cálculos algebraicos se implementan manualmente con
@@ -35,6 +36,7 @@ CalculadoraAlgebra/
 │   ├── matriz.py
 │   ├── vectores.py
 │   ├── operaciones_matriciales.py
+│   ├── propiedades.py
 │   ├── eliminacion.py
 │   └── clasificador.py
 └── frontend/
@@ -49,6 +51,7 @@ presentación de resultados. La interfaz organiza el programa en:
 1. **Sistemas lineales**
 2. **Vectores**
 3. **Matrices**
+4. **Propiedades A·x**
 
 ### `backend/vectores.py`
 
@@ -67,7 +70,27 @@ Implementa:
 - resta de matrices;
 - multiplicación de una matriz por un escalar;
 - producto matricial `A · B`;
+- producto matriz-vector `A · x`;
 - validación de matrices rectangulares y dimensiones compatibles.
+
+### `backend/propiedades.py`
+
+Implementa `verificar_propiedades(A, u, v, c)`, que comprueba la linealidad
+del producto matriz-vector y devuelve todos los resultados intermedios:
+
+```text
+u + v
+A·u
+A·v
+A·(u+v)
+A·u + A·v
+c·u
+A·(c·u)
+c·(A·u)
+```
+
+Las comparaciones se realizan directamente sobre listas de `Fraction`, por lo
+que los resultados son exactos.
 
 ### `backend/eliminacion.py`
 
@@ -195,6 +218,35 @@ c1,2 = (1 · 6) + (2 · 8) = 22
 
 Si las dimensiones son incompatibles, la interfaz muestra el motivo y no
 realiza el cálculo.
+
+### Propiedades `A·x`
+
+La cuarta pestaña permite introducir una matriz `A` de tamaño `m×n`, dos
+vectores `u` y `v` de dimensión `n`, y un escalar `c`. Se muestran los pasos:
+
+```text
+PROPIEDAD a) A(u + v) = Au + Av
+Paso 1: u + v
+Paso 2: A·(u + v)
+Paso 3: A·u
+Paso 4: A·v
+Paso 5: A·u + A·v
+
+PROPIEDAD b) A(cu) = c(Au)
+Paso 1: c·u
+Paso 2: A·(c·u)
+Paso 3: A·u
+Paso 4: c·(A·u)
+```
+
+La aplicación compara ambos lados con igualdad exacta y muestra si cada
+propiedad se cumple. Si `A` no es rectangular, sus columnas no coinciden con
+la dimensión de los vectores, o `u` y `v` tienen dimensiones distintas, se
+muestra un mensaje de error.
+
+Las pestañas **Vectores**, **Matrices** y **Propiedades A·x** incluyen un
+botón **Limpiar**. Este botón coloca en cero todas las entradas de datos,
+incluidos los escalares, y borra el resultado mostrado.
 
 ### Sistemas lineales `Ax = b`
 
