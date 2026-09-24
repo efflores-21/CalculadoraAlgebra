@@ -21,6 +21,7 @@ from backend.operaciones_matriciales import (
     multiplicar_escalar_matriz,
     multiplicar_matrices,
 )
+from backend.propiedades import verificar_propiedades
 
 # Configuración del tema visual
 ctk.set_appearance_mode("Dark")
@@ -60,16 +61,24 @@ class InterfazCalculadora(ctk.CTk):
         self.entradas_A = []
         self.entradas_B = []
 
+        self.prop_m_var = ctk.IntVar(value=2)
+        self.prop_n_var = ctk.IntVar(value=2)
+        self.entradas_prop_A = []
+        self.entradas_prop_u = []
+        self.entradas_prop_v = []
+
         self._configurar_grid()
         self.tabs = ctk.CTkTabview(self)
         self.tabs.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         self.tabs.add("Sistemas lineales")
         self.tabs.add("Vectores")
         self.tabs.add("Matrices")
+        self.tabs.add("Propiedades A·x")
 
         self._construir_pestana_sistemas()
         self._construir_pestana_vectores()
         self._construir_pestana_matrices()
+        self._construir_pestana_propiedades()
 
     def _configurar_grid(self):
         self.grid_columnconfigure(0, weight=1)
@@ -642,6 +651,13 @@ class InterfazCalculadora(ctk.CTk):
             text="¿b es combinación lineal?",
             command=self._op_combinacion_lineal,
         ).grid(row=0, column=3, padx=4, pady=4)
+        ctk.CTkButton(
+            botones,
+            text="Limpiar",
+            fg_color="transparent",
+            border_width=1,
+            command=self.limpiar_vectores,
+        ).grid(row=0, column=4, padx=4, pady=4)
 
         ctk.CTkLabel(
             padre,
@@ -730,6 +746,21 @@ class InterfazCalculadora(ctk.CTk):
         texto = entry.get().strip() or "0"
         return _a_fraction(texto)
 
+    def _poner_entrada_en_cero(self, entry):
+        """Reemplaza el contenido de una entrada por cero."""
+        entry.delete(0, "end")
+        entry.insert(0, "0")
+
+    def limpiar_vectores(self):
+        """Reinicia a cero los vectores, el escalar y el resultado de la pestaña."""
+        for vector in self.entradas_vectores:
+            for entry in vector:
+                self._poner_entrada_en_cero(entry)
+        for entry in self.entradas_b_vec:
+            self._poner_entrada_en_cero(entry)
+        self._poner_entrada_en_cero(self.entry_vec_escalar)
+        self._mostrar_en(self.txt_vectores, "Vectores reiniciados a cero.\n")
+
     def _leer_vectores_tab(self):
         n = self.vec_n_var.get()
         k = self.vec_k_var.get()
@@ -786,9 +817,11 @@ class InterfazCalculadora(ctk.CTk):
         return "Se revisa la siguiente columna porque no tiene pivote."
 
     def _mostrar_en(self, textbox, texto):
+        """Reemplaza completamente el contenido visible de un área de resultados."""
         textbox.configure(state="normal")
         textbox.delete("1.0", "end")
-        textbox.insert("end", texto)
+        textbox.insert("1.0", texto)
+        textbox.see("1.0")
 
     def _formatear_matriz_corchetes(self, matriz):
         """Muestra una matriz con corchetes [ ] alineados por columnas."""
@@ -918,6 +951,220 @@ class InterfazCalculadora(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def _construir_pestana_propiedades(self):
+        """Construye la pestaña para verificar la linealidad de A·x."""
+        padre = self.tabs.tab("Propiedades A·x")
+        padre.grid_columnconfigure(0, weight=1)
+        padre.grid_columnconfigure(1, weight=1)
+        padre.grid_rowconfigure(2, weight=1)
+        padre.grid_rowconfigure(5, weight=2)
+
+        controles = ctk.CTkFrame(padre, fg_color="transparent")
+        controles.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
+
+        ctk.CTkLabel(controles, text="Filas de A (m):").grid(row=0, column=0, padx=(0, 4))
+        self.entry_prop_m = ctk.CTkEntry(controles, width=55, justify="center")
+        self.entry_prop_m.insert(0, "2")
+        self.entry_prop_m.grid(row=0, column=1, padx=(0, 12))
+
+        ctk.CTkLabel(
+            controles, text="Columnas de A (n) / dimensión de u,v:"
+        ).grid(row=0, column=2, padx=(0, 4))
+        self.entry_prop_n = ctk.CTkEntry(controles, width=55, justify="center")
+        self.entry_prop_n.insert(0, "2")
+        self.entry_prop_n.grid(row=0, column=3, padx=(0, 12))
+
+        ctk.CTkLabel(controles, text="Escalar c:").grid(row=0, column=4, padx=(0, 4))
+        self.entry_prop_c = ctk.CTkEntry(controles, width=75, justify="center")
+        self.entry_prop_c.insert(0, "2")
+        self.entry_prop_c.grid(row=0, column=5)
+
+        for entry in (self.entry_prop_m, self.entry_prop_n):
+            entry.bind("<Return>", self._on_dim_propiedades)
+            entry.bind("<FocusOut>", self._on_dim_propiedades)
+
+        ctk.CTkLabel(
+            padre,
+            text=(
+                "Se verifica la linealidad del producto matriz-vector: "
+                "A(u+v)=Au+Av y A(cu)=c(Au)."
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color="#94A3B8",
+            wraplength=900,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 6))
+
+        self.scroll_prop_A = ctk.CTkScrollableFrame(padre, height=220)
+        self.scroll_prop_A.grid(row=2, column=0, sticky="nsew", padx=(10, 5), pady=5)
+        self.scroll_prop_vectores = ctk.CTkScrollableFrame(padre, height=220)
+        self.scroll_prop_vectores.grid(row=2, column=1, sticky="nsew", padx=(5, 10), pady=5)
+
+        botones = ctk.CTkFrame(padre, fg_color="transparent")
+        botones.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=8)
+        botones.grid_columnconfigure(0, weight=3)
+        botones.grid_columnconfigure(1, weight=1)
+        ctk.CTkButton(
+            botones,
+            text="Verificar propiedades",
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._verificar_propiedades,
+        ).grid(row=0, column=0, sticky="ew", padx=(4, 2), pady=4)
+        ctk.CTkButton(
+            botones,
+            text="Limpiar",
+            fg_color="transparent",
+            border_width=1,
+            command=self.limpiar_propiedades,
+        ).grid(row=0, column=1, sticky="ew", padx=(2, 4), pady=4)
+
+        ctk.CTkLabel(
+            padre,
+            text="Resultado",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=10)
+        self.txt_propiedades = ctk.CTkTextbox(
+            padre,
+            font=ctk.CTkFont(family="Consolas", size=13),
+            activate_scrollbars=True,
+            wrap="none",
+        )
+        self.txt_propiedades.grid(
+            row=5, column=0, columnspan=2, sticky="nsew", padx=10, pady=(0, 10)
+        )
+        self._actualizar_tablas_propiedades()
+
+    def _on_dim_propiedades(self, event=None):
+        """Valida m y n y regenera las tablas de A, u y v."""
+        nuevo_m = self._validar_entero(self.entry_prop_m.get())
+        nuevo_n = self._validar_entero(self.entry_prop_n.get())
+        if nuevo_m is None or nuevo_n is None:
+            self.entry_prop_m.delete(0, "end")
+            self.entry_prop_m.insert(0, str(self.prop_m_var.get()))
+            self.entry_prop_n.delete(0, "end")
+            self.entry_prop_n.insert(0, str(self.prop_n_var.get()))
+            messagebox.showwarning(
+                "Dimensión inválida",
+                f"m y n deben ser enteros entre {DIM_MINIMA} y {DIM_MAXIMA}.",
+            )
+            return
+        if nuevo_m != self.prop_m_var.get() or nuevo_n != self.prop_n_var.get():
+            self.prop_m_var.set(nuevo_m)
+            self.prop_n_var.set(nuevo_n)
+            self._actualizar_tablas_propiedades()
+
+    def _construir_fila_vector_propiedad(self, padre, fila, nombre, columnas):
+        """Construye una fila horizontal de entradas para un vector de R^n."""
+        ctk.CTkLabel(
+            padre, text=nombre, font=ctk.CTkFont(size=14, weight="bold")
+        ).grid(row=fila, column=0, padx=4, pady=(10, 4), sticky="w")
+        entradas = []
+        for j in range(columnas):
+            entry = ctk.CTkEntry(
+                padre,
+                width=64,
+                height=32,
+                justify="center",
+                font=ctk.CTkFont(family="Consolas", size=13),
+            )
+            entry.grid(row=fila, column=j + 1, padx=3, pady=(10, 4))
+            entry.insert(0, "0")
+            entry.bind("<FocusIn>", lambda e, ent=entry: ent.select_range(0, "end"))
+            entradas.append(entry)
+        return entradas
+
+    def _actualizar_tablas_propiedades(self):
+        """Regenera la matriz A y las filas de u y v según m y n."""
+        for widget in self.scroll_prop_A.winfo_children():
+            widget.destroy()
+        for widget in self.scroll_prop_vectores.winfo_children():
+            widget.destroy()
+
+        self.entradas_prop_A = self._construir_tabla_matriz(
+            self.scroll_prop_A,
+            self.prop_m_var.get(),
+            self.prop_n_var.get(),
+            f"Matriz A ({self.prop_m_var.get()}×{self.prop_n_var.get()})",
+        )
+        ctk.CTkLabel(
+            self.scroll_prop_vectores,
+            text="Vectores de entrada",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).grid(row=0, column=0, columnspan=self.prop_n_var.get() + 1, sticky="w", padx=4)
+        self.entradas_prop_u = self._construir_fila_vector_propiedad(
+            self.scroll_prop_vectores, 1, "u =", self.prop_n_var.get()
+        )
+        self.entradas_prop_v = self._construir_fila_vector_propiedad(
+            self.scroll_prop_vectores, 2, "v =", self.prop_n_var.get()
+        )
+
+    def _leer_vector_propiedad(self, entradas, nombre):
+        """Lee una fila de entradas y convierte cada componente a Fraction."""
+        if not entradas:
+            raise ValueError(f"El vector {nombre} no puede estar vacío.")
+        return [_a_fraction(entry.get().strip() or "0") for entry in entradas]
+
+    def limpiar_propiedades(self):
+        """Reinicia a cero A, u, v, c y el resultado de la pestaña de propiedades."""
+        for fila in self.entradas_prop_A:
+            for entry in fila:
+                self._poner_entrada_en_cero(entry)
+        for entry in self.entradas_prop_u + self.entradas_prop_v:
+            self._poner_entrada_en_cero(entry)
+        self._poner_entrada_en_cero(self.entry_prop_c)
+        self._mostrar_en(self.txt_propiedades, "Matriz, vectores y escalar reiniciados a cero.\n")
+
+    def _verificar_propiedades(self):
+        """Calcula y presenta paso a paso las dos propiedades de linealidad."""
+        try:
+            A = self._leer_matriz_entries(self.entradas_prop_A)
+            u = self._leer_vector_propiedad(self.entradas_prop_u, "u")
+            v = self._leer_vector_propiedad(self.entradas_prop_v, "v")
+            c = self._leer_escalar(self.entry_prop_c)
+            resultado = verificar_propiedades(A, u, v, c)
+
+            def vector(nombre):
+                return self._formatear_vector(resultado[nombre])
+
+            estado_a = "¡SE CUMPLE! ✅" if resultado["a_se_cumple"] else "NO SE CUMPLE ❌"
+            estado_b = "¡SE CUMPLE! ✅" if resultado["b_se_cumple"] else "NO SE CUMPLE ❌"
+            texto = (
+                "============================================================\n"
+                "  PROPIEDADES DEL PRODUCTO MATRIZ-VECTOR\n"
+                "============================================================\n"
+                "DATOS: "
+                f"u={self._formatear_vector(u)}, "
+                f"v={self._formatear_vector(v)}, c={formatear_valor(c)}\n"
+                f"A = {self._formatear_matriz_corchetes(A)}\n\n"
+                "RESUMEN:\n"
+                f"  A(u+v)=Au+Av  -> {estado_a}\n"
+                f"  A(cu)=c(Au)   -> {estado_b}\n\n"
+                "------------------------------------------------------------\n"
+                "A) A(u+v) = Au+Av\n"
+                "------------------------------------------------------------\n"
+                f"  1) u+v       = {vector('a_u_mas_v')}\n"
+                f"  2) A(u+v)    = {vector('a_A_por_u_mas_v')}\n"
+                f"  3) Au        = {vector('a_Au')}\n"
+                f"  4) Av        = {vector('a_Av')}\n"
+                f"  5) Au+Av     = {vector('a_Au_mas_Av')}\n"
+                f"  Comparación: {vector('a_A_por_u_mas_v')} = "
+                f"{vector('a_Au_mas_Av')}  -> {estado_a}\n\n"
+                "------------------------------------------------------------\n"
+                "B) A(cu) = c(Au)\n"
+                "------------------------------------------------------------\n"
+                f"  1) cu        = {vector('b_c_por_u')}\n"
+                f"  2) A(cu)     = {vector('b_A_por_cu')}\n"
+                f"  3) Au        = {vector('b_Au')}  (calculado arriba)\n"
+                f"  4) c(Au)     = {vector('b_c_por_Au')}\n"
+                f"  Comparación: {vector('b_A_por_cu')} = "
+                f"{vector('b_c_por_Au')}  -> {estado_b}\n"
+                "============================================================\n"
+            )
+            self._mostrar_en(self.txt_propiedades, texto)
+        except Exception as error:
+            messagebox.showerror("Error", str(error))
+
     # ------------------------------------------------------------------
     # PESTAÑA MATRICES
     # ------------------------------------------------------------------
@@ -987,6 +1234,13 @@ class InterfazCalculadora(ctk.CTk):
         ctk.CTkButton(botones, text="A·B", command=self._op_multiplicar_matrices).grid(
             row=0, column=3, padx=4, pady=4
         )
+        ctk.CTkButton(
+            botones,
+            text="Limpiar",
+            fg_color="transparent",
+            border_width=1,
+            command=self.limpiar_matrices,
+        ).grid(row=0, column=4, padx=4, pady=4)
 
         ctk.CTkLabel(
             padre,
@@ -1084,6 +1338,15 @@ class InterfazCalculadora(ctk.CTk):
                 fila_vals.append(_a_fraction(texto))
             matriz.append(fila_vals)
         return matriz
+
+    def limpiar_matrices(self):
+        """Reinicia a cero A, B, el escalar y el resultado de la pestaña."""
+        for matriz in (self.entradas_A, self.entradas_B):
+            for fila in matriz:
+                for entry in fila:
+                    self._poner_entrada_en_cero(entry)
+        self._poner_entrada_en_cero(self.entry_mat_escalar)
+        self._mostrar_en(self.txt_matrices, "Matrices y escalar reiniciados a cero.\n")
 
     def _op_suma_matrices(self):
         try:

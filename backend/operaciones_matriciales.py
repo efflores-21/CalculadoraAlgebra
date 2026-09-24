@@ -6,7 +6,6 @@ convierten internamente a fractions.Fraction. No se usa NumPy ni SciPy.
 """
 
 from fractions import Fraction
-
 from backend.matriz import _a_fraction
 
 
@@ -178,3 +177,43 @@ def multiplicar_matrices(A, B):
             fila.append(acumulado)
         producto.append(fila)
     return producto
+
+
+def multiplicar_matriz_vector(A, x):
+    """
+    Multiplica una matriz A por un vector columna x.
+
+    Procedimiento algebraico equivalente: si A es m×n y x pertenece a R^n,
+        (A·x)[i] = Σ_j A[i][j] · x[j].
+    Cada componente del resultado es el producto punto entre una fila de A
+    y el vector x. El producto solo está definido cuando las columnas de A
+    coinciden con la cantidad de componentes de x.
+
+    Args:
+        A: matriz de tamaño m×n.
+        x: vector de n componentes.
+
+    Returns:
+        list[Fraction]: vector A·x de m componentes.
+
+    Raises:
+        ValueError: si A no es rectangular o las dimensiones no coinciden.
+    """
+    matriz = _matriz_a_fraction(A)
+    if x is None or len(x) == 0:
+        raise ValueError("El vector no puede estar vacío.")
+    vector = [_a_fraction(valor) for valor in x]
+    filas, columnas = _dimensiones(matriz)
+    if columnas != len(vector):
+        raise ValueError(
+            f"Dimensiones incompatibles: A tiene {columnas} columnas "
+            f"pero el vector tiene {len(vector)} componentes."
+        )
+
+    resultado = []
+    for i in range(filas):
+        acumulado = Fraction(0, 1)
+        for j in range(columnas):
+            acumulado += matriz[i][j] * vector[j]
+        resultado.append(acumulado)
+    return resultado
