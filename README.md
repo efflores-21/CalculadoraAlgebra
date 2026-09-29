@@ -7,17 +7,16 @@ paso a paso cuando corresponde.
 
 ## Inicio rápido
 
-Requiere Python y CustomTkinter. Para instalar la interfaz, si hace falta:
-
-```text
-pip install customtkinter
-```
-
-Inicia la aplicación desde la carpeta del proyecto:
+Solo requiere Python 3 instalado (desde python.org, que ya incluye Tkinter).
+Después de clonar el repositorio, ejecuta:
 
 ```text
 python main.py
 ```
+
+La primera vez, si la computadora no tiene CustomTkinter, `main.py` lo
+instala automáticamente con pip (necesita internet solo esa vez). También
+puede instalarse a mano con `pip install -r requirements.txt`.
 
 El menú principal permite seleccionar un módulo. Este se muestra en la misma
 ventana y ofrece un botón para regresar al menú.

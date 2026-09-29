@@ -1,6 +1,50 @@
 """Menú principal que navega entre módulos dentro de una sola ventana."""
 
-import customtkinter as ctk
+import importlib
+import os
+import subprocess
+import sys
+
+# Permite ejecutar main.py desde cualquier carpeta (o con doble clic):
+# los paquetes backend/ y modulos/ se buscan junto a este archivo.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+def _asegurar_customtkinter():
+    """Instala CustomTkinter con pip la primera vez, si la computadora no lo tiene."""
+    try:
+        importlib.import_module("customtkinter")
+        return
+    except ImportError:
+        pass
+    print("CustomTkinter no está instalado. Instalándolo (solo la primera vez)...")
+    comando = [sys.executable, "-m", "pip", "install", "customtkinter"]
+    if subprocess.call(comando) != 0:
+        # Sin permisos de administrador, se reintenta en la carpeta del usuario.
+        subprocess.call(comando + ["--user"])
+    importlib.invalidate_caches()
+    try:
+        importlib.import_module("customtkinter")
+    except ImportError:
+        mensaje = (
+            "No se pudo instalar CustomTkinter automáticamente.\n"
+            "Revisa la conexión a internet o ejecuta:\n\n"
+            f"  {sys.executable} -m pip install customtkinter"
+        )
+        print(mensaje)
+        try:
+            from tkinter import Tk, messagebox
+            raiz = Tk()
+            raiz.withdraw()
+            messagebox.showerror("Calculadora de Álgebra Lineal", mensaje)
+        except Exception:
+            input("Presiona Enter para salir...")
+        sys.exit(1)
+
+
+_asegurar_customtkinter()
+
+import customtkinter as ctk  # noqa: E402
 
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
