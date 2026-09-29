@@ -3,7 +3,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 
-from backend.clasificador import clasificar_sistema
+from backend.clasificador import clasificar_sistema, columnas_pivote
 from backend.eliminacion import resolver_sistema
 from backend.matriz import _a_fraction, formatear_valor
 from modulos._comun import (
@@ -145,6 +145,38 @@ class ModuloSistemas(ctk.CTkFrame):
                     f"Paso {i}: {paso['descripcion']}",
                     formatear_matriz(paso["matriz"]),
                 ])
+            nombre_final = (
+                "forma escalonada reducida (RREF)"
+                if metodo == "gauss-jordan" else "forma escalonada"
+            )
+            lineas.extend([
+                "",
+                f"Matriz final en {nombre_final}:",
+                formatear_matriz(datos["matriz_escalonada"]),
+            ])
+
+            # Una columna es pivote si contiene el primer valor no nulo de
+            # alguna fila; sus variables son básicas y las demás son libres.
+            pivotes = columnas_pivote(datos["matriz_escalonada"], datos["rango"])
+            libres = [j for j in range(n) if j not in pivotes]
+            lineas.extend([
+                "",
+                "COLUMNAS PIVOTE Y VARIABLES:",
+                "  Columnas pivote: "
+                + (", ".join(f"columna {j + 1}" for j in pivotes) or "ninguna"),
+            ])
+            if clase["tipo"] == "Inconsistente":
+                lineas.append(
+                    "  Variables básicas y libres: no aplica, porque el sistema no tiene solución."
+                )
+            else:
+                lineas.extend([
+                    "  Variables básicas: "
+                    + (", ".join(f"x{j + 1}" for j in pivotes) or "ninguna"),
+                    "  Variables libres: "
+                    + (", ".join(f"x{j + 1}" for j in libres) or "ninguna"),
+                ])
+
             lineas.extend([
                 "",
                 f"Clasificacion: {clase['tipo']}.",
@@ -155,20 +187,65 @@ class ModuloSistemas(ctk.CTkFrame):
                 expresiones = datos["soluciones_generales"]
                 for variable in range(n):
                     constante, terminos = expresiones.get((variable), (None, None))
-                    if constante is not None:
+                    if variable in libres:
+                        lineas.append(
+                            f"  x{variable + 1} = t{variable + 1} (variable libre, cualquier valor)"
+                        )
+                    elif constante is not None:
                         lineas.append(
                             f"  x{variable + 1} = {self._formatear_expresion(constante, terminos)}"
                         )
-                    elif variable in datos["variables_libres"]:
-                        lineas.append(f"  x{variable + 1} es variable libre.")
                     else:
                         valor = datos["soluciones"].get(variable)
                         lineas.append(
                             f"  x{variable + 1} = {formatear_valor(valor)}"
                         )
+                lineas.extend(
+                    self._verificar_solucion(matriz_a, vector_b, expresiones, libres)
+                )
             reemplazar_texto(self.resultado, "\n".join(lineas) + "\n")
         except (ValueError, ZeroDivisionError) as error:
             messagebox.showerror("Error", str(error))
+
+    def _verificar_solucion(self, matriz_a, vector_b, expresiones, libres):
+        """
+        Sustituye la solución en cada ecuación original y compara con b.
+
+        Equivale a comprobar A*x = b fila por fila: la ecuación i se cumple si
+        a_i1*x1 + ... + a_in*xn da exactamente b_i. Con variables libres se
+        verifica la solución particular que resulta de tomar todos los t = 0.
+        """
+        n = len(matriz_a[0])
+        x = [expresiones[j][0] for j in range(n)]
+        lineas = ["", "VERIFICACIÓN (sustitución en el sistema original):"]
+        if libres:
+            lineas.append(
+                "  Se usa la solución particular con "
+                + ", ".join(f"t{j + 1}" for j in libres) + " = 0:"
+            )
+        lineas.append(
+            "  x = (" + ", ".join(formatear_valor(valor) for valor in x) + ")"
+        )
+        todas_cumplen = True
+        for i, fila in enumerate(matriz_a):
+            productos = " + ".join(
+                f"({formatear_valor(fila[j])})({formatear_valor(x[j])})"
+                for j in range(n)
+            )
+            total = sum(fila[j] * x[j] for j in range(n))
+            cumple = total == vector_b[i]
+            todas_cumplen = todas_cumplen and cumple
+            lineas.append(
+                f"  Ec. {i + 1}: {productos} = {formatear_valor(total)}"
+                f"  {'=' if cumple else '≠'} {formatear_valor(vector_b[i])}"
+                f"  {'✓' if cumple else '✗'}"
+            )
+        lineas.append(
+            "  Resultado: la solución satisface todas las ecuaciones."
+            if todas_cumplen
+            else "  Resultado: la solución NO satisface todas las ecuaciones."
+        )
+        return lineas
 
     def _formatear_expresion(self, constante, terminos):
         """Escribe una solución afín, equivalente a expresar variables con parámetros libres."""

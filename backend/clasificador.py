@@ -56,6 +56,23 @@ def clasificar_sistema(matriz_escalonada, rango):
         }
 
 
+def columnas_pivote(matriz_escalonada, rango):
+    """
+    Devuelve los índices (base 0) de las columnas pivote de la matriz de coeficientes.
+
+    En cada una de las primeras `rango` filas, la columna pivote es la de la
+    primera entrada distinta de cero. La última columna (b) no se considera.
+    """
+    n = len(matriz_escalonada[0]) - 1
+    pivotes = []
+    for i in range(rango):
+        for c in range(n):
+            if not es_cero(matriz_escalonada[i][c]):
+                pivotes.append(c)
+                break
+    return pivotes
+
+
 def mostrar_clasificacion(clasificacion):
     """
     Muestra la clasificación del sistema de manera clara.
