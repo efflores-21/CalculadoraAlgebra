@@ -33,9 +33,9 @@ DIM_MAXIMA = 12
 DIM_POR_DEFECTO = 3
 
 
-class InterfazCalculadora(ctk.CTk):
-    def __init__(self):
-        super().__init__()
+class InterfazCalculadora(ctk.CTkToplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
 
         self.title("Calculadora de Álgebra Lineal")
         self.geometry("1100x850")
