@@ -1,9 +1,8 @@
 """Panel para suma, resta, escalares y combinación lineal de vectores."""
 
 import customtkinter as ctk
-from tkinter import messagebox
 
-from backend.matriz import formatear_valor
+from backend.matriz import formatear_valor, subindice
 from backend.vectores import (
     es_combinacion_lineal,
     multiplicar_escalar_vector,
@@ -13,16 +12,20 @@ from backend.vectores import (
 from backend.eliminacion import resolver_sistema
 from backend.clasificador import clasificar_sistema
 from modulos._comun import (
-    crear_logo,
-    crear_resultado,
+    boton_primario,
+    boton_secundario,
+    crear_controles,
+    crear_estructura,
     entrada_numero,
+    etiqueta,
     formatear_matriz,
     formatear_vector,
     leer_entero,
     leer_fraccion,
     mensaje_error,
-    mostrar_teoremas,
     reemplazar_texto,
+    reiniciar_celdas,
+    subtitulo,
 )
 
 
@@ -40,78 +43,62 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
 
     def _construir_interfaz(self):
         """Construye controles, tabla vectorial y área de resultados."""
-        ctk.CTkButton(
+        zonas = crear_estructura(
             self,
-            text="<- Volver al menú principal",
-            fg_color="transparent",
-            border_width=1,
-            width=220,
-            command=self.on_back,
-        ).pack(anchor="w", padx=12, pady=(10, 0))
-        crear_logo(
-            self,
-            "MÓDULO 2: OPERACIONES CON VECTORES\n"
-            "Suma, resta, producto por escalar y combinación lineal\n"
-            "Vectores en R^n",
-        )
-
-        controles = ctk.CTkFrame(self)
-        controles.pack(fill="x", padx=12, pady=6)
-        ctk.CTkLabel(controles, text="Dimensión n:").grid(row=0, column=0, padx=4)
-        self.entry_n = ctk.CTkEntry(controles, width=62, justify="center")
-        self.entry_n.insert(0, "3")
-        self.entry_n.grid(row=0, column=1, padx=4)
-        ctk.CTkLabel(controles, text="Vectores generadores k:").grid(
-            row=0, column=2, padx=4
-        )
-        self.entry_k = ctk.CTkEntry(controles, width=62, justify="center")
-        self.entry_k.insert(0, "2")
-        self.entry_k.grid(row=0, column=3, padx=4)
-        ctk.CTkLabel(controles, text="Escalar c:").grid(row=0, column=4, padx=4)
-        self.entry_c = ctk.CTkEntry(controles, width=75, justify="center")
-        self.entry_c.insert(0, "2")
-        self.entry_c.grid(row=0, column=5, padx=4)
-        ctk.CTkButton(
-            controles, text="Aplicar dimensiones", command=self.actualizar_entradas
-        ).grid(row=0, column=6, padx=4)
-        ctk.CTkButton(
-            controles,
-            text="0. Ver teoremas",
-            command=lambda: mostrar_teoremas(
-                self, "operaciones_vectores", "Operaciones con vectores"
+            self.on_back,
+            numero=2,
+            titulo="Vectores y combinación lineal",
+            descripcion="Suma, resta y escalar de vectores. ¿Es b combinación lineal?",
+            logo=(
+                " u + v   MÓDULO: OPERACIONES CON VECTORES\n"
+                " c · v   Suma, resta, escalar y combinación lineal\n"
+                " → R^n   c1·v1 + ... + ck·vk = b"
             ),
-        ).grid(row=0, column=7, padx=4)
-
-        ctk.CTkLabel(
-            self,
-            text="La suma, resta y el escalar usan v1 y v2; la combinación lineal usa todos los vectores y b.",
-            text_color="#AAB7C4",
-            wraplength=950,
-        ).pack(anchor="w", padx=14, pady=(0, 4))
-        self.tabla = ctk.CTkScrollableFrame(self, label_text="Componentes de los vectores")
-        self.tabla.pack(fill="both", expand=True, padx=12, pady=6)
-
-        acciones = ctk.CTkFrame(self, fg_color="transparent")
-        acciones.pack(fill="x", padx=12, pady=4)
-        botones = (
-            ("v1 + v2", self.sumar),
-            ("v1 - v2", self.restar),
-            ("c · v1", self.escalar),
-            ("¿b combinación lineal?", self.combinacion_lineal),
+            pasos=[
+                "Escribe cuántos componentes tiene cada vector, cuántos vectores "
+                "vas a usar y pulsa «Crear tabla».",
+                "Cada columna es un vector. Para sumar, restar o multiplicar por c "
+                "se usan v₁ y v₂.",
+                "Para saber si b es combinación lineal de los vectores, llena "
+                "también la columna b y pulsa «¿b es combinación lineal?».",
+            ],
+            clave_teoremas="operaciones_vectores",
+            indicacion="Aquí verás cada operación componente por componente, o el "
+                       "sistema que decide si b es combinación lineal.",
         )
-        for titulo, comando in botones:
-            ctk.CTkButton(acciones, text=titulo, command=comando).pack(
-                side="left", fill="x", expand=True, padx=3
+        self.resultado = zonas.resultado
+        contenido = zonas.contenido
+
+        controles, entradas = crear_controles(
+            contenido,
+            [("n", "Componentes", "3", 90), ("k", "Vectores", "2", 80),
+             ("c", "Escalar c", "2", 80, False)],
+            self.actualizar_entradas,
+        )
+        controles.pack(anchor="w", padx=10, pady=(10, 0))
+        self.entry_n, self.entry_k = entradas["n"], entradas["k"]
+        self.entry_c = entradas["c"]
+
+        subtitulo(contenido, "Tus vectores").pack(anchor="w", padx=10, pady=(20, 6))
+        self.tabla = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.tabla.pack(anchor="w", padx=6)
+
+        acciones = zonas.acciones
+        acciones.grid_columnconfigure((0, 1, 2), weight=1, uniform="ops")
+        for columna, (titulo, comando) in enumerate((
+            ("v₁ + v₂", self.sumar),
+            ("v₁ − v₂", self.restar),
+            ("c · v₁", self.escalar),
+        )):
+            boton_secundario(acciones, titulo, comando, height=38).grid(
+                row=0, column=columna, sticky="ew", padx=(0 if columna == 0 else 8, 0)
             )
-        ctk.CTkButton(
-            acciones,
-            text="Limpiar",
-            width=90,
-            fg_color="transparent",
-            border_width=1,
-            command=self.limpiar,
-        ).pack(side="left", padx=3)
-        self.resultado = crear_resultado(self, height=260)
+        boton_primario(
+            acciones, "¿b es combinación lineal?", self.combinacion_lineal
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        boton_secundario(acciones, "Limpiar", self.limpiar, height=40).grid(
+            row=1, column=2, sticky="ew", padx=(8, 0), pady=(8, 0)
+        )
 
     def actualizar_entradas(self):
         """Valida n,k y crea k vectores, además del vector objetivo b."""
@@ -126,18 +113,19 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
         self.vectores_entries = [[] for _ in range(k)]
         self.b_entries = []
         for j in range(k):
-            ctk.CTkLabel(self.tabla, text=f"v{j + 1}").grid(row=0, column=j + 1, padx=4)
-        ctk.CTkLabel(self.tabla, text="b (objetivo)").grid(row=0, column=k + 1, padx=8)
-        for i in range(n):
-            ctk.CTkLabel(self.tabla, text=f"Componente {i + 1}").grid(
-                row=i + 1, column=0, sticky="w", padx=5
+            etiqueta(self.tabla, f"v{subindice(j + 1)}", color="texto", negrita=True).grid(
+                row=0, column=j, pady=(0, 2)
             )
+        etiqueta(self.tabla, "b", color="texto", negrita=True).grid(
+            row=0, column=k, padx=(18, 0), pady=(0, 2)
+        )
+        for i in range(n):
             for j in range(k):
                 celda = entrada_numero(self.tabla)
-                celda.grid(row=i + 1, column=j + 1, padx=3, pady=3)
+                celda.grid(row=i + 1, column=j, padx=3, pady=3)
                 self.vectores_entries[j].append(celda)
             objetivo = entrada_numero(self.tabla)
-            objetivo.grid(row=i + 1, column=k + 1, padx=8, pady=3)
+            objetivo.grid(row=i + 1, column=k, padx=(18, 3), pady=3)
             self.b_entries.append(objetivo)
         reemplazar_texto(self.resultado, "")
 
@@ -147,10 +135,10 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
         for indice, fila in enumerate(self.vectores_entries):
             try:
                 vectores.append([
-                    leer_fraccion(celda, f"v{indice + 1}") for celda in fila
+                    leer_fraccion(celda, f"v{subindice(indice + 1)}") for celda in fila
                 ])
             except ValueError as error:
-                raise ValueError(f"Entrada inválida en v{indice + 1}: {error}") from error
+                raise ValueError(f"Entrada inválida en v{subindice(indice + 1)}: {error}") from error
         return vectores
 
     def sumar(self):
@@ -168,14 +156,15 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             reemplazar_texto(
                 self.resultado,
                 "SUMA DE VECTORES\n"
-                f"v1 = {formatear_vector(vectores[0])}\n"
-                f"v2 = {formatear_vector(vectores[1])}\n"
+                f"v₁ = {formatear_vector(vectores[0])}\n"
+                f"v₂ = {formatear_vector(vectores[1])}\n"
                 "Se suman coordenadas de la misma posición:\n"
                 + "\n".join(pasos)
-                + f"\nResultado: v1+v2 = {formatear_vector(resultado)}\n",
+                + f"\nResultado: v₁ + v₂ = {formatear_vector(resultado)}\n",
+                f"v₁ + v₂ = {formatear_vector(resultado)}",
             )
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def restar(self):
         """Calcula v1-v2 restando coordenadas homólogas."""
@@ -192,14 +181,15 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             reemplazar_texto(
                 self.resultado,
                 "RESTA DE VECTORES\n"
-                f"v1 = {formatear_vector(vectores[0])}\n"
-                f"v2 = {formatear_vector(vectores[1])}\n"
+                f"v₁ = {formatear_vector(vectores[0])}\n"
+                f"v₂ = {formatear_vector(vectores[1])}\n"
                 "Se restan coordenadas de la misma posición:\n"
                 + "\n".join(pasos)
-                + f"\nResultado: v1-v2 = {formatear_vector(resultado)}\n",
+                + f"\nResultado: v₁ − v₂ = {formatear_vector(resultado)}\n",
+                f"v₁ − v₂ = {formatear_vector(resultado)}",
             )
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def escalar(self):
         """Multiplica c por cada componente de v1, equivalente a c*v1."""
@@ -215,13 +205,14 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             reemplazar_texto(
                 self.resultado,
                 "PRODUCTO DE UN VECTOR POR UN ESCALAR\n"
-                f"c = {formatear_valor(escalar)}; v1 = {formatear_vector(vectores[0])}\n"
+                f"c = {formatear_valor(escalar)}; v₁ = {formatear_vector(vectores[0])}\n"
                 "Se multiplica c por cada coordenada:\n"
                 + "\n".join(pasos)
-                + f"\nResultado: c*v1 = {formatear_vector(resultado)}\n",
+                + f"\nResultado: c·v₁ = {formatear_vector(resultado)}\n",
+                f"{formatear_valor(escalar)} · v₁ = {formatear_vector(resultado)}",
             )
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def combinacion_lineal(self):
         """Resuelve V*c=b y decide si b está en el span de los vectores ingresados."""
@@ -237,7 +228,7 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             )
             lineas = [
                 "COMBINACIÓN LINEAL",
-                "Se buscan escalares c1,...,ck tales que c1*v1+...+ck*vk=b.",
+                "Se buscan escalares c₁, …, cₖ tales que c₁·v₁ + … + cₖ·vₖ = b.",
                 f"b = {formatear_vector(objetivo)}",
                 "Matriz aumentada [V|b]:",
                 formatear_matriz(aumentada),
@@ -259,25 +250,26 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                     expresion = calculo["soluciones_generales"].get(indice)
                     if expresion and not expresion[1]:
                         lineas.append(
-                            f"  c{indice + 1} = {formatear_valor(expresion[0])}"
+                            f"  c{subindice(indice + 1)} = {formatear_valor(expresion[0])}"
                         )
                     elif indice in calculo["variables_libres"]:
-                        lineas.append(f"  c{indice + 1} es libre.")
+                        lineas.append(f"  c{subindice(indice + 1)} es libre.")
                 if calculo["variables_libres"]:
                     lineas.append("Existen infinitas representaciones de b.")
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n")
+            if clasificacion["tipo"] == "Inconsistente":
+                resumen = "b NO es combinación lineal de los vectores."
+            elif calculo["variables_libres"]:
+                resumen = "b SÍ es combinación lineal (de infinitas formas)."
+            else:
+                resumen = "b SÍ es combinación lineal:   " + ",   ".join(
+                    f"c{subindice(j + 1)} = {formatear_valor(calculo['soluciones_generales'][j][0])}"
+                    for j in range(len(vectores))
+                )
+            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def limpiar(self):
         """Reinicia los vectores, b, el escalar y el área de resultados."""
-        for fila in self.vectores_entries:
-            for celda in fila:
-                celda.delete(0, "end")
-                celda.insert(0, "0")
-        for celda in self.b_entries:
-            celda.delete(0, "end")
-            celda.insert(0, "0")
-        self.entry_c.delete(0, "end")
-        self.entry_c.insert(0, "0")
-        reemplazar_texto(self.resultado, "Entradas reiniciadas a cero.\n")
+        reiniciar_celdas(self.vectores_entries, self.b_entries, [self.entry_c])
+        reemplazar_texto(self.resultado, "")

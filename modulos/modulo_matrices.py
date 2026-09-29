@@ -2,9 +2,8 @@
 
 from fractions import Fraction
 import customtkinter as ctk
-from tkinter import messagebox
 
-from backend.matriz import _a_fraction, formatear_valor
+from backend.matriz import _a_fraction, formatear_valor, subindice
 from backend.operaciones_matriciales import (
     multiplicar_escalar_matriz,
     multiplicar_matrices,
@@ -12,14 +11,19 @@ from backend.operaciones_matriciales import (
     suma_matrices,
 )
 from modulos._comun import (
-    crear_logo,
-    crear_resultado,
+    boton_primario,
+    boton_secundario,
+    crear_controles,
+    crear_estructura,
     entrada_numero,
     formatear_matriz,
     leer_entero,
+    leer_fraccion,
+    matriz_en_linea,
     mensaje_error,
-    mostrar_teoremas,
     reemplazar_texto,
+    reiniciar_celdas,
+    subtitulo,
 )
 
 
@@ -104,86 +108,84 @@ class ModuloMatrices(ctk.CTkFrame):
 
     def _construir_interfaz(self):
         """Construye los controles, tablas y área de resultados del módulo."""
-        ctk.CTkButton(
+        zonas = crear_estructura(
             self,
-            text="<- Volver al menu principal",
-            fg_color="transparent",
-            border_width=1,
-            width=210,
-            command=self.on_back,
-        ).pack(anchor="w", padx=12, pady=(10, 0))
-        crear_logo(
-            self,
-            "[ A ][ B ]  MODULO 4: ALGEBRA DE MATRICES\n"
-            "[ C ][ D ]  Operaciones, traspuesta e inversa\n"
-            "A+B | A-B | kA | A*B | A^T | A^-1",
+            self.on_back,
+            numero=4,
+            titulo="Operaciones con matrices",
+            descripcion="Suma, resta, producto, traspuesta e inversa de matrices.",
+            logo=(
+                "[ A ][ B ]  MÓDULO: ÁLGEBRA DE MATRICES\n"
+                "[ C ][ D ]  Operaciones, Traspuesta y Matriz Inversa"
+            ),
+            pasos=[
+                "Escribe el tamaño de A y de B (filas × columnas) y pulsa "
+                "«Crear tablas».",
+                "Llena las matrices. kA, Aᵀ y A⁻¹ solo usan A.",
+                "Pulsa la operación. A + B y A − B piden el mismo tamaño; A · B "
+                "pide que las columnas de A sean iguales a las filas de B.",
+            ],
+            clave_teoremas="matrices",
+            indicacion="Aquí verás la operación entrada por entrada y la matriz "
+                       "resultante. La inversa muestra cada paso de Gauss-Jordan.",
         )
-        controles = ctk.CTkFrame(self)
-        controles.pack(fill="x", padx=12, pady=6)
-        self.entries_dim = {}
-        for columna, (clave, etiqueta, inicial) in enumerate((
-            ("am", "A filas", "2"), ("an", "A columnas", "2"),
-            ("bm", "B filas", "2"), ("bn", "B columnas", "2"),
-        )):
-            ctk.CTkLabel(controles, text=etiqueta).grid(
-                row=0, column=columna * 2, padx=(6, 2), pady=8
-            )
-            entry = ctk.CTkEntry(controles, width=55, justify="center")
-            entry.insert(0, inicial)
-            entry.grid(row=0, column=columna * 2 + 1, padx=(0, 5))
-            self.entries_dim[clave] = entry
-        ctk.CTkButton(
-            controles, text="Aplicar dimensiones", command=self.actualizar_entradas
-        ).grid(row=0, column=8, padx=4)
-        ctk.CTkButton(
-            controles,
-            text="0. Ver Teoremas Clave del Módulo",
-            command=lambda: mostrar_teoremas(self, "matrices", "Matrices"),
-        ).grid(row=0, column=9, padx=4)
-        escalar_frame = ctk.CTkFrame(self, fg_color="transparent")
-        escalar_frame.pack(fill="x", padx=12, pady=(0, 5))
-        ctk.CTkLabel(escalar_frame, text="Escalar k:").pack(side="left", padx=(4, 6))
-        self.entry_escalar = ctk.CTkEntry(escalar_frame, width=80, justify="center")
-        self.entry_escalar.insert(0, "2")
-        self.entry_escalar.pack(side="left")
-        self.tablas = ctk.CTkFrame(self, fg_color="transparent")
-        self.tablas.pack(fill="both", expand=True, padx=12, pady=6)
-        self.tablas.grid_columnconfigure((0, 1), weight=1)
-        self.tablas.grid_rowconfigure(0, weight=1)
-        self.scroll_A = ctk.CTkScrollableFrame(self.tablas, label_text="Matriz A")
-        self.scroll_A.grid(row=0, column=0, sticky="nsew", padx=5)
-        self.scroll_B = ctk.CTkScrollableFrame(self.tablas, label_text="Matriz B")
-        self.scroll_B.grid(row=0, column=1, sticky="nsew", padx=5)
+        self.resultado = zonas.resultado
+        contenido = zonas.contenido
 
-        acciones = ctk.CTkFrame(self, fg_color="transparent")
-        acciones.pack(fill="x", padx=12, pady=4)
+        controles, self.entries_dim = crear_controles(
+            contenido,
+            [
+                ("am", "Filas de A", "2", 80), ("an", "Columnas de A", "2", 100),
+                ("bm", "Filas de B", "2", 80), ("bn", "Columnas de B", "2", 100),
+            ],
+            self.actualizar_entradas,
+            texto_boton=None,
+        )
+        controles.pack(anchor="w", padx=10, pady=(10, 0))
+        extra, entradas = crear_controles(
+            contenido,
+            [("k", "Escalar k (para kA)", "2", 130, False)],
+            self.actualizar_entradas,
+            texto_boton="Crear tablas",
+        )
+        extra.pack(anchor="w", padx=10, pady=(12, 0))
+        self.entry_escalar = entradas["k"]
+
+        self.tablas = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.tablas.pack(anchor="w", fill="x", pady=(8, 0))
+        subtitulo(self.tablas, "Matriz A").grid(row=0, column=0, sticky="w", padx=10, pady=(12, 6))
+        subtitulo(self.tablas, "Matriz B").grid(row=0, column=1, sticky="w", padx=(28, 10), pady=(12, 6))
+        self.scroll_A = ctk.CTkFrame(self.tablas, fg_color="transparent")
+        self.scroll_A.grid(row=1, column=0, sticky="nw", padx=6)
+        self.scroll_B = ctk.CTkFrame(self.tablas, fg_color="transparent")
+        self.scroll_B.grid(row=1, column=1, sticky="nw", padx=(24, 6))
+
+        acciones = zonas.acciones
+        acciones.grid_columnconfigure((0, 1, 2), weight=1, uniform="ops")
         operaciones = [
-            ("A+B", lambda: self.calcular("suma")),
-            ("A-B", lambda: self.calcular("resta")),
-            ("kA", lambda: self.calcular("escalar")),
-            ("A·B", lambda: self.calcular("producto")),
-            ("Aᵀ", lambda: self.calcular("traspuesta")),
-            ("A⁻¹", lambda: self.calcular("inversa")),
+            ("A + B", "suma"), ("A − B", "resta"), ("k · A", "escalar"),
+            ("A · B", "producto"), ("Aᵀ  traspuesta", "traspuesta"), ("A⁻¹  inversa", "inversa"),
         ]
-        for texto, comando in operaciones:
-            ctk.CTkButton(acciones, text=texto, command=comando).pack(
-                side="left", fill="x", expand=True, padx=3
+        for indice, (texto, operacion) in enumerate(operaciones):
+            boton_primario(
+                acciones, texto, lambda op=operacion: self.calcular(op), height=38
+            ).grid(
+                row=indice // 3, column=indice % 3, sticky="ew",
+                padx=(0 if indice % 3 == 0 else 8, 0), pady=(0, 8),
             )
-        ctk.CTkButton(
-            acciones,
-            text="Limpiar",
-            width=100,
-            fg_color="transparent",
-            border_width=1,
-            command=self.limpiar,
-        ).pack(side="left", padx=3)
-        self.resultado = crear_resultado(self, height=260)
+        boton_secundario(acciones, "Limpiar", self.limpiar, height=36).grid(
+            row=2, column=0, columnspan=3, sticky="ew"
+        )
 
     def actualizar_entradas(self):
         """Valida las dimensiones e inicializa las celdas de A y B."""
         try:
+            nombres = {
+                "am": "Las filas de A", "an": "Las columnas de A",
+                "bm": "Las filas de B", "bn": "Las columnas de B",
+            }
             dimensiones = {
-                clave: leer_entero(entry, f"Dimensión {clave}")
+                clave: leer_entero(entry, nombres[clave])
                 for clave, entry in self.entries_dim.items()
             }
         except ValueError as error:
@@ -213,13 +215,13 @@ class ModuloMatrices(ctk.CTkFrame):
 
     def _leer_matriz(self, entradas, nombre):
         """Lee y convierte las celdas de una matriz a números racionales exactos."""
-        try:
-            return [
-                [_a_fraction(celda.get().strip() or "0") for celda in fila]
-                for fila in entradas
+        return [
+            [
+                leer_fraccion(celda, f"La entrada ({i + 1},{j + 1}) de {nombre}")
+                for j, celda in enumerate(fila)
             ]
-        except (ValueError, ZeroDivisionError) as error:
-            raise ValueError(f"Hay un valor inválido en la matriz {nombre}.") from error
+            for i, fila in enumerate(entradas)
+        ]
 
     def calcular(self, operacion):
         """Ejecuta la operación seleccionada, equivalente a aplicar su definición matricial."""
@@ -232,7 +234,7 @@ class ModuloMatrices(ctk.CTkFrame):
                 for i in range(len(A)):
                     for j in range(len(A[0])):
                         texto += (
-                            f"c{i + 1},{j + 1} = {formatear_valor(A[i][j])} + "
+                            f"c{subindice(i + 1)},{subindice(j + 1)} = {formatear_valor(A[i][j])} + "
                             f"{formatear_valor(B[i][j])} = {formatear_valor(C[i][j])}\n"
                         )
                 texto += "\nResultado A+B:\n" + formatear_matriz(C)
@@ -243,18 +245,18 @@ class ModuloMatrices(ctk.CTkFrame):
                 for i in range(len(A)):
                     for j in range(len(A[0])):
                         texto += (
-                            f"c{i + 1},{j + 1} = {formatear_valor(A[i][j])} - "
+                            f"c{subindice(i + 1)},{subindice(j + 1)} = {formatear_valor(A[i][j])} - "
                             f"{formatear_valor(B[i][j])} = {formatear_valor(C[i][j])}\n"
                         )
                 texto += "\nResultado A-B:\n" + formatear_matriz(C)
             elif operacion == "escalar":
-                k = _a_fraction(self.entry_escalar.get().strip() or "0")
+                k = leer_fraccion(self.entry_escalar, "El escalar k")
                 C = multiplicar_escalar_matriz(k, A)
                 texto = f"k={formatear_valor(k)}; cada entrada de A se multiplica por k:\n"
                 for i in range(len(A)):
                     for j in range(len(A[0])):
                         texto += (
-                            f"c{i + 1},{j + 1}: {formatear_valor(k)}*"
+                            f"c{subindice(i + 1)},{subindice(j + 1)}: {formatear_valor(k)}*"
                             f"{formatear_valor(A[i][j])}={formatear_valor(C[i][j])}\n"
                         )
                 texto += "\nResultado kA:\n" + formatear_matriz(C)
@@ -269,7 +271,7 @@ class ModuloMatrices(ctk.CTkFrame):
                             for k in range(len(A[0]))
                         ]
                         lineas.append(
-                            f"c{i + 1},{j + 1} = " + " + ".join(productos)
+                            f"c{subindice(i + 1)},{subindice(j + 1)} = " + " + ".join(productos)
                             + f" = {formatear_valor(C[i][j])}"
                         )
                 lineas.extend(["", "Resultado A·B:", formatear_matriz(C)])
@@ -291,17 +293,17 @@ class ModuloMatrices(ctk.CTkFrame):
                     ])
                 lineas.extend(["", "A^-1 =", formatear_matriz(C)])
                 texto = "\n".join(lineas)
-            reemplazar_texto(self.resultado, texto + "\n")
+            nombre = {
+                "suma": "A + B", "resta": "A − B", "escalar": "k · A",
+                "producto": "A · B", "traspuesta": "Aᵀ", "inversa": "A⁻¹",
+            }[operacion]
+            reemplazar_texto(
+                self.resultado, texto + "\n", f"{nombre} = {matriz_en_linea(C)}"
+            )
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def limpiar(self):
         """Restaura a cero todas las entradas de las matrices y el escalar."""
-        for matriz in (self.entradas_A, self.entradas_B):
-            for fila in matriz:
-                for celda in fila:
-                    celda.delete(0, "end")
-                    celda.insert(0, "0")
-        self.entry_escalar.delete(0, "end")
-        self.entry_escalar.insert(0, "0")
-        reemplazar_texto(self.resultado, "Matrices y escalar reiniciados a cero.\n")
+        reiniciar_celdas(self.entradas_A, self.entradas_B, [self.entry_escalar])
+        reemplazar_texto(self.resultado, "")

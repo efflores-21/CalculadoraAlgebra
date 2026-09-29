@@ -2,18 +2,21 @@
 
 from fractions import Fraction
 import customtkinter as ctk
-from tkinter import messagebox
 
 from backend.matriz import _a_fraction, formatear_valor
 from modulos._comun import (
-    crear_logo,
-    crear_resultado,
+    boton_primario,
+    boton_secundario,
+    crear_controles,
+    crear_estructura,
     entrada_numero,
     formatear_matriz,
     leer_entero,
+    leer_fraccion,
     mensaje_error,
-    mostrar_teoremas,
     reemplazar_texto,
+    reiniciar_celdas,
+    subtitulo,
 )
 
 
@@ -90,53 +93,47 @@ class ModuloDeterminantes(ctk.CTkFrame):
         self.actualizar_entradas()
 
     def _construir_interfaz(self):
-        """Crea la ventana, su logotipo, el control de orden y las acciones."""
-        ctk.CTkButton(
+        """Crea la pantalla, su logotipo, el control de orden y las acciones."""
+        zonas = crear_estructura(
             self,
-            text="<- Volver al menu principal",
-            fg_color="transparent",
-            border_width=1,
-            width=210,
-            command=self.on_back,
-        ).pack(anchor="w", padx=12, pady=(10, 0))
-        crear_logo(
-            self,
-            "+---------+\n"
-            "| det(A)  |  MODULO 5: DETERMINANTES\n"
-            "+---------+  Pivotes, intercambios de fila y valor exacto",
+            self.on_back,
+            numero=5,
+            titulo="Determinantes",
+            descripcion="Calcula det(A) paso a paso y dice si A tiene inversa.",
+            logo=(
+                "+---------+\n"
+                "| det(A)  |  MÓDULO: DETERMINANTES\n"
+                "+---------+  Pivotes, intercambios de fila y valor exacto"
+            ),
+            pasos=[
+                "Escribe el tamaño n de tu matriz cuadrada (n × n) y pulsa "
+                "«Crear tabla».",
+                "Llena la matriz A fila por fila.",
+                "Pulsa «Calcular determinante».",
+            ],
+            clave_teoremas="determinantes",
+            indicacion="Aquí verás la eliminación hasta la forma triangular, "
+                       "los pivotes, el valor de det(A) y si A es invertible.",
         )
-        controles = ctk.CTkFrame(self)
-        controles.pack(fill="x", padx=12, pady=8)
-        ctk.CTkLabel(controles, text="Orden de la matriz n:").pack(
-            side="left", padx=(10, 5), pady=8
+        self.resultado = zonas.resultado
+        contenido = zonas.contenido
+
+        controles, entradas = crear_controles(
+            contenido, [("n", "Tamaño n", "2", 90)], self.actualizar_entradas
         )
-        self.entry_n = ctk.CTkEntry(controles, width=70, justify="center")
-        self.entry_n.insert(0, "2")
-        self.entry_n.pack(side="left", padx=5)
-        ctk.CTkButton(
-            controles, text="Crear matriz", command=self.actualizar_entradas
-        ).pack(side="left", padx=5)
-        ctk.CTkButton(
-            controles,
-            text="0. Ver Teoremas Clave del Módulo",
-            command=lambda: mostrar_teoremas(self, "determinantes", "Determinantes"),
-        ).pack(side="left", padx=5)
-        self.tabla = ctk.CTkScrollableFrame(self, label_text="Matriz cuadrada A")
-        self.tabla.pack(fill="both", expand=True, padx=12, pady=8)
-        acciones = ctk.CTkFrame(self, fg_color="transparent")
-        acciones.pack(fill="x", padx=12, pady=4)
-        ctk.CTkButton(
-            acciones, text="Calcular determinante", command=self.calcular, height=38
-        ).pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(
-            acciones,
-            text="Limpiar",
-            width=110,
-            fg_color="transparent",
-            border_width=1,
-            command=self.limpiar,
-        ).pack(side="left", padx=(5, 0))
-        self.resultado = crear_resultado(self, height=280)
+        controles.pack(anchor="w", padx=10, pady=(10, 0))
+        self.entry_n = entradas["n"]
+
+        subtitulo(contenido, "Matriz A").pack(anchor="w", padx=10, pady=(20, 6))
+        self.tabla = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.tabla.pack(anchor="w", padx=6)
+
+        boton_primario(zonas.acciones, "Calcular determinante", self.calcular).pack(
+            side="left", fill="x", expand=True, padx=(0, 8)
+        )
+        boton_secundario(zonas.acciones, "Limpiar", self.limpiar, width=100, height=40).pack(
+            side="left"
+        )
 
     def actualizar_entradas(self):
         """Construye una cuadrícula n por n para representar una matriz cuadrada."""
@@ -161,8 +158,11 @@ class ModuloDeterminantes(ctk.CTkFrame):
         """Lee A y muestra pivotes, operaciones de fila y el valor de det(A)."""
         try:
             matriz = [
-                [_a_fraction(entry.get().strip() or "0") for entry in fila]
-                for fila in self.entradas
+                [
+                    leer_fraccion(entry, f"La entrada ({i + 1},{j + 1}) de A")
+                    for j, entry in enumerate(fila)
+                ]
+                for i, fila in enumerate(self.entradas)
             ]
             determinante, pasos = determinante_con_pasos(matriz)
             lineas = [
@@ -183,14 +183,14 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 f"det(A) = {formatear_valor(determinante)}",
                 "A es invertible." if determinante != 0 else "A es singular; no tiene inversa.",
             ])
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n")
+            resumen = f"det(A) = {formatear_valor(determinante)}   ·   " + (
+                "A es invertible" if determinante != 0 else "A es singular (no tiene inversa)"
+            )
+            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def limpiar(self):
         """Reinicia a cero todas las entradas de la matriz."""
-        for fila in self.entradas:
-            for entry in fila:
-                entry.delete(0, "end")
-                entry.insert(0, "0")
-        reemplazar_texto(self.resultado, "Matriz reiniciada a cero.\n")
+        reiniciar_celdas(self.entradas)
+        reemplazar_texto(self.resultado, "")

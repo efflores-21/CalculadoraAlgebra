@@ -46,6 +46,7 @@ _asegurar_customtkinter()
 
 import customtkinter as ctk  # noqa: E402
 
+from modulos._comun import COLOR, boton_texto, etiqueta, fuente, tarjeta
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
 from modulos.modulo_operaciones_vectores import ModuloOperacionesVectores
@@ -53,8 +54,26 @@ from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
 from modulos.modulo_vectores import ModuloVectores
 
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+ctk.set_appearance_mode("Light")
+ctk.set_default_color_theme(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulos", "tema_minimalista.json")
+)
+
+# (clave, título, descripción) de cada módulo, en el orden del menú.
+MODULOS = (
+    ("sistemas", "Sistemas de ecuaciones",
+     "Resuelve Ax = b con Gauss o Gauss-Jordan y comprueba la solución."),
+    ("operaciones_vectores", "Vectores y combinación lineal",
+     "Suma, resta y escalar de vectores. ¿Es b combinación lineal?"),
+    ("vectores", "Independencia lineal",
+     "Decide si un conjunto de vectores es L.I. o L.D."),
+    ("matrices", "Operaciones con matrices",
+     "Suma, resta, producto, traspuesta e inversa de matrices."),
+    ("determinantes", "Determinantes",
+     "Calcula det(A) paso a paso y dice si A tiene inversa."),
+    ("propiedades", "Producto matriz-vector",
+     "Comprueba A(u + v) = Au + Av y A(cu) = c(Au)."),
+)
 
 
 class MenuPrincipal(ctk.CTk):
@@ -64,8 +83,13 @@ class MenuPrincipal(ctk.CTk):
         """Prepara la ventana, el menú inicial y el contenedor de módulos."""
         super().__init__()
         self.title("Calculadora de Álgebra Lineal")
-        self.geometry("1100x850")
-        self.minsize(900, 680)
+        # Tamaño cómodo que nunca excede la pantalla (laptops pequeñas incluidas).
+        escala = ctk.ScalingTracker.get_window_scaling(self)
+        ancho = int(min(1280, self.winfo_screenwidth() / escala - 40))
+        alto = int(min(860, self.winfo_screenheight() / escala - 90))
+        self.geometry(f"{ancho}x{alto}")
+        self.minsize(min(980, ancho), min(640, alto))
+        self.configure(fg_color=COLOR["fondo"])
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -73,61 +97,81 @@ class MenuPrincipal(ctk.CTk):
         self._construir_menu()
 
     def _construir_menu(self):
-        """Crea la pantalla de inicio con opciones que cambian el panel visible."""
-        self.menu_frame = ctk.CTkFrame(self, corner_radius=16)
-        self.menu_frame.grid(row=0, column=0, sticky="nsew", padx=14, pady=14)
+        """Crea la pantalla de inicio: una tarjeta por módulo, en dos columnas."""
+        self.menu_frame = ctk.CTkFrame(self, fg_color=COLOR["fondo"], corner_radius=0)
+        self.menu_frame.grid(row=0, column=0, sticky="nsew")
         self.menu_frame.grid_columnconfigure(0, weight=1)
-        self.menu_frame.grid_rowconfigure(2, weight=1)
+        self.menu_frame.grid_rowconfigure(1, weight=1)
 
+        encabezado = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
+        encabezado.grid(row=0, column=0, pady=(48, 28))
+        etiqueta(encabezado, "ÁLGEBRA LINEAL", tamano=12, negrita=True).pack()
         ctk.CTkLabel(
-            self.menu_frame,
-            text="CALCULADORA DE ÁLGEBRA LINEAL",
-            font=ctk.CTkFont(size=28, weight="bold"),
-        ).grid(row=0, column=0, padx=20, pady=(24, 8))
-        ctk.CTkLabel(
-            self.menu_frame,
-            text="Selecciona un módulo para comenzar.",
-            font=ctk.CTkFont(size=15),
-            text_color="#AAB7C4",
-        ).grid(row=1, column=0, padx=20, pady=(0, 10))
+            encabezado,
+            text="Calculadora",
+            font=fuente(40, negrita=True),
+            text_color=COLOR["texto"],
+        ).pack()
+        etiqueta(
+            encabezado,
+            "Elige qué quieres calcular. Cada módulo te guía paso a paso.",
+            tamano=15,
+        ).pack(pady=(4, 0))
 
-        botones = (
-            ("1. Sistemas de ecuaciones", "sistemas"),
-            ("2. Operaciones con vectores y combinación lineal", "operaciones_vectores"),
-            ("3. Independencia lineal de vectores", "vectores"),
-            ("4. Operaciones con matrices", "matrices"),
-            ("5. Determinantes", "determinantes"),
-            ("6. Propiedades del producto matriz-vector", "propiedades"),
+        rejilla = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
+        rejilla.grid(row=1, column=0, sticky="n", padx=40)
+        rejilla.grid_columnconfigure((0, 1), weight=1, uniform="tarjetas")
+        for indice, (clave, titulo, descripcion) in enumerate(MODULOS):
+            self._crear_tarjeta_modulo(rejilla, indice + 1, clave, titulo, descripcion).grid(
+                row=indice // 2, column=indice % 2, padx=10, pady=10, sticky="nsew"
+            )
+
+        pie = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
+        pie.grid(row=2, column=0, pady=(10, 28))
+        etiqueta(
+            pie, "Resultados exactos con fracciones  ·  Sin NumPy ni SciPy", tamano=12
+        ).pack()
+        boton_texto(pie, "Salir", self.destroy, width=90).pack(pady=(8, 0))
+
+    def _crear_tarjeta_modulo(self, parent, numero, clave, titulo, descripcion):
+        """Tarjeta clicable: número, título, descripción corta y 'Abrir'."""
+        caja = tarjeta(parent, width=440, height=150, cursor="hand2")
+        caja.grid_propagate(False)
+        caja.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            caja,
+            text=f"{numero:02d}",
+            width=44,
+            height=44,
+            corner_radius=12,
+            fg_color=COLOR["negro"],
+            text_color="#FFFFFF",
+            font=fuente(15, negrita=True),
+        ).grid(row=0, column=0, rowspan=2, sticky="nw", padx=(22, 16), pady=22)
+        ctk.CTkLabel(
+            caja, text=titulo, font=fuente(17, negrita=True), text_color=COLOR["texto"],
+            anchor="w",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 22), pady=(20, 0))
+        etiqueta(
+            caja, descripcion, tamano=13, justify="left", anchor="w", wraplength=320
+        ).grid(row=1, column=1, sticky="nw", padx=(0, 22), pady=(2, 0))
+        etiqueta(caja, "Abrir  →", tamano=13, color="texto", negrita=True).grid(
+            row=2, column=1, sticky="w", padx=(0, 22), pady=(0, 18)
         )
-        lista_modulos = ctk.CTkScrollableFrame(
-            self.menu_frame,
-            label_text="Módulos disponibles",
-            fg_color="transparent",
-        )
-        lista_modulos.grid(row=2, column=0, sticky="nsew", padx=50, pady=4)
-        lista_modulos.grid_columnconfigure(0, weight=1)
-        for etiqueta, clave in botones:
-            ctk.CTkButton(
-                lista_modulos,
-                text=etiqueta,
-                height=48,
-                font=ctk.CTkFont(size=15, weight="bold"),
-                command=lambda modulo=clave: self.mostrar_modulo(modulo),
-            ).pack(fill="x", padx=10, pady=5)
+        caja.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(
-            self.menu_frame,
-            text="Cálculos exactos con Fraction. No se utilizan NumPy ni SciPy.",
-            font=ctk.CTkFont(size=12),
-            text_color="#AAB7C4",
-        ).grid(row=3, column=0, padx=20, pady=(6, 4))
-        ctk.CTkButton(
-            self.menu_frame,
-            text="Salir",
-            fg_color="transparent",
-            border_width=1,
-            command=self.destroy,
-        ).grid(row=4, column=0, padx=60, pady=(4, 16), sticky="ew")
+        def abrir(evento=None):
+            self.mostrar_modulo(clave)
+
+        def resaltar(activo):
+            caja.configure(border_color=COLOR["negro"] if activo else COLOR["borde"])
+
+        for widget in [caja] + caja.winfo_children():
+            widget.bind("<Button-1>", abrir)
+            widget.bind("<Enter>", lambda evento: resaltar(True))
+            widget.bind("<Leave>", lambda evento: resaltar(False))
+            widget.configure(cursor="hand2")
+        return caja
 
     def mostrar_modulo(self, nombre):
         """Oculta el menú y presenta el módulo elegido en la ventana principal."""
@@ -147,13 +191,13 @@ class MenuPrincipal(ctk.CTk):
             self.paneles[nombre] = clases[nombre](self, self.mostrar_menu)
         for panel in self.paneles.values():
             panel.grid_forget()
-        self.paneles[nombre].grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        self.paneles[nombre].grid(row=0, column=0, sticky="nsew")
 
     def mostrar_menu(self):
         """Oculta el módulo activo y regresa a la pantalla principal."""
         for panel in self.paneles.values():
             panel.grid_forget()
-        self.menu_frame.grid(row=0, column=0, sticky="nsew", padx=14, pady=14)
+        self.menu_frame.grid(row=0, column=0, sticky="nsew")
 
 
 if __name__ == "__main__":

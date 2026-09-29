@@ -1,20 +1,25 @@
 """Ventana independiente para resolver sistemas de ecuaciones lineales."""
 
 import customtkinter as ctk
-from tkinter import messagebox
 
 from backend.clasificador import clasificar_sistema, columnas_pivote
 from backend.eliminacion import resolver_sistema
-from backend.matriz import _a_fraction, formatear_valor
+from backend.matriz import formatear_valor, subindice
 from modulos._comun import (
-    crear_logo,
-    crear_resultado,
+    Selector,
+    boton_primario,
+    boton_secundario,
+    crear_controles,
+    crear_estructura,
     entrada_numero,
+    etiqueta,
     formatear_matriz,
     leer_entero,
+    leer_fraccion,
     mensaje_error,
-    mostrar_teoremas,
     reemplazar_texto,
+    reiniciar_celdas,
+    subtitulo,
 )
 
 
@@ -31,66 +36,60 @@ class ModuloSistemas(ctk.CTkFrame):
 
     def _construir_interfaz(self):
         """Construye campos, controles y resultados propios del módulo."""
-        ctk.CTkButton(
+        zonas = crear_estructura(
             self,
-            text="<- Volver al menu principal",
-            fg_color="transparent",
-            border_width=1,
-            width=210,
-            command=self.on_back,
-        ).pack(anchor="w", padx=12, pady=(10, 0))
-        crear_logo(
-            self,
-            "[ [1 2 | 3] ]  MODULO 1: SISTEMAS DE ECUACIONES (SEL)\n"
-            "[ [0 1 | 5] ]  Metodos: Gauss y Gauss-Jordan\n"
-            "Sistema matricial A*x=b",
+            self.on_back,
+            numero=1,
+            titulo="Sistemas de ecuaciones",
+            descripcion="Resuelve Ax = b por Gauss o Gauss-Jordan, paso a paso.",
+            logo=(
+                "[ [1 2 | 3] ]  MÓDULO: SISTEMAS DE ECUACIONES (SEL)\n"
+                "[ [0 1 | 5] ]  Métodos: Gauss, Gauss-Jordan"
+            ),
+            pasos=[
+                "Escribe cuántas ecuaciones y cuántas variables tiene tu sistema "
+                "y pulsa «Crear tabla».",
+                "Cada fila es una ecuación: escribe los coeficientes de x₁, x₂, … "
+                "y en la columna «= b» el número que va después del igual.",
+                "Elige el método y pulsa «Resolver».",
+            ],
+            nota="Ejemplo: 2x₁ + x₂ = 5 se escribe 2 | 1 | 5.  "
+                 "Acepta enteros, decimales y fracciones (1/3).",
+            clave_teoremas="sistemas",
+            indicacion="Aquí verás la matriz aumentada, cada operación entre filas, "
+                       "las columnas pivote, la solución y su verificación.",
         )
-        controles = ctk.CTkFrame(self)
-        controles.pack(fill="x", padx=12, pady=6)
-        ctk.CTkLabel(controles, text="Ecuaciones m:").grid(row=0, column=0, padx=5, pady=8)
-        self.entry_m = ctk.CTkEntry(controles, width=60, justify="center")
-        self.entry_m.insert(0, "2")
-        self.entry_m.grid(row=0, column=1, padx=5)
-        ctk.CTkLabel(controles, text="Variables n:").grid(row=0, column=2, padx=5)
-        self.entry_n = ctk.CTkEntry(controles, width=60, justify="center")
-        self.entry_n.insert(0, "2")
-        self.entry_n.grid(row=0, column=3, padx=5)
-        ctk.CTkButton(
-            controles, text="Aplicar dimensiones", command=self.actualizar_entradas
-        ).grid(row=0, column=4, padx=5)
-        self.metodo = ctk.CTkOptionMenu(
-            controles, values=["Gauss-Jordan", "Gauss"], width=140
-        )
-        self.metodo.set("Gauss-Jordan")
-        self.metodo.grid(row=0, column=5, padx=5)
-        ctk.CTkButton(
-            controles,
-            text="0. Ver Teoremas Clave del Módulo",
-            command=lambda: mostrar_teoremas(self, "sistemas", "Sistemas"),
-        ).grid(row=0, column=6, padx=5)
+        self.resultado = zonas.resultado
+        contenido = zonas.contenido
 
-        self.tabla = ctk.CTkScrollableFrame(self, label_text="Coeficientes A y términos independientes b")
-        self.tabla.pack(fill="both", expand=True, padx=12, pady=6)
-        acciones = ctk.CTkFrame(self, fg_color="transparent")
-        acciones.pack(fill="x", padx=12, pady=4)
-        ctk.CTkButton(
-            acciones, text="Resolver sistema", command=self.resolver, height=38
-        ).pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(
-            acciones,
-            text="Limpiar",
-            width=110,
-            fg_color="transparent",
-            border_width=1,
-            command=self.limpiar,
-        ).pack(side="left", padx=(5, 0))
-        self.resultado = crear_resultado(self, 260)
+        controles, entradas = crear_controles(
+            contenido,
+            [("m", "Ecuaciones", "2", 90), ("n", "Variables", "2", 90)],
+            self.actualizar_entradas,
+        )
+        controles.pack(anchor="w", padx=10, pady=(10, 0))
+        self.entry_m, self.entry_n = entradas["m"], entradas["n"]
+
+        etiqueta(contenido, "Método").pack(anchor="w", padx=10, pady=(16, 2))
+        self.metodo = Selector(contenido, ["Gauss-Jordan", "Gauss"])
+        self.metodo.pack(anchor="w", padx=10)
+
+        subtitulo(contenido, "Tu sistema").pack(anchor="w", padx=10, pady=(20, 6))
+        self.tabla = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.tabla.pack(anchor="w", padx=6)
+
+        boton_primario(zonas.acciones, "Resolver", self.resolver).pack(
+            side="left", fill="x", expand=True, padx=(0, 8)
+        )
+        boton_secundario(zonas.acciones, "Limpiar", self.limpiar, width=100, height=40).pack(
+            side="left"
+        )
 
     def actualizar_entradas(self):
         """Valida m,n y construye las entradas que representan A y b."""
         try:
-            m = leer_entero(self.entry_m, "El número de ecuaciones m")
-            n = leer_entero(self.entry_n, "El número de variables n")
+            m = leer_entero(self.entry_m, "El número de ecuaciones")
+            n = leer_entero(self.entry_n, "El número de variables")
         except ValueError as error:
             mensaje_error(error)
             return
@@ -99,8 +98,12 @@ class ModuloSistemas(ctk.CTkFrame):
         self.entradas_A = []
         self.entradas_b = []
         for j in range(n):
-            ctk.CTkLabel(self.tabla, text=f"x{j + 1}").grid(row=0, column=j, padx=3)
-        ctk.CTkLabel(self.tabla, text="| b").grid(row=0, column=n, padx=8)
+            etiqueta(self.tabla, f"x{subindice(j + 1)}", tamano=15).grid(
+                row=0, column=j, pady=(0, 2)
+            )
+        etiqueta(self.tabla, "= b", color="texto", negrita=True).grid(
+            row=0, column=n, padx=(18, 0), pady=(0, 2)
+        )
         for i in range(m):
             fila = []
             for j in range(n):
@@ -108,21 +111,27 @@ class ModuloSistemas(ctk.CTkFrame):
                 entry.grid(row=i + 1, column=j, padx=3, pady=3)
                 fila.append(entry)
             entry_b = entrada_numero(self.tabla)
-            entry_b.grid(row=i + 1, column=n, padx=8, pady=3)
+            entry_b.grid(row=i + 1, column=n, padx=(18, 3), pady=3)
             self.entradas_A.append(fila)
             self.entradas_b.append(entry_b)
+        reemplazar_texto(self.resultado, "")
 
     def resolver(self):
         """Resuelve A*x=b y muestra las operaciones de fila y clasificación."""
         try:
-            m = leer_entero(self.entry_m, "El número de ecuaciones m")
-            n = leer_entero(self.entry_n, "El número de variables n")
+            # Se usa el tamaño de la tabla visible, aunque los campos cambien.
+            m = len(self.entradas_A)
+            n = len(self.entradas_A[0])
             matriz_a = [
-                [_a_fraction(celda.get().strip() or "0") for celda in fila]
-                for fila in self.entradas_A
+                [
+                    leer_fraccion(celda, f"El coeficiente de x{subindice(j + 1)} en la ecuación {i + 1}")
+                    for j, celda in enumerate(fila)
+                ]
+                for i, fila in enumerate(self.entradas_A)
             ]
             vector_b = [
-                _a_fraction(celda.get().strip() or "0") for celda in self.entradas_b
+                leer_fraccion(celda, f"El valor b de la ecuación {i + 1}")
+                for i, celda in enumerate(self.entradas_b)
             ]
             matriz_aumentada = [
                 matriz_a[i][:] + [vector_b[i]] for i in range(m)
@@ -172,9 +181,9 @@ class ModuloSistemas(ctk.CTkFrame):
             else:
                 lineas.extend([
                     "  Variables básicas: "
-                    + (", ".join(f"x{j + 1}" for j in pivotes) or "ninguna"),
+                    + (", ".join(f"x{subindice(j + 1)}" for j in pivotes) or "ninguna"),
                     "  Variables libres: "
-                    + (", ".join(f"x{j + 1}" for j in libres) or "ninguna"),
+                    + (", ".join(f"x{subindice(j + 1)}" for j in libres) or "ninguna"),
                 ])
 
             lineas.extend([
@@ -189,23 +198,34 @@ class ModuloSistemas(ctk.CTkFrame):
                     constante, terminos = expresiones.get((variable), (None, None))
                     if variable in libres:
                         lineas.append(
-                            f"  x{variable + 1} = t{variable + 1} (variable libre, cualquier valor)"
+                            f"  x{subindice(variable + 1)} = t{subindice(variable + 1)} (variable libre, cualquier valor)"
                         )
                     elif constante is not None:
                         lineas.append(
-                            f"  x{variable + 1} = {self._formatear_expresion(constante, terminos)}"
+                            f"  x{subindice(variable + 1)} = {self._formatear_expresion(constante, terminos)}"
                         )
                     else:
                         valor = datos["soluciones"].get(variable)
                         lineas.append(
-                            f"  x{variable + 1} = {formatear_valor(valor)}"
+                            f"  x{subindice(variable + 1)} = {formatear_valor(valor)}"
                         )
                 lineas.extend(
                     self._verificar_solucion(matriz_a, vector_b, expresiones, libres)
                 )
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n")
+            if clase["tipo"] == "Inconsistente":
+                resumen = "Sin solución: el sistema es inconsistente."
+            elif libres:
+                resumen = (
+                    "Infinitas soluciones  ·  variables libres: "
+                    + ", ".join(f"x{subindice(j + 1)}" for j in libres)
+                )
+            else:
+                resumen = "Solución única:   " + ",   ".join(
+                    f"x{subindice(j + 1)} = {formatear_valor(expresiones[j][0])}" for j in range(n)
+                )
+            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
-            messagebox.showerror("Error", str(error))
+            mensaje_error(error)
 
     def _verificar_solucion(self, matriz_a, vector_b, expresiones, libres):
         """
@@ -221,7 +241,7 @@ class ModuloSistemas(ctk.CTkFrame):
         if libres:
             lineas.append(
                 "  Se usa la solución particular con "
-                + ", ".join(f"t{j + 1}" for j in libres) + " = 0:"
+                + ", ".join(f"t{subindice(j + 1)}" for j in libres) + " = 0:"
             )
         lineas.append(
             "  x = (" + ", ".join(formatear_valor(valor) for valor in x) + ")"
@@ -254,16 +274,10 @@ class ModuloSistemas(ctk.CTkFrame):
             signo = "+" if coeficiente >= 0 else "-"
             magnitud = abs(coeficiente)
             factor = "" if magnitud == 1 else formatear_valor(magnitud) + "*"
-            texto += f" {signo} {factor}t{libre + 1}"
+            texto += f" {signo} {factor}t{subindice(libre + 1)}"
         return texto
 
     def limpiar(self):
         """Reinicia a cero los coeficientes y términos independientes."""
-        for fila in self.entradas_A:
-            for entry in fila:
-                entry.delete(0, "end")
-                entry.insert(0, "0")
-        for entry in self.entradas_b:
-            entry.delete(0, "end")
-            entry.insert(0, "0")
-        reemplazar_texto(self.resultado, "Entradas reiniciadas a cero.\n")
+        reiniciar_celdas(self.entradas_A, self.entradas_b)
+        reemplazar_texto(self.resultado, "")

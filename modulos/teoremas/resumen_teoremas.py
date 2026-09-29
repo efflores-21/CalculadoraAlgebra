@@ -12,8 +12,8 @@ TEOREMAS = {
     ),
     "vectores": (
         "TEOREMA DE INDEPENDENCIA LINEAL\n\n"
-        "Los vectores v1,...,vk son linealmente independientes si la única solución "
-        "de c1*v1 + ... + ck*vk = 0 es c1=...=ck=0.\n"
+        "Los vectores v₁, …, vₖ son linealmente independientes si la única solución "
+        "de c₁·v₁ + … + cₖ·vₖ = 0 es c₁ = … = cₖ = 0.\n"
         "Si el sistema homogéneo tiene una variable libre, existe una solución "
         "no trivial y los vectores son linealmente dependientes.\n\n"
         "CRITERIO DE RANGO\n"
@@ -32,8 +32,8 @@ TEOREMAS = {
         "El producto por escalar también opera en cada coordenada:\n"
         "(c*u)i = c*ui.\n\n"
         "COMBINACION LINEAL\n"
-        "b es combinación lineal de v1,...,vk si existen escalares c1,...,ck "
-        "tales que c1*v1+...+ck*vk=b. Esto se resuelve como V*c=b, con los "
+        "b es combinación lineal de v₁, …, vₖ si existen escalares c₁, …, cₖ "
+        "tales que c₁·v₁ + … + cₖ·vₖ = b. Esto se resuelve como V*c=b, con los "
         "vectores como columnas de V.\n"
     ),
     "matrices": (

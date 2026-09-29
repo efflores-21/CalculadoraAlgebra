@@ -2,19 +2,23 @@
 
 from fractions import Fraction
 import customtkinter as ctk
-from tkinter import messagebox
 
 from backend.eliminacion import eliminacion_con_pasos
-from backend.matriz import _a_fraction, formatear_valor
+from backend.matriz import subindice
 from modulos._comun import (
-    crear_logo,
-    crear_resultado,
+    boton_primario,
+    boton_secundario,
+    crear_controles,
+    crear_estructura,
     entrada_numero,
+    etiqueta,
     formatear_matriz,
     leer_entero,
+    leer_fraccion,
     mensaje_error,
-    mostrar_teoremas,
     reemplazar_texto,
+    reiniciar_celdas,
+    subtitulo,
 )
 
 
@@ -30,74 +34,50 @@ class ModuloVectores(ctk.CTkFrame):
 
     def _construir_interfaz(self):
         """Construye la interfaz del módulo y su flujo de entrada y resultado."""
-        ctk.CTkButton(
+        zonas = crear_estructura(
             self,
-            text="<- Volver al menu principal",
-            fg_color="transparent",
-            border_width=1,
-            width=210,
-            command=self.on_back,
-        ).pack(anchor="w", padx=12, pady=(10, 0))
-        crear_logo(
-            self,
-            "MÓDULO 3: INDEPENDENCIA LINEAL DE VECTORES\n"
-            "Vectores linealmente independientes (L.I.) o dependientes (L.D.)\n"
-            "Sistema homogéneo: c1*v1 + ... + ck*vk = 0",
-        )
-
-        controles = ctk.CTkFrame(self)
-        controles.pack(fill="x", padx=12, pady=8)
-        ctk.CTkLabel(controles, text="Cantidad de vectores k:").grid(
-            row=0, column=0, padx=(10, 4), pady=10
-        )
-        self.entry_k = ctk.CTkEntry(controles, width=70, justify="center")
-        self.entry_k.insert(0, "2")
-        self.entry_k.grid(row=0, column=1, padx=(0, 14), pady=10)
-        ctk.CTkLabel(controles, text="Dimensión n:").grid(
-            row=0, column=2, padx=(0, 4), pady=10
-        )
-        self.entry_n = ctk.CTkEntry(controles, width=70, justify="center")
-        self.entry_n.insert(0, "2")
-        self.entry_n.grid(row=0, column=3, padx=(0, 14), pady=10)
-        ctk.CTkButton(
-            controles, text="Aplicar dimensiones", command=self.actualizar_entradas
-        ).grid(row=0, column=4, padx=5, pady=10)
-        ctk.CTkButton(
-            controles,
-            text="0. Ver Teoremas Clave del Módulo",
-            command=lambda: mostrar_teoremas(self, "vectores", "Vectores"),
-        ).grid(row=0, column=5, padx=5, pady=10)
-
-        ctk.CTkLabel(
-            self,
-            text=(
-                "Cada columna de la matriz de entrada representa un vector. "
-                "La independencia se decide resolviendo el sistema homogéneo."
+            self.on_back,
+            numero=3,
+            titulo="Independencia lineal",
+            descripcion="Decide si un conjunto de vectores es L.I. o L.D.",
+            logo=(
+                "  v1  v2  vk   MÓDULO: VECTORES E INDEPENDENCIA LINEAL\n"
+                "  |   |   |    Combinaciones Lineales, L.I. y L.D.\n"
+                "  [ A ] c = 0  Ax = 0"
             ),
-            text_color="#AAB7C4",
-            wraplength=960,
-        ).pack(anchor="w", padx=14, pady=(0, 4))
+            pasos=[
+                "Escribe cuántos vectores tienes y cuántos componentes tiene "
+                "cada uno, y pulsa «Crear tabla».",
+                "Cada columna es un vector: escribe sus componentes de arriba "
+                "hacia abajo.",
+                "Pulsa «Analizar» para saber si son independientes (L.I.) "
+                "o dependientes (L.D.).",
+            ],
+            clave_teoremas="vectores",
+            indicacion="Aquí verás el veredicto L.I. o L.D., la matriz reducida, "
+                       "los pivotes y las variables libres.",
+        )
+        self.resultado = zonas.resultado
+        contenido = zonas.contenido
 
-        self.marco_entradas = ctk.CTkScrollableFrame(self, label_text="Vectores de entrada")
-        self.marco_entradas.pack(fill="both", expand=True, padx=12, pady=8)
-        acciones = ctk.CTkFrame(self, fg_color="transparent")
-        acciones.pack(fill="x", padx=12, pady=4)
-        ctk.CTkButton(
-            acciones,
-            text="Analizar independencia lineal",
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            command=self.analizar,
-        ).pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(
-            acciones,
-            text="Limpiar",
-            width=120,
-            fg_color="transparent",
-            border_width=1,
-            command=self.limpiar,
-        ).pack(side="left", padx=(5, 0))
-        self.resultado = crear_resultado(self, height=280)
+        controles, entradas = crear_controles(
+            contenido,
+            [("k", "Cantidad de vectores", "2", 130), ("n", "Componentes", "2", 100)],
+            self.actualizar_entradas,
+        )
+        controles.pack(anchor="w", padx=10, pady=(10, 0))
+        self.entry_k, self.entry_n = entradas["k"], entradas["n"]
+
+        subtitulo(contenido, "Tus vectores").pack(anchor="w", padx=10, pady=(20, 6))
+        self.marco_entradas = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.marco_entradas.pack(anchor="w", padx=6)
+
+        boton_primario(zonas.acciones, "Analizar", self.analizar).pack(
+            side="left", fill="x", expand=True, padx=(0, 8)
+        )
+        boton_secundario(zonas.acciones, "Limpiar", self.limpiar, width=100, height=40).pack(
+            side="left"
+        )
 
     def actualizar_entradas(self):
         """Lee k y n y construye campos para k vectores con n componentes."""
@@ -110,27 +90,17 @@ class ModuloVectores(ctk.CTkFrame):
 
         for widget in self.marco_entradas.winfo_children():
             widget.destroy()
-        self.entradas_vectores = []
-        ctk.CTkLabel(
-            self.marco_entradas,
-            text="Cada columna corresponde a un vector vⱼ.",
-            font=ctk.CTkFont(weight="bold"),
-        ).grid(row=0, column=0, columnspan=k + 1, sticky="w", padx=6, pady=6)
+        self.entradas_vectores = [[] for _ in range(k)]
         for j in range(k):
-            ctk.CTkLabel(
-                self.marco_entradas, text=f"v{j + 1}", font=ctk.CTkFont(weight="bold")
-            ).grid(row=1, column=j + 1, padx=4, pady=4)
-        for i in range(n):
-            ctk.CTkLabel(self.marco_entradas, text=f"Componente {i + 1}").grid(
-                row=i + 2, column=0, sticky="w", padx=6, pady=3
+            etiqueta(self.marco_entradas, f"v{subindice(j + 1)}", color="texto", negrita=True).grid(
+                row=0, column=j, pady=(0, 2)
             )
+        for i in range(n):
             for j in range(k):
                 entry = entrada_numero(self.marco_entradas)
-                entry.grid(row=i + 2, column=j + 1, padx=3, pady=3)
-                if len(self.entradas_vectores) <= j:
-                    self.entradas_vectores.append([])
+                entry.grid(row=i + 1, column=j, padx=3, pady=3)
                 self.entradas_vectores[j].append(entry)
-        self.resultado.delete("1.0", "end")
+        reemplazar_texto(self.resultado, "")
 
     def leer_datos(self):
         """Lee los vectores de la tabla, equivalente a definir elementos de R^n."""
@@ -138,15 +108,10 @@ class ModuloVectores(ctk.CTkFrame):
             raise ValueError("Primero aplica dimensiones válidas.")
         vectores = []
         for j, entradas in enumerate(self.entradas_vectores):
-            vector = []
-            for i, entry in enumerate(entradas):
-                try:
-                    vector.append(_a_fraction(entry.get().strip() or "0"))
-                except (ValueError, ZeroDivisionError) as error:
-                    raise ValueError(
-                        f"El componente {i + 1} del vector v{j + 1} no es válido."
-                    ) from error
-            vectores.append(vector)
+            vectores.append([
+                leer_fraccion(entry, f"El componente {i + 1} del vector v{subindice(j + 1)}")
+                for i, entry in enumerate(entradas)
+            ])
         return vectores
 
     def construir_matriz_columnas(self, vectores):
@@ -187,9 +152,10 @@ class ModuloVectores(ctk.CTkFrame):
     def analizar(self):
         """Construye y resuelve A*c=0, mostrando reducción, rango y veredicto."""
         try:
-            k = leer_entero(self.entry_k, "La cantidad k")
-            n = leer_entero(self.entry_n, "La dimensión n")
+            # Se usa el tamaño de la tabla visible, aunque los campos cambien.
             vectores = self.leer_datos()
+            k = len(vectores)
+            n = len(vectores[0])
             matriz = self.construir_matriz_columnas(vectores)
             aumentada = self.construir_sistema_homogeneo(matriz)
             reducida, rango, pasos = self.eliminar_gauss_jordan(aumentada)
@@ -222,14 +188,15 @@ class ModuloVectores(ctk.CTkFrame):
                 lineas.append("A*c=0 solo tiene la solución trivial c=0.")
             else:
                 lineas.append("Hay una variable libre y existe una solución no trivial.")
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n")
+            resumen = (
+                "Linealmente independientes (L.I.)" if independiente
+                else "Linealmente dependientes (L.D.)"
+            ) + f"   ·   {len(pivotes)} pivote(s) de {k} vector(es)"
+            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
 
     def limpiar(self):
         """Reinicia todas las componentes ingresadas a cero y limpia el resultado."""
-        for vector in self.entradas_vectores:
-            for entry in vector:
-                entry.delete(0, "end")
-                entry.insert(0, "0")
-        reemplazar_texto(self.resultado, "Entradas reiniciadas a cero.\n")
+        reiniciar_celdas(self.entradas_vectores)
+        reemplazar_texto(self.resultado, "")
