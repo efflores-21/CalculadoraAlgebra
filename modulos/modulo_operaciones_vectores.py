@@ -18,6 +18,7 @@ from modulos._comun import (
     crear_estructura,
     entrada_numero,
     etiqueta,
+    formatear_expresion,
     formatear_matriz,
     formatear_vector,
     leer_entero,
@@ -245,26 +246,43 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                     clasificacion["descripcion"],
                 ])
             else:
+                # Cada escalar cⱼ es una constante o, si hay variables libres,
+                # una expresión en términos de los parámetros tⱼ.
+                libres = calculo["variables_libres"]
+                coeficientes = []
+                for indice in range(len(vectores)):
+                    nombre = f"c{subindice(indice + 1)}"
+                    if indice in libres:
+                        coeficientes.append(f"{nombre} = t{subindice(indice + 1)}")
+                    else:
+                        constante, terminos = calculo["soluciones_generales"][indice]
+                        coeficientes.append(f"{nombre} = {formatear_expresion(constante, terminos)}")
                 lineas.append("Conclusión: b SÍ es combinación lineal.")
-                for indice, vector in enumerate(vectores):
-                    expresion = calculo["soluciones_generales"].get(indice)
-                    if expresion and not expresion[1]:
-                        lineas.append(
-                            f"  c{subindice(indice + 1)} = {formatear_valor(expresion[0])}"
-                        )
-                    elif indice in calculo["variables_libres"]:
-                        lineas.append(f"  c{subindice(indice + 1)} es libre.")
-                if calculo["variables_libres"]:
-                    lineas.append("Existen infinitas representaciones de b.")
+                lineas.extend(
+                    "  " + texto + ("  (libre, cualquier valor)" if j in libres else "")
+                    for j, texto in enumerate(coeficientes)
+                )
+                if libres:
+                    lineas.extend([
+                        "Existen infinitas representaciones de b: cada valor de "
+                        + ", ".join(f"t{subindice(j + 1)}" for j in libres)
+                        + " da una distinta.",
+                        "Ejemplo con "
+                        + ", ".join(f"t{subindice(j + 1)}" for j in libres) + " = 0:  "
+                        + ",  ".join(
+                            f"c{subindice(j + 1)} = "
+                            f"{formatear_valor(calculo['soluciones_generales'][j][0])}"
+                            for j in range(len(vectores))
+                        ),
+                    ])
             if clasificacion["tipo"] == "Inconsistente":
                 resumen = "b NO es combinación lineal de los vectores."
             elif calculo["variables_libres"]:
-                resumen = "b SÍ es combinación lineal (de infinitas formas)."
-            else:
-                resumen = "b SÍ es combinación lineal:   " + ",   ".join(
-                    f"c{subindice(j + 1)} = {formatear_valor(calculo['soluciones_generales'][j][0])}"
-                    for j in range(len(vectores))
+                resumen = "b SÍ es combinación lineal (infinitas formas):   " + ",   ".join(
+                    coeficientes
                 )
+            else:
+                resumen = "b SÍ es combinación lineal:   " + ",   ".join(coeficientes)
             reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)

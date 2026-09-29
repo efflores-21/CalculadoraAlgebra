@@ -144,6 +144,7 @@ class ModuloPropiedades(ctk.CTkFrame):
             datos = verificar_propiedades(A, u, v, c)
 
             def vector(clave):
+                """Escribe como (a, b, …) el vector guardado con esa clave."""
                 return formatear_vector(datos[clave])
 
             estado_a = "SE CUMPLE" if datos["a_se_cumple"] else "NO SE CUMPLE"

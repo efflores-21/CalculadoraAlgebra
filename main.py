@@ -161,9 +161,11 @@ class MenuPrincipal(ctk.CTk):
         caja.grid_rowconfigure(1, weight=1)
 
         def abrir(evento=None):
+            """Abre el módulo de esta tarjeta."""
             self.mostrar_modulo(clave)
 
         def resaltar(activo):
+            """Marca el borde en negro mientras el mouse está sobre la tarjeta."""
             caja.configure(border_color=COLOR["negro"] if activo else COLOR["borde"])
 
         for widget in [caja] + caja.winfo_children():

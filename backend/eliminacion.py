@@ -227,6 +227,7 @@ class EliminacionGaussiana:
     """Compatibilidad con versiones previas del código."""
 
     def __init__(self, matriz_aum, tolerancia=1e-12):
+        """Guarda una copia de la matriz aumentada [A|b] que se va a escalonar."""
         if isinstance(matriz_aum, MatrizAumentada):
             self.matriz = matriz_aum.copiar()
         else:
@@ -234,6 +235,7 @@ class EliminacionGaussiana:
         self.tolerancia = tolerancia
 
     def escalonar(self, mostrar_pasos=False):
+        """Lleva [A|b] a forma escalonada con Gauss y devuelve la matriz resultante."""
         matriz, rango, pasos = eliminacion_con_pasos(self.matriz, metodo='gauss', verbose=mostrar_pasos)
         self.matriz = MatrizAumentada(matriz)
         return self.matriz
