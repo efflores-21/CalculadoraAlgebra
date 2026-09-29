@@ -114,7 +114,7 @@ class ModuloMatrices(ctk.CTkFrame):
         ).pack(anchor="w", padx=12, pady=(10, 0))
         crear_logo(
             self,
-            "[ A ][ B ]  MODULO 3: ALGEBRA DE MATRICES\n"
+            "[ A ][ B ]  MODULO 4: ALGEBRA DE MATRICES\n"
             "[ C ][ D ]  Operaciones, traspuesta e inversa\n"
             "A+B | A-B | kA | A*B | A^T | A^-1",
         )

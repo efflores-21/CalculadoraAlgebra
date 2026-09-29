@@ -4,6 +4,8 @@ import customtkinter as ctk
 
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
+from modulos.modulo_operaciones_vectores import ModuloOperacionesVectores
+from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
 from modulos.modulo_vectores import ModuloVectores
 
@@ -31,55 +33,67 @@ class MenuPrincipal(ctk.CTk):
         self.menu_frame = ctk.CTkFrame(self, corner_radius=16)
         self.menu_frame.grid(row=0, column=0, sticky="nsew", padx=14, pady=14)
         self.menu_frame.grid_columnconfigure(0, weight=1)
+        self.menu_frame.grid_rowconfigure(2, weight=1)
 
         ctk.CTkLabel(
             self.menu_frame,
             text="CALCULADORA DE ÁLGEBRA LINEAL",
             font=ctk.CTkFont(size=28, weight="bold"),
-        ).pack(padx=20, pady=(50, 8))
+        ).grid(row=0, column=0, padx=20, pady=(24, 8))
         ctk.CTkLabel(
             self.menu_frame,
-            text="Selecciona un módulo. La calculadora permanecerá en esta ventana.",
+            text="Selecciona un módulo para comenzar.",
             font=ctk.CTkFont(size=15),
             text_color="#AAB7C4",
-        ).pack(padx=20, pady=(0, 30))
+        ).grid(row=1, column=0, padx=20, pady=(0, 10))
 
         botones = (
-            ("Módulo 1 - Sistemas de ecuaciones", "sistemas"),
-            ("Módulo 2 - Vectores e independencia lineal", "vectores"),
-            ("Módulo 3 - Álgebra de matrices", "matrices"),
-            ("Módulo 4 - Determinantes", "determinantes"),
+            ("1. Sistemas de ecuaciones", "sistemas"),
+            ("2. Operaciones con vectores y combinación lineal", "operaciones_vectores"),
+            ("3. Independencia lineal de vectores", "vectores"),
+            ("4. Operaciones con matrices", "matrices"),
+            ("5. Determinantes", "determinantes"),
+            ("6. Propiedades del producto matriz-vector", "propiedades"),
         )
+        lista_modulos = ctk.CTkScrollableFrame(
+            self.menu_frame,
+            label_text="Módulos disponibles",
+            fg_color="transparent",
+        )
+        lista_modulos.grid(row=2, column=0, sticky="nsew", padx=50, pady=4)
+        lista_modulos.grid_columnconfigure(0, weight=1)
         for etiqueta, clave in botones:
             ctk.CTkButton(
-                self.menu_frame,
+                lista_modulos,
                 text=etiqueta,
-                height=54,
-                font=ctk.CTkFont(size=16, weight="bold"),
+                height=48,
+                font=ctk.CTkFont(size=15, weight="bold"),
                 command=lambda modulo=clave: self.mostrar_modulo(modulo),
-            ).pack(fill="x", padx=150, pady=8)
+            ).pack(fill="x", padx=10, pady=5)
 
         ctk.CTkLabel(
             self.menu_frame,
             text="Cálculos exactos con Fraction. No se utilizan NumPy ni SciPy.",
             font=ctk.CTkFont(size=12),
             text_color="#AAB7C4",
-        ).pack(padx=20, pady=(24, 8))
+        ).grid(row=3, column=0, padx=20, pady=(6, 4))
         ctk.CTkButton(
             self.menu_frame,
             text="Salir",
             fg_color="transparent",
             border_width=1,
             command=self.destroy,
-        ).pack(padx=150, pady=(8, 35), fill="x")
+        ).grid(row=4, column=0, padx=60, pady=(4, 16), sticky="ew")
 
     def mostrar_modulo(self, nombre):
         """Oculta el menú y presenta el módulo elegido en la ventana principal."""
         clases = {
             "sistemas": ModuloSistemas,
+            "operaciones_vectores": ModuloOperacionesVectores,
             "vectores": ModuloVectores,
             "matrices": ModuloMatrices,
             "determinantes": ModuloDeterminantes,
+            "propiedades": ModuloPropiedades,
         }
         if nombre not in clases:
             raise ValueError(f"Módulo desconocido: {nombre}")

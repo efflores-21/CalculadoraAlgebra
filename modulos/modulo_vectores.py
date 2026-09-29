@@ -1,4 +1,4 @@
-"""Ventana del Módulo 2: vectores, combinaciones e independencia lineal."""
+"""Panel del Módulo 3: independencia lineal de vectores."""
 
 from fractions import Fraction
 import customtkinter as ctk
@@ -40,8 +40,8 @@ class ModuloVectores(ctk.CTkFrame):
         ).pack(anchor="w", padx=12, pady=(10, 0))
         crear_logo(
             self,
-            "MÓDULO 2: VECTORES E INDEPENDENCIA LINEAL\n"
-            "Combinaciones lineales, vectores L.I. y L.D.\n"
+            "MÓDULO 3: INDEPENDENCIA LINEAL DE VECTORES\n"
+            "Vectores linealmente independientes (L.I.) o dependientes (L.D.)\n"
             "Sistema homogéneo: c1*v1 + ... + ck*vk = 0",
         )
 

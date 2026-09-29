@@ -24,34 +24,42 @@ ventana y ofrece un botón para regresar al menú.
 
 ## Funcionalidades
 
-### Sistemas de ecuaciones
+Los módulos están numerados en el mismo orden en el menú principal:
+
+### Módulo 1: Sistemas de ecuaciones
 
 Resuelve sistemas de la forma `Ax = b` con eliminación de Gauss o
 Gauss-Jordan. Muestra las operaciones elementales, clasifica el sistema como
 de solución única, infinitas soluciones o inconsistente y permite verificar
 la solución.
 
-### Vectores e independencia lineal
+### Módulo 2: Operaciones con vectores y combinación lineal
+
+Permite sumar y restar vectores, multiplicarlos por escalares y verificar si
+un vector es combinación lineal de un conjunto. Para esta última operación
+plantea y resuelve el sistema de coeficientes correspondiente.
+
+### Módulo 3: Independencia lineal
 
 Permite ingresar varios vectores de `R^n`, organizarlos como columnas de una
 matriz y analizar su independencia resolviendo el sistema homogéneo `A*c = 0`.
 Presenta la forma reducida, los pivotes, las variables libres y el veredicto:
 linealmente independientes (L.I.) o dependientes (L.D.).
 
-### Operaciones con matrices
+### Módulo 4: Operaciones con matrices
 
 Incluye suma, resta, multiplicación por escalar, producto de matrices,
 traspuesta e inversa. Las operaciones verifican las dimensiones necesarias y
 presentan el resultado; los productos y la inversa muestran sus pasos de
 cálculo.
 
-### Determinantes
+### Módulo 5: Determinantes
 
 Calcula el determinante de matrices cuadradas mediante eliminación por filas.
 Muestra los pivotes y los intercambios de filas, y señala si la matriz es
 singular.
 
-### Propiedades del producto matriz-vector
+### Módulo 6: Propiedades del producto matriz-vector
 
 Verifica las propiedades de linealidad:
 
@@ -62,6 +70,9 @@ A(cu) = c(Au)
 
 La aplicación presenta los resultados intermedios y compara ambos lados de
 cada igualdad.
+
+El menú ofrece por separado las **operaciones con vectores**, la
+**independencia lineal** y las **propiedades del producto matriz-vector**.
 
 ## Teoremas y ayuda
 

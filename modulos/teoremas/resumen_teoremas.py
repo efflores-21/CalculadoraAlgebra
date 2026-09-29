@@ -25,6 +25,17 @@ TEOREMAS = {
         "conjunto L.I. también es L.I. Si un conjunto es L.D., cualquier conjunto "
         "que lo contenga también es L.D.\n"
     ),
+    "operaciones_vectores": (
+        "OPERACIONES CON VECTORES\n\n"
+        "La suma y la resta se realizan coordenada por coordenada:\n"
+        "(u+v)i = ui+vi y (u-v)i = ui-vi.\n"
+        "El producto por escalar también opera en cada coordenada:\n"
+        "(c*u)i = c*ui.\n\n"
+        "COMBINACION LINEAL\n"
+        "b es combinación lineal de v1,...,vk si existen escalares c1,...,ck "
+        "tales que c1*v1+...+ck*vk=b. Esto se resuelve como V*c=b, con los "
+        "vectores como columnas de V.\n"
+    ),
     "matrices": (
         "PROPIEDADES BÁSICAS DE MATRICES\n\n"
         "A+B y A-B están definidas cuando A y B tienen el mismo tamaño.\n"
@@ -40,6 +51,16 @@ TEOREMAS = {
         "Sumar a una fila un múltiplo de otra no cambia el determinante.\n"
         "Multiplicar una fila por un escalar multiplica el determinante por ese escalar.\n"
         "Una matriz es singular si y solo si det(A)=0.\n"
+    ),
+    "propiedades": (
+        "LINEALIDAD DEL PRODUCTO MATRIZ-VECTOR\n\n"
+        "Si A es m por n y u,v pertenecen a R^n, entonces:\n"
+        "A(u+v)=Au+Av.\n\n"
+        "Para todo escalar c:\n"
+        "A(cu)=c(Au).\n\n"
+        "Estas dos igualdades expresan que la transformación x -> A*x es lineal.\n"
+        "Las dimensiones deben ser compatibles: A tiene n columnas y u,v tienen "
+        "n componentes.\n"
     ),
 }
 

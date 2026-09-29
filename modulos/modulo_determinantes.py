@@ -102,7 +102,7 @@ class ModuloDeterminantes(ctk.CTkFrame):
         crear_logo(
             self,
             "+---------+\n"
-            "| det(A)  |  MODULO 4: DETERMINANTES\n"
+            "| det(A)  |  MODULO 5: DETERMINANTES\n"
             "+---------+  Pivotes, intercambios de fila y valor exacto",
         )
         controles = ctk.CTkFrame(self)
@@ -166,7 +166,7 @@ class ModuloDeterminantes(ctk.CTkFrame):
             ]
             determinante, pasos = determinante_con_pasos(matriz)
             lineas = [
-                "MODULO 4 | CALCULO DEL DETERMINANTE",
+                "MODULO 5 | CALCULO DEL DETERMINANTE",
                 "=" * 56,
                 "Matriz A:",
                 formatear_matriz(matriz),
