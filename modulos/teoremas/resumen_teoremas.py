@@ -43,6 +43,13 @@ TEOREMAS = {
         "Una matriz cuadrada A es invertible si existe A^-1 tal que "
         "A*A^-1=A^-1*A=I.\n"
         "La traspuesta intercambia filas por columnas: (A^T)[i,j]=A[j,i].\n"
+        "\nTEOREMA DE LA INVERSA (Sesión 10)\n"
+        "(A^-1)^-1=A; (AB)^-1=B^-1 A^-1; "
+        "(A^T)^-1=(A^-1)^T.\n"
+        "\nTEOREMA DE LA MATRIZ INVERTIBLE: caracterizaciones indicadas\n"
+        "c) A tiene n posiciones pivote.\n"
+        "e) Las columnas de A son linealmente independientes.\n"
+        "h) Las columnas de A generan R^n.\n"
     ),
     "determinantes": (
         "PROPIEDADES DEL DETERMINANTE\n\n"

@@ -358,8 +358,8 @@ def matriz_menores(A):
             
             # Calcular determinante de la submatriz
             if len(submatriz) == 0:
-                # Caso trivial: matriz 1×1, menor es un escalar
-                menor = mat_a[1 - i][1 - j] if n == 2 else Fraction(0, 1)
+                # El determinante de la submatriz vacía es 1 por convención.
+                menor = Fraction(1, 1)
             else:
                 menor = determinante_por_cofactores(submatriz)
             

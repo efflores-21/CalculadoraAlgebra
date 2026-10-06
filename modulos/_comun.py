@@ -64,8 +64,11 @@ def leer_entero(entry, etiqueta, minimo=1, maximo=DIMENSION_MAXIMA):
 
 def leer_fraccion(entry, etiqueta):
     """Convierte un campo numérico a Fraction, equivalente a leer un escalar exacto."""
+    texto = entry.get().strip()
+    if not texto:
+        raise ValueError(f"{etiqueta} no puede quedar vacío.")
     try:
-        return _a_fraction(entry.get().strip() or "0")
+        return _a_fraction(texto)
     except (ValueError, ZeroDivisionError) as error:
         raise ValueError(
             f"{etiqueta} no es un número válido. Usa enteros, decimales o "
