@@ -217,3 +217,336 @@ def multiplicar_matriz_vector(A, x):
             acumulado += matriz[i][j] * vector[j]
         resultado.append(acumulado)
     return resultado
+
+
+# ============================================================================
+# FUNCIONES PARA INVERSA POR MATRIZ ADJUNTA
+# ============================================================================
+
+
+def _determinante_2x2(A):
+    """
+    Calcula el determinante de una matriz 2×2 de forma directa.
+    
+    Det([[a, b], [c, d]]) = ad - bc
+    
+    Args:
+        A: matriz 2×2 de Fraction
+    
+    Returns:
+        Fraction: determinante
+    """
+    return A[0][0] * A[1][1] - A[0][1] * A[1][0]
+
+
+def determinante_por_cofactores(A):
+    """
+    Calcula el determinante de una matriz cuadrada mediante expansión por cofactores.
+
+    Procedimiento algebraico: para una matriz A cuadrada n×n, el determinante
+    se expande por la primera fila:
+        det(A) = Σ_j A[0][j] × C[0][j]
+    donde C[0][j] es el cofactor: C[0][j] = (-1)^(0+j) × M[0][j],
+    y M[0][j] es el determinante de la submatriz sin fila 0 y columna j.
+
+    Casos base:
+    - Para 1×1: det = A[0][0]
+    - Para 2×2: det = A[0][0]×A[1][1] - A[0][1]×A[1][0]
+
+    Casos recursivos (n > 2): usa expansión por cofactores.
+
+    Args:
+        A: matriz cuadrada n×n
+
+    Returns:
+        Fraction: determinante de la matriz
+
+    Raises:
+        ValueError: si la matriz no es cuadrada
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    if m != n:
+        raise ValueError(
+            f"El determinante solo está definido para matrices cuadradas. "
+            f"Se recibió una matriz {m}×{n}."
+        )
+    
+    # Caso base: matriz 1×1
+    if n == 1:
+        return mat_a[0][0]
+    
+    # Caso base: matriz 2×2 (más eficiente que recursión)
+    if n == 2:
+        return _determinante_2x2(mat_a)
+    
+    # Caso recursivo: expansión por la primera fila
+    determinante = Fraction(0, 1)
+    
+    for j in range(n):
+        # Elemento de la primera fila
+        elemento = mat_a[0][j]
+        
+        # Si elemento es cero, no aporta al determinante
+        if elemento == 0:
+            continue
+        
+        # Crear submatriz sin fila 0 y sin columna j
+        submatriz = []
+        for i in range(1, n):
+            fila_sub = []
+            for k in range(n):
+                if k != j:
+                    fila_sub.append(mat_a[i][k])
+            submatriz.append(fila_sub)
+        
+        # Cofactor = (-1)^(0+j) × det(submatriz)
+        signo = Fraction(1, 1) if j % 2 == 0 else Fraction(-1, 1)
+        det_sub = determinante_por_cofactores(submatriz)
+        cofactor = signo * det_sub
+        
+        # Acumular en determinante
+        determinante += elemento * cofactor
+    
+    return determinante
+
+
+def matriz_menores(A):
+    """
+    Calcula la matriz de menores M de una matriz cuadrada A.
+
+    Procedimiento algebraico: para cada posición (i, j), el menor M[i][j]
+    es el determinante de la submatriz obtenida al eliminar la fila i
+    y la columna j de A.
+
+    Args:
+        A: matriz cuadrada n×n
+
+    Returns:
+        list[list[Fraction]]: matriz de menores M (n×n)
+
+    Raises:
+        ValueError: si la matriz no es cuadrada o está vacía
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    if m != n:
+        raise ValueError(
+            f"La matriz de menores solo se define para matrices cuadradas. "
+            f"Se recibió una matriz {m}×{n}."
+        )
+    
+    menores = []
+    
+    for i in range(n):
+        fila_menores = []
+        
+        for j in range(n):
+            # Crear submatriz sin fila i y sin columna j
+            submatriz = []
+            for fila in range(n):
+                if fila == i:
+                    continue
+                fila_sub = []
+                for col in range(n):
+                    if col == j:
+                        continue
+                    fila_sub.append(mat_a[fila][col])
+                submatriz.append(fila_sub)
+            
+            # Calcular determinante de la submatriz
+            if len(submatriz) == 0:
+                # Caso trivial: matriz 1×1, menor es un escalar
+                menor = mat_a[1 - i][1 - j] if n == 2 else Fraction(0, 1)
+            else:
+                menor = determinante_por_cofactores(submatriz)
+            
+            fila_menores.append(menor)
+        
+        menores.append(fila_menores)
+    
+    return menores
+
+
+def matriz_cofactores(A):
+    """
+    Calcula la matriz de cofactores C de una matriz cuadrada A.
+
+    Procedimiento algebraico: para cada posición (i, j), el cofactor C[i][j]
+    se define como:
+        C[i][j] = (-1)^(i+j) × M[i][j]
+    donde M[i][j] es el menor en esa posición.
+
+    Args:
+        A: matriz cuadrada n×n
+
+    Returns:
+        list[list[Fraction]]: matriz de cofactores C (n×n)
+
+    Raises:
+        ValueError: si la matriz no es cuadrada
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    if m != n:
+        raise ValueError(
+            f"La matriz de cofactores solo se define para matrices cuadradas. "
+            f"Se recibió una matriz {m}×{n}."
+        )
+    
+    # Obtener menores
+    menores = matriz_menores(mat_a)
+    
+    # Aplicar el signo (-1)^(i+j) a cada menor
+    cofactores = []
+    for i in range(n):
+        fila_cofactores = []
+        for j in range(n):
+            signo = Fraction(1, 1) if (i + j) % 2 == 0 else Fraction(-1, 1)
+            cofactor = signo * menores[i][j]
+            fila_cofactores.append(cofactor)
+        cofactores.append(fila_cofactores)
+    
+    return cofactores
+
+
+def transponer_matriz(A):
+    """
+    Calcula la traspuesta de una matriz A: A^T[i][j] = A[j][i].
+
+    Procedimiento algebraico: intercambia filas y columnas.
+
+    Args:
+        A: matriz m×n
+
+    Returns:
+        list[list[Fraction]]: matriz traspuesta (n×m)
+
+    Raises:
+        ValueError: si la matriz está vacía o no es rectangular
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    # Transponer: recorrer columnas y convertirlas en filas
+    transpuesta = []
+    for j in range(n):
+        fila_transpuesta = []
+        for i in range(m):
+            fila_transpuesta.append(mat_a[i][j])
+        transpuesta.append(fila_transpuesta)
+    
+    return transpuesta
+
+
+def matriz_adjunta(A):
+    """
+    Calcula la matriz adjunta Adj(A) de una matriz cuadrada A.
+
+    Procedimiento algebraico: la matriz adjunta es la transpuesta de la
+    matriz de cofactores:
+        Adj(A) = C^T
+    donde C es la matriz de cofactores.
+
+    Args:
+        A: matriz cuadrada n×n
+
+    Returns:
+        list[list[Fraction]]: matriz adjunta (n×n)
+
+    Raises:
+        ValueError: si la matriz no es cuadrada
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    if m != n:
+        raise ValueError(
+            f"La matriz adjunta solo se define para matrices cuadradas. "
+            f"Se recibió una matriz {m}×{n}."
+        )
+    
+    # Obtener cofactores
+    cofactores = matriz_cofactores(mat_a)
+    
+    # Transponer los cofactores
+    adjunta = transponer_matriz(cofactores)
+    
+    return adjunta
+
+
+def inversa_por_adjunta(A):
+    """
+    Calcula la inversa de una matriz cuadrada A usando el método de matriz adjunta.
+
+    Procedimiento algebraico: si det(A) ≠ 0, entonces:
+        A^-1 = (1/det(A)) × Adj(A)
+
+    Devuelve los pasos intermedios para su presentación en la interfaz:
+    1. Matriz original A
+    2. Matriz de menores M
+    3. Matriz de cofactores C
+    4. Matriz adjunta Adj(A) = C^T
+    5. Determinante det(A)
+    6. Matriz inversa A^-1
+
+    Args:
+        A: matriz cuadrada n×n
+
+    Returns:
+        tuple: (A_inversa, pasos)
+        - A_inversa: list[list[Fraction]], matriz inversa n×n
+        - pasos: list of (descripción, matriz) para presentación
+
+    Raises:
+        ValueError: si la matriz no es cuadrada o es singular (det = 0)
+    """
+    mat_a = _matriz_a_fraction(A)
+    m, n = _dimensiones(mat_a)
+    
+    if m != n:
+        raise ValueError(
+            f"La inversa solo está definida para matrices cuadradas. "
+            f"Se recibió una matriz {m}×{n}."
+        )
+    
+    # Calcular determinante
+    determinante = determinante_por_cofactores(mat_a)
+    
+    # Verificar que no sea singular
+    if determinante == 0:
+        raise ValueError(
+            "La matriz es singular (determinante = 0) y no tiene inversa."
+        )
+    
+    # Inicializar pasos
+    pasos = [
+        ("Matriz original A", [fila[:] for fila in mat_a])
+    ]
+    
+    # Calcular menores
+    menores = matriz_menores(mat_a)
+    pasos.append(("Matriz de menores M", [fila[:] for fila in menores]))
+    
+    # Calcular cofactores
+    cofactores = matriz_cofactores(mat_a)
+    pasos.append(("Matriz de cofactores C", [fila[:] for fila in cofactores]))
+    
+    # Calcular adjunta (transpuesta de cofactores)
+    adjunta = transponer_matriz(cofactores)
+    pasos.append(("Matriz adjunta Adj(A) = C^T", [fila[:] for fila in adjunta]))
+    
+    # Incluir determinante
+    pasos.append((f"Determinante det(A) = {determinante}", [fila[:] for fila in mat_a]))
+    
+    # Calcular inversa: A^-1 = (1/det(A)) × Adj(A)
+    escalar_inverso = Fraction(1, 1) / determinante
+    inversa = multiplicar_escalar_matriz(escalar_inverso, adjunta)
+    
+    pasos.append(("Matriz inversa A^-1 = (1/det(A)) × Adj(A)", 
+                  [fila[:] for fila in inversa]))
+    
+    return inversa, pasos
