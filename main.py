@@ -104,12 +104,12 @@ class MenuPrincipal(ctk.CTk):
         self.menu_frame.grid_rowconfigure(1, weight=1)
 
         encabezado = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
-        encabezado.grid(row=0, column=0, pady=(48, 28))
+        encabezado.grid(row=0, column=0, pady=(30, 18))
         etiqueta(encabezado, "ÁLGEBRA LINEAL", tamano=12, negrita=True).pack()
         ctk.CTkLabel(
             encabezado,
             text="Calculadora",
-            font=fuente(40, negrita=True),
+            font=fuente(36, negrita=True),
             text_color=COLOR["texto"],
         ).pack()
         etiqueta(
@@ -123,11 +123,11 @@ class MenuPrincipal(ctk.CTk):
         rejilla.grid_columnconfigure((0, 1), weight=1, uniform="tarjetas")
         for indice, (clave, titulo, descripcion) in enumerate(MODULOS):
             self._crear_tarjeta_modulo(rejilla, indice + 1, clave, titulo, descripcion).grid(
-                row=indice // 2, column=indice % 2, padx=10, pady=10, sticky="nsew"
+                row=indice // 2, column=indice % 2, padx=10, pady=7, sticky="nsew"
             )
 
         pie = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
-        pie.grid(row=2, column=0, pady=(10, 28))
+        pie.grid(row=2, column=0, pady=(8, 16))
         etiqueta(
             pie, "Resultados exactos con fracciones  ·  Sin NumPy ni SciPy", tamano=12
         ).pack()
@@ -135,7 +135,7 @@ class MenuPrincipal(ctk.CTk):
 
     def _crear_tarjeta_modulo(self, parent, numero, clave, titulo, descripcion):
         """Tarjeta clicable: número, título, descripción corta y 'Abrir'."""
-        caja = tarjeta(parent, width=440, height=150, cursor="hand2")
+        caja = tarjeta(parent, width=440, height=128, cursor="hand2")
         caja.grid_propagate(False)
         caja.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(
@@ -147,23 +147,25 @@ class MenuPrincipal(ctk.CTk):
             fg_color=COLOR["negro"],
             text_color="#FFFFFF",
             font=fuente(15, negrita=True),
-        ).grid(row=0, column=0, rowspan=2, sticky="nw", padx=(22, 16), pady=22)
+        ).grid(row=0, column=0, rowspan=2, sticky="nw", padx=(22, 16), pady=18)
         ctk.CTkLabel(
             caja, text=titulo, font=fuente(17, negrita=True), text_color=COLOR["texto"],
             anchor="w",
-        ).grid(row=0, column=1, sticky="w", padx=(0, 22), pady=(20, 0))
+        ).grid(row=0, column=1, sticky="w", padx=(0, 22), pady=(16, 0))
         etiqueta(
             caja, descripcion, tamano=13, justify="left", anchor="w", wraplength=320
         ).grid(row=1, column=1, sticky="nw", padx=(0, 22), pady=(2, 0))
         etiqueta(caja, "Abrir  →", tamano=13, color="texto", negrita=True).grid(
-            row=2, column=1, sticky="w", padx=(0, 22), pady=(0, 18)
+            row=2, column=1, sticky="w", padx=(0, 22), pady=(0, 14)
         )
         caja.grid_rowconfigure(1, weight=1)
 
         def abrir(evento=None):
+            """Abre el módulo de esta tarjeta."""
             self.mostrar_modulo(clave)
 
         def resaltar(activo):
+            """Marca el borde en negro mientras el mouse está sobre la tarjeta."""
             caja.configure(border_color=COLOR["negro"] if activo else COLOR["borde"])
 
         for widget in [caja] + caja.winfo_children():

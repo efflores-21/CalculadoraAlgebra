@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import customtkinter as ctk
 from tkinter import messagebox
 
-from backend.matriz import _a_fraction, formatear_valor
+from backend.matriz import _a_fraction, formatear_valor, subindice
 from modulos.teoremas.resumen_teoremas import obtener_resumen
 
 
@@ -64,8 +64,11 @@ def leer_entero(entry, etiqueta, minimo=1, maximo=DIMENSION_MAXIMA):
 
 def leer_fraccion(entry, etiqueta):
     """Convierte un campo numérico a Fraction, equivalente a leer un escalar exacto."""
+    texto = entry.get().strip()
+    if not texto:
+        raise ValueError(f"{etiqueta} no puede quedar vacío.")
     try:
-        return _a_fraction(entry.get().strip() or "0")
+        return _a_fraction(texto)
     except (ValueError, ZeroDivisionError) as error:
         raise ValueError(
             f"{etiqueta} no es un número válido. Usa enteros, decimales o "
@@ -93,6 +96,35 @@ def formatear_matriz(matriz):
         ) + " ]"
         for fila in textos
     )
+
+
+def formatear_expresion(constante, terminos):
+    """
+    Escribe una solución con parámetros, por ejemplo  2 - t₃  o  -2*t₂ + 1/3*t₄.
+
+    Equivale a expresar una variable básica en función de las variables
+    libres: valor = constante + Σ coeficiente·tᵢ.
+
+    Args:
+        constante: parte fija (Fraction).
+        terminos: dict {índice de la variable libre: coeficiente}.
+    """
+    partes = []
+    for libre, coeficiente in sorted(terminos.items()):
+        if coeficiente == 0:
+            continue
+        magnitud = abs(coeficiente)
+        factor = "" if magnitud == 1 else formatear_valor(magnitud) + "*"
+        partes.append(("-" if coeficiente < 0 else "+", f"{factor}t{subindice(libre + 1)}"))
+    if constante != 0 or not partes:
+        texto = formatear_valor(constante)
+    else:
+        # Sin parte fija: el primer término va sin «0 +» delante.
+        signo, termino = partes.pop(0)
+        texto = ("-" if signo == "-" else "") + termino
+    for signo, termino in partes:
+        texto += f" {signo} {termino}"
+    return texto
 
 
 def mensaje_error(error):
@@ -406,6 +438,8 @@ def reemplazar_texto(caja, texto, resumen=None):
     caja.delete("1.0", "end")
     caja.insert("1.0", texto)
     caja.see("1.0")
+    # Solo lectura: se puede seleccionar y copiar, pero no editar el resultado.
+    caja.configure(state="disabled")
     respuesta = getattr(caja, "respuesta", None)
     if respuesta is not None:
         if resumen and texto.strip():
@@ -486,6 +520,7 @@ def _crear_guia(parent, pasos, nota, indicacion):
     textos_anchos.append(texto)
 
     def ajustar(evento):
+        """Reacomoda el texto de la guía al ancho disponible."""
         # evento.width viene en píxeles reales; wraplength se da en unidades de
         # CustomTkinter, que después aplica la escala de la pantalla.
         ancho = evento.width / ctk.ScalingTracker.get_widget_scaling(guia)

@@ -13,6 +13,7 @@ from modulos._comun import (
     crear_estructura,
     entrada_numero,
     etiqueta,
+    formatear_expresion,
     formatear_matriz,
     leer_entero,
     leer_fraccion,
@@ -202,7 +203,7 @@ class ModuloSistemas(ctk.CTkFrame):
                         )
                     elif constante is not None:
                         lineas.append(
-                            f"  x{subindice(variable + 1)} = {self._formatear_expresion(constante, terminos)}"
+                            f"  x{subindice(variable + 1)} = {formatear_expresion(constante, terminos)}"
                         )
                     else:
                         valor = datos["soluciones"].get(variable)
@@ -266,16 +267,6 @@ class ModuloSistemas(ctk.CTkFrame):
             else "  Resultado: la solución NO satisface todas las ecuaciones."
         )
         return lineas
-
-    def _formatear_expresion(self, constante, terminos):
-        """Escribe una solución afín, equivalente a expresar variables con parámetros libres."""
-        texto = formatear_valor(constante)
-        for libre, coeficiente in sorted(terminos.items()):
-            signo = "+" if coeficiente >= 0 else "-"
-            magnitud = abs(coeficiente)
-            factor = "" if magnitud == 1 else formatear_valor(magnitud) + "*"
-            texto += f" {signo} {factor}t{subindice(libre + 1)}"
-        return texto
 
     def limpiar(self):
         """Reinicia a cero los coeficientes y términos independientes."""

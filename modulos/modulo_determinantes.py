@@ -1,9 +1,9 @@
 """Ventana independiente para calcular determinantes de matrices cuadradas."""
 
-from fractions import Fraction
 import customtkinter as ctk
 
-from backend.matriz import _a_fraction, formatear_valor
+from backend.matriz import formatear_valor
+from backend.matrices import determinante_triangular
 from modulos._comun import (
     boton_primario,
     boton_secundario,
@@ -22,64 +22,9 @@ from modulos._comun import (
 
 def determinante_con_pasos(A):
     """
-    Calcula det(A) mediante eliminación triangular y devuelve los pasos.
-
-    Algebraicamente, det(A) es el producto de los pivotes de una matriz
-    triangular, ajustado por el signo de cada intercambio de filas.
-    Sumar un múltiplo de una fila a otra no cambia el determinante.
+    Conserva la API de la interfaz y delega el algoritmo al backend.
     """
-    if not A or not A[0]:
-        raise ValueError("La matriz debe ser no vacía.")
-    n = len(A)
-    if any(len(fila) != n for fila in A):
-        raise ValueError("El determinante solo está definido para matrices cuadradas.")
-    matriz = [[_a_fraction(valor) for valor in fila] for fila in A]
-    pasos = [("Matriz inicial", [fila[:] for fila in matriz])]
-    signo = 1
-    producto_pivotes = Fraction(1, 1)
-
-    for columna in range(n):
-        fila_pivote = columna
-        while fila_pivote < n and matriz[fila_pivote][columna] == 0:
-            fila_pivote += 1
-        if fila_pivote == n:
-            pasos.append((
-                f"No hay pivote en columna {columna + 1}; det(A)=0.",
-                [fila[:] for fila in matriz],
-            ))
-            return Fraction(0, 1), pasos
-        if fila_pivote != columna:
-            matriz[columna], matriz[fila_pivote] = matriz[fila_pivote], matriz[columna]
-            signo *= -1
-            pasos.append((
-                f"Intercambiar F{columna + 1} y F{fila_pivote + 1}; cambia el signo.",
-                [fila[:] for fila in matriz],
-            ))
-        pivote = matriz[columna][columna]
-        producto_pivotes *= pivote
-        pasos.append((
-            f"Pivote {columna + 1}: {formatear_valor(pivote)}.",
-            [fila[:] for fila in matriz],
-        ))
-        for fila in range(columna + 1, n):
-            if matriz[fila][columna] != 0:
-                factor = matriz[fila][columna] / pivote
-                for j in range(columna, n):
-                    matriz[fila][j] -= factor * matriz[columna][j]
-                pasos.append((
-                    f"F{fila + 1} <- F{fila + 1} - "
-                    f"({formatear_valor(factor)})F{columna + 1}.",
-                    [fila_actual[:] for fila_actual in matriz],
-                ))
-
-    determinante = signo * producto_pivotes
-    pasos.append((
-        "det(A) = signo por producto de pivotes = "
-        f"{signo} * {formatear_valor(producto_pivotes)} "
-        f"= {formatear_valor(determinante)}.",
-        [fila[:] for fila in matriz],
-    ))
-    return determinante, pasos
+    return determinante_triangular(A)
 
 
 class ModuloDeterminantes(ctk.CTkFrame):

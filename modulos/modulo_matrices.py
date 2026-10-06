@@ -3,12 +3,22 @@
 from fractions import Fraction
 import customtkinter as ctk
 
-from backend.matriz import _a_fraction, formatear_valor, subindice
+from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import (
     multiplicar_escalar_matriz,
     multiplicar_matrices,
     resta_matrices,
     suma_matrices,
+)
+from backend.matrices import (
+    determinante_cofactores,
+    determinante_triangular,
+    invertir_adjunta,
+    invertir_gauss_jordan,
+    sarrus_3x3,
+    transponer_matriz as transponer_matriz_backend,
+    verificar_inversa,
+    verificar_seis_propiedades,
 )
 from modulos._comun import (
     boton_primario,
@@ -24,75 +34,18 @@ from modulos._comun import (
     reemplazar_texto,
     reiniciar_celdas,
     subtitulo,
+    mostrar_teoremas,
 )
 
 
 def transponer_matriz(A):
-    """Intercambia filas y columnas, equivalente a definir (A^T)[i,j]=A[j,i]."""
-    if not A or not A[0]:
-        raise ValueError("A debe ser una matriz no vacía.")
-    columnas = len(A[0])
-    if any(len(fila) != columnas for fila in A):
-        raise ValueError("A debe ser rectangular.")
-    return [[A[i][j] for i in range(len(A))] for j in range(columnas)]
+    """Conserva el nombre de interfaz y delega la transposición al backend."""
+    return transponer_matriz_backend(A)
 
 
 def invertir_matriz(A):
-    """
-    Calcula A^-1 reduciendo [A|I] a [I|A^-1] por Gauss-Jordan.
-
-    El procedimiento algebraico usa solo operaciones elementales de fila.
-    Si no se puede obtener la identidad a la izquierda, A es singular y no
-    tiene inversa.
-    """
-    if not A or not A[0]:
-        raise ValueError("A debe ser una matriz no vacía.")
-    n = len(A)
-    if any(len(fila) != n for fila in A):
-        raise ValueError("La inversa solo está definida para matrices cuadradas.")
-    aumentada = [
-        [_a_fraction(valor) for valor in A[i]]
-        + [Fraction(1 if i == j else 0) for j in range(n)]
-        for i in range(n)
-    ]
-    pasos = [("Matriz aumentada inicial [A|I]", [fila[:] for fila in aumentada])]
-
-    for columna in range(n):
-        fila_pivote = columna
-        while fila_pivote < n and aumentada[fila_pivote][columna] == 0:
-            fila_pivote += 1
-        if fila_pivote == n:
-            raise ValueError("La matriz es singular; su determinante es cero y no tiene inversa.")
-        if fila_pivote != columna:
-            aumentada[columna], aumentada[fila_pivote] = (
-                aumentada[fila_pivote], aumentada[columna]
-            )
-            pasos.append((
-                f"Intercambiar F{columna + 1} y F{fila_pivote + 1}",
-                [fila[:] for fila in aumentada],
-            ))
-        pivote = aumentada[columna][columna]
-        aumentada[columna] = [valor / pivote for valor in aumentada[columna]]
-        pasos.append((
-            f"Dividir F{columna + 1} entre {formatear_valor(pivote)}",
-            [fila[:] for fila in aumentada],
-        ))
-        for fila in range(n):
-            if fila == columna:
-                continue
-            factor = aumentada[fila][columna]
-            if factor != 0:
-                aumentada[fila] = [
-                    aumentada[fila][j] - factor * aumentada[columna][j]
-                    for j in range(2 * n)
-                ]
-                pasos.append((
-                    f"F{fila + 1} <- F{fila + 1} - "
-                    f"({formatear_valor(factor)})F{columna + 1}",
-                    [fila_actual[:] for fila_actual in aumentada],
-                ))
-    inversa = [fila[n:] for fila in aumentada]
-    return inversa, pasos
+    """Conserva el nombre previo y delega el cálculo exacto al backend."""
+    return invertir_gauss_jordan(A)
 
 
 class ModuloMatrices(ctk.CTkFrame):
@@ -115,7 +68,7 @@ class ModuloMatrices(ctk.CTkFrame):
             titulo="Operaciones con matrices",
             descripcion="Suma, resta, producto, traspuesta e inversa de matrices.",
             logo=(
-                "[ A ][ B ]  MÓDULO: ÁLGEBRA DE MATRICES\n"
+                "[ A ][ B ]  MÓDULO III: ÁLGEBRA DE MATRICES\n"
                 "[ C ][ D ]  Operaciones, Traspuesta y Matriz Inversa"
             ),
             pasos=[
@@ -151,6 +104,23 @@ class ModuloMatrices(ctk.CTkFrame):
         extra.pack(anchor="w", padx=10, pady=(12, 0))
         self.entry_escalar = entradas["k"]
 
+        controles_fila, entradas_fila = crear_controles(
+            contenido,
+            [("fi", "Fila i (1-based)", "1", 95), ("fj", "Fila j", "2", 80)],
+            self.actualizar_entradas,
+            texto_boton=None,
+        )
+        controles_fila.pack(anchor="w", padx=10, pady=(6, 0))
+        self.entry_fila_i = entradas_fila["fi"]
+        self.entry_fila_j = entradas_fila["fj"]
+        self.tipo_fila_var = ctk.StringVar(value="Intercambiar filas")
+        ctk.CTkOptionMenu(
+            controles_fila,
+            variable=self.tipo_fila_var,
+            values=["Intercambiar filas", "Sumar múltiplo de fila", "Multiplicar fila por escalar"],
+            width=250,
+        ).pack(side="left", padx=(8, 0))
+
         self.tablas = ctk.CTkFrame(contenido, fg_color="transparent")
         self.tablas.pack(anchor="w", fill="x", pady=(8, 0))
         subtitulo(self.tablas, "Matriz A").grid(row=0, column=0, sticky="w", padx=10, pady=(12, 6))
@@ -163,18 +133,21 @@ class ModuloMatrices(ctk.CTkFrame):
         acciones = zonas.acciones
         acciones.grid_columnconfigure((0, 1, 2), weight=1, uniform="ops")
         operaciones = [
-            ("A + B", "suma"), ("A − B", "resta"), ("k · A", "escalar"),
-            ("A · B", "producto"), ("Aᵀ  traspuesta", "traspuesta"), ("A⁻¹  inversa", "inversa"),
+            ("1. Suma", "suma"), ("2. Resta", "resta"), ("3. Escalar", "escalar"),
+            ("4. Producto", "producto"), ("5. Transposición", "traspuesta"),
+            ("6. Determinante", "determinante"), ("7. Inversa Gauss-Jordan", "inversa"),
+            ("8. Inversa adjunta", "adjunta"), ("9. Verificador", "propiedades"),
+            ("0. Teoremas clave", "teoremas"),
         ]
         for indice, (texto, operacion) in enumerate(operaciones):
             boton_primario(
                 acciones, texto, lambda op=operacion: self.calcular(op), height=38
             ).grid(
-                row=indice // 3, column=indice % 3, sticky="ew",
-                padx=(0 if indice % 3 == 0 else 8, 0), pady=(0, 8),
+                row=indice // 2, column=indice % 2, sticky="ew",
+                padx=(0 if indice % 2 == 0 else 8, 0), pady=(0, 8),
             )
         boton_secundario(acciones, "Limpiar", self.limpiar, height=36).grid(
-            row=2, column=0, columnspan=3, sticky="ew"
+            row=(len(operaciones) + 1) // 2, column=0, columnspan=2, sticky="ew"
         )
 
     def actualizar_entradas(self):
@@ -226,6 +199,9 @@ class ModuloMatrices(ctk.CTkFrame):
     def calcular(self, operacion):
         """Ejecuta la operación seleccionada, equivalente a aplicar su definición matricial."""
         try:
+            if operacion == "teoremas":
+                mostrar_teoremas(self, "matrices", "Álgebra de Matrices")
+                return
             A = self._leer_matriz(self.entradas_A, "A")
             if operacion == "suma":
                 B = self._leer_matriz(self.entradas_B, "B")
@@ -283,19 +259,93 @@ class ModuloMatrices(ctk.CTkFrame):
                     "A =\n" + formatear_matriz(A)
                     + "\n\nA^T =\n" + formatear_matriz(C)
                 )
-            else:
-                C, pasos = invertir_matriz(A)
-                lineas = ["Inversa por Gauss-Jordan: transformar [A|I] en [I|A^-1]."]
+            elif operacion in ("inversa", "adjunta"):
+                if operacion == "adjunta":
+                    C, pasos = invertir_adjunta(A)
+                    titulo = "Inversa por matriz adjunta"
+                else:
+                    C, pasos = invertir_matriz(A)
+                    titulo = "Inversa por Gauss-Jordan: transformar [A|I] en [I|A^-1]."
+                verificacion, identidad, cumple = verificar_inversa(A, C, multiplicar_matrices)
+                if operacion == "adjunta":
+                    otra_inversa, _ = invertir_matriz(A)
+                else:
+                    otra_inversa, _ = invertir_adjunta(A)
+                lineas = [titulo]
                 for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
                     lineas.extend([
                         f"Paso {indice}: {descripcion}",
                         formatear_matriz(matriz_paso),
                     ])
-                lineas.extend(["", "A^-1 =", formatear_matriz(C)])
+                lineas.extend([
+                    "", "A^-1 =", formatear_matriz(C),
+                    "", "A·A^-1:", formatear_matriz(verificacion),
+                    "Matriz identidad esperada:", formatear_matriz(identidad),
+                    "A·A^-1 = I: " + ("Se cumple" if cumple else "No se cumple"),
+                    "Comparación de métodos: " + ("las inversas coinciden" if C == otra_inversa
+                                                   else "las inversas NO coinciden"),
+                ])
+                texto = "\n".join(lineas)
+            elif operacion == "determinante":
+                det_cofactores = determinante_cofactores(A)
+                det_triangular, pasos = determinante_triangular(A)
+                lineas = ["Determinante por expansión de cofactores: " + formatear_valor(det_cofactores)]
+                if len(A) == 3:
+                    det_sarrus = sarrus_3x3(A)
+                    positivos = [A[0][0] * A[1][1] * A[2][2],
+                                 A[0][1] * A[1][2] * A[2][0],
+                                 A[0][2] * A[1][0] * A[2][1]]
+                    negativos = [A[0][2] * A[1][1] * A[2][0],
+                                 A[0][1] * A[1][0] * A[2][2],
+                                 A[0][0] * A[1][2] * A[2][1]]
+                    lineas.extend([
+                        "Sarrus: suma de diagonales descendentes = " +
+                        formatear_valor(sum(positivos, Fraction(0))),
+                        "Sarrus: suma de diagonales ascendentes = " +
+                        formatear_valor(sum(negativos, Fraction(0))),
+                        "Determinante por Sarrus: " + formatear_valor(det_sarrus),
+                        "Sarrus coincide con cofactores: " +
+                        ("Se cumple" if det_sarrus == det_cofactores else "No se cumple"),
+                    ])
+                lineas.append("Reducción a forma triangular:")
+                for indice, (descripcion, estado) in enumerate(pasos, 1):
+                    lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(estado)])
+                lineas.extend([
+                    "Determinante por triangularización: " + formatear_valor(det_triangular),
+                    "Comparación de métodos: " + ("coinciden" if det_cofactores == det_triangular
+                                                   else "NO coinciden"),
+                ])
+                C = [[det_cofactores]]
+                texto = "\n".join(lineas)
+            elif operacion == "propiedades":
+                B = self._leer_matriz(self.entradas_B, "B")
+                n = len(A)
+                fila_i = leer_entero(self.entry_fila_i, "La fila i", 1, n) - 1
+                fila_j = leer_entero(self.entry_fila_j, "La fila j", 1, n) - 1
+                datos = verificar_seis_propiedades(
+                    A, B, self.tipo_fila_var.get(), fila_i, fila_j,
+                    leer_fraccion(self.entry_escalar, "El escalar k"), multiplicar_matrices,
+                )
+                lineas = []
+                for titulo, lado_izquierdo, lado_derecho in datos:
+                    if lado_derecho is None:
+                        lineas.extend([titulo, ""])
+                        for descripcion, estado in lado_izquierdo:
+                            lineas.extend([descripcion, formatear_matriz(estado)])
+                        continue
+                    formato = lambda valor: formatear_matriz(valor) if isinstance(valor, list) else formatear_valor(valor)
+                    lineas.extend([
+                        titulo, "Lado izquierdo: " + formato(lado_izquierdo),
+                        "Lado derecho: " + formato(lado_derecho),
+                        "Se cumple" if lado_izquierdo == lado_derecho else "No se cumple", "",
+                    ])
+                C = A
                 texto = "\n".join(lineas)
             nombre = {
                 "suma": "A + B", "resta": "A − B", "escalar": "k · A",
                 "producto": "A · B", "traspuesta": "Aᵀ", "inversa": "A⁻¹",
+                "adjunta": "A⁻¹ por adjunta", "determinante": "det(A)",
+                "propiedades": "Verificador de propiedades",
             }[operacion]
             reemplazar_texto(
                 self.resultado, texto + "\n", f"{nombre} = {matriz_en_linea(C)}"
