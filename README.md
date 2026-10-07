@@ -32,7 +32,7 @@ Gauss-Jordan. Muestra las operaciones elementales, clasifica el sistema como
 de solución única, infinitas soluciones o inconsistente y permite verificar
 la solución.
 
-### Módulo 2: Operaciones con vectores y combinación lineal
+### Módulo 2: Vectores y combinación lineal
 
 Permite sumar y restar vectores, multiplicarlos por escalares y verificar si
 un vector es combinación lineal de un conjunto. Para esta última operación
@@ -58,7 +58,13 @@ Calcula el determinante de matrices cuadradas mediante eliminación por filas.
 Muestra los pivotes y los intercambios de filas, y señala si la matriz es
 singular.
 
-### Módulo 6: Propiedades del producto matriz-vector
+### Módulo 6: Factorización LU
+
+Factoriza `A = LU`, con `L` triangular inferior y diagonal unitaria, y `U`
+triangular superior. Resuelve `Ax = b` mediante sustitución hacia adelante
+(`Ly = b`) y hacia atrás (`Ux = y`).
+
+### Módulo 7: Producto matriz-vector / Propiedades
 
 Verifica las propiedades de linealidad:
 

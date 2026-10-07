@@ -40,7 +40,7 @@ class ModuloPropiedades(ctk.CTkFrame):
         zonas = crear_estructura(
             self,
             self.on_back,
-            numero=6,
+            numero=7,
             titulo="Producto matriz-vector",
             descripcion="Comprueba A(u + v) = Au + Av  y  A(cu) = c(Au).",
             logo=(

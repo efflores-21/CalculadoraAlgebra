@@ -9,6 +9,9 @@ TEOREMAS = {
         "OPERACIONES ELEMENTALES\n"
         "Intercambiar filas, multiplicar una fila por un escalar no nulo o sumar "
         "a una fila un múltiplo de otra conserva el conjunto de soluciones.\n"
+        "\nREGLA DE CRAMER\n"
+        "Para Ax=b cuadrado con det(A) != 0, x_i=det(A_i(b))/det(A), donde "
+        "A_i(b) reemplaza la columna i de A por b.\n"
     ),
     "vectores": (
         "TEOREMA DE INDEPENDENCIA LINEAL\n\n"
@@ -43,6 +46,9 @@ TEOREMAS = {
         "Una matriz cuadrada A es invertible si existe A^-1 tal que "
         "A*A^-1=A^-1*A=I.\n"
         "La traspuesta intercambia filas por columnas: (A^T)[i,j]=A[j,i].\n"
+        "Regla fila-columna: (AB)[i,j] es el producto punto de la fila i de A "
+        "con la columna j de B.\n"
+        "(A^T)^T=A; (A+B)^T=A^T+B^T; (rA)^T=rA^T; (AB)^T=B^T A^T.\n"
         "\nTEOREMA DE LA INVERSA (Sesión 10)\n"
         "(A^-1)^-1=A; (AB)^-1=B^-1 A^-1; "
         "(A^T)^-1=(A^-1)^T.\n"
@@ -50,6 +56,7 @@ TEOREMAS = {
         "c) A tiene n posiciones pivote.\n"
         "e) Las columnas de A son linealmente independientes.\n"
         "h) Las columnas de A generan R^n.\n"
+        "La reduccion [A | I] -> [I | A^-1] calcula la inversa por Gauss-Jordan.\n"
     ),
     "determinantes": (
         "PROPIEDADES DEL DETERMINANTE\n\n"
@@ -58,6 +65,21 @@ TEOREMAS = {
         "Sumar a una fila un múltiplo de otra no cambia el determinante.\n"
         "Multiplicar una fila por un escalar multiplica el determinante por ese escalar.\n"
         "Una matriz es singular si y solo si det(A)=0.\n"
+        "En una matriz triangular, det(A) es el producto de las entradas diagonales.\n"
+        "det(A^T)=det(A) y det(AB)=det(A)det(B).\n"
+        "Si det(A) != 0, det(A^-1)=1/det(A).\n"
+        "A^-1=(1/det(A)) adj(A), donde adj(A)=C^T y C es la matriz de cofactores.\n"
+        "Regla de Cramer: para Ax=b con det(A) != 0, "
+        "x_i=det(A_i(b))/det(A).\n"
+    ),
+    "lu": (
+        "FACTORIZACIÓN LU\n\n"
+        "A = LU.\n"
+        "L es una matriz triangular inferior con unos en la diagonal.\n"
+        "U es una matriz triangular superior.\n\n"
+        "Para resolver Ax = b mediante LU:\n"
+        "1) Resolver Ly = b mediante sustitución hacia adelante.\n"
+        "2) Resolver Ux = y mediante sustitución hacia atrás.\n"
     ),
     "propiedades": (
         "LINEALIDAD DEL PRODUCTO MATRIZ-VECTOR\n\n"

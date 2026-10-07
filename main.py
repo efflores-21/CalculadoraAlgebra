@@ -49,6 +49,7 @@ import customtkinter as ctk  # noqa: E402
 from modulos._comun import COLOR, boton_texto, etiqueta, fuente, tarjeta
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
+from modulos.modulo_lu import ModuloLU
 from modulos.modulo_operaciones_vectores import ModuloOperacionesVectores
 from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
@@ -71,6 +72,8 @@ MODULOS = (
      "Suma, resta, producto, traspuesta e inversa de matrices."),
     ("determinantes", "Determinantes",
      "Calcula det(A) paso a paso y dice si A tiene inversa."),
+    ("lu", "Factorización LU",
+     "Factoriza A = LU y resuelve Ax = b por sustituciones."),
     ("propiedades", "Producto matriz-vector",
      "Comprueba A(u + v) = Au + Av y A(cu) = c(Au)."),
 )
@@ -118,8 +121,12 @@ class MenuPrincipal(ctk.CTk):
             tamano=15,
         ).pack(pady=(4, 0))
 
-        rejilla = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
-        rejilla.grid(row=1, column=0, sticky="n", padx=40)
+        area_modulos = ctk.CTkScrollableFrame(
+            self.menu_frame, fg_color="transparent"
+        )
+        area_modulos.grid(row=1, column=0, sticky="nsew", padx=40)
+        rejilla = ctk.CTkFrame(area_modulos, fg_color="transparent")
+        rejilla.pack(anchor="n")
         rejilla.grid_columnconfigure((0, 1), weight=1, uniform="tarjetas")
         for indice, (clave, titulo, descripcion) in enumerate(MODULOS):
             self._crear_tarjeta_modulo(rejilla, indice + 1, clave, titulo, descripcion).grid(
@@ -182,6 +189,7 @@ class MenuPrincipal(ctk.CTk):
             "operaciones_vectores": ModuloOperacionesVectores,
             "vectores": ModuloVectores,
             "matrices": ModuloMatrices,
+            "lu": ModuloLU,
             "determinantes": ModuloDeterminantes,
             "propiedades": ModuloPropiedades,
         }
