@@ -1,10 +1,11 @@
 """Estilo visual, componentes y validaciones comunes para todos los módulos."""
 
+import re
 import sys
 from types import SimpleNamespace
 
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import TclError, messagebox
 
 from backend.matriz import _a_fraction, formatear_valor, subindice
 from modulos.teoremas.resumen_teoremas import obtener_resumen
@@ -96,6 +97,106 @@ def formatear_matriz(matriz):
         ) + " ]"
         for fila in textos
     )
+
+
+def matriz_a_texto_portapapeles(matriz):
+    """Serializa una matriz en filas tabuladas, compatible con hojas de cálculo."""
+    if not matriz or not matriz[0]:
+        raise ValueError("No hay una matriz para copiar.")
+    columnas = len(matriz[0])
+    if any(len(fila) != columnas for fila in matriz):
+        raise ValueError("La matriz no es rectangular y no se puede copiar.")
+    return "\n".join(
+        "\t".join(formatear_valor(_a_fraction(valor)) for valor in fila)
+        for fila in matriz
+    )
+
+
+def parsear_matriz_portapapeles(texto):
+    """Lee matrices tabuladas, separadas por espacios o en formato alineado."""
+    if not texto or not texto.strip():
+        raise ValueError("El portapapeles está vacío; copie una matriz primero.")
+    filas_texto = []
+    for linea in texto.strip().splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        # Admite la notación compacta [1 2 ; 3 4] que usa la interfaz.
+        filas_texto.extend(parte.strip() for parte in linea.split(";") if parte.strip())
+    matriz = []
+    for numero_fila, fila_texto in enumerate(filas_texto, 1):
+        fila_texto = re.sub(r"^\[\s*|\s*\]$", "", fila_texto).strip()
+        if "\t" in fila_texto:
+            valores = [valor.strip() for valor in fila_texto.split("\t")]
+        elif "," in fila_texto:
+            valores = [valor.strip() for valor in fila_texto.split(",")]
+        else:
+            valores = re.split(r"\s+", fila_texto)
+        if not valores or any(not valor for valor in valores):
+            raise ValueError(f"La fila {numero_fila} contiene una entrada vacía.")
+        for columna, valor in enumerate(valores, 1):
+            try:
+                _a_fraction(valor)
+            except (ValueError, ZeroDivisionError) as error:
+                raise ValueError(
+                    f"La entrada ({numero_fila},{columna}) no es un número válido: {valor!r}."
+                ) from error
+        matriz.append(valores)
+    if not matriz:
+        raise ValueError("No se encontró ninguna fila de matriz en el portapapeles.")
+    ancho = len(matriz[0])
+    if ancho == 0 or any(len(fila) != ancho for fila in matriz):
+        raise ValueError("Las filas de la matriz deben tener la misma cantidad de columnas.")
+    return matriz
+
+
+def copiar_matriz_al_portapapeles(widget, matriz):
+    """Copia una matriz numérica como texto TSV al portapapeles del sistema."""
+    try:
+        texto = matriz_a_texto_portapapeles(matriz)
+        widget.clipboard_clear()
+        widget.clipboard_append(texto)
+    except (ValueError, TclError) as error:
+        mensaje_error(error)
+        return False
+    return True
+
+
+def copiar_entradas_al_portapapeles(widget, entradas):
+    """Lee y copia una cuadrícula de campos numéricos."""
+    try:
+        matriz = [[_a_fraction(celda.get().strip()) for celda in fila] for fila in entradas]
+        return copiar_matriz_al_portapapeles(widget, matriz)
+    except (ValueError, ZeroDivisionError) as error:
+        mensaje_error(error)
+        return False
+
+
+def pegar_matriz_en_entradas(widget, entradas):
+    """Pega en una cuadrícula solo si el formato y sus dimensiones coinciden."""
+    try:
+        matriz = parsear_matriz_portapapeles(widget.clipboard_get())
+        filas_esperadas = len(entradas)
+        columnas_esperadas = len(entradas[0]) if entradas else 0
+        if len(matriz) != filas_esperadas or any(
+            len(fila) != columnas_esperadas for fila in matriz
+        ):
+            raise ValueError(
+                f"La matriz copiada es de {len(matriz)}×{len(matriz[0])}; "
+                f"el destino requiere {filas_esperadas}×{columnas_esperadas}. "
+                "Ajuste el tamaño o copie una matriz compatible."
+            )
+    except TclError:
+        mensaje_error(ValueError("No se pudo leer el portapapeles; copie una matriz primero."))
+        return False
+    except ValueError as error:
+        mensaje_error(error)
+        return False
+    for i, fila in enumerate(entradas):
+        for j, celda in enumerate(fila):
+            celda.delete(0, "end")
+            celda.insert(0, matriz[i][j])
+    return True
 
 
 def formatear_expresion(constante, terminos):
@@ -458,6 +559,29 @@ def reemplazar_texto(caja, texto, resumen=None):
         guia.grid()
 
 
+def _proteger_callbacks_scroll_textbox(caja):
+    """Evita que el dibujo de CTkScrollbar reingrese en su callback de scroll."""
+    def crear_callback(barra):
+        actualizando = False
+
+        def actualizar(inicio, fin):
+            nonlocal actualizando
+            if actualizando:
+                return
+            actualizando = True
+            try:
+                barra.set(inicio, fin)
+            finally:
+                actualizando = False
+
+        return actualizar
+
+    caja._textbox.configure(
+        yscrollcommand=crear_callback(caja._y_scrollbar),
+        xscrollcommand=crear_callback(caja._x_scrollbar),
+    )
+
+
 def matriz_en_linea(matriz):
     """Escribe una matriz pequeña en una línea: [1  2 ; 3  4]."""
     return "[" + " ; ".join(
@@ -640,6 +764,7 @@ def crear_estructura(
         fg_color=COLOR["suave"],
         text_color=COLOR["texto"],
     )
+    _proteger_callbacks_scroll_textbox(resultado)
     resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
     guia = _crear_guia(derecha, pasos, nota, indicacion)
     guia.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))

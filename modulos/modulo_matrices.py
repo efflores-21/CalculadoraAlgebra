@@ -25,12 +25,15 @@ from modulos._comun import (
     boton_secundario,
     crear_controles,
     crear_estructura,
+    copiar_entradas_al_portapapeles,
+    copiar_matriz_al_portapapeles,
     entrada_numero,
     formatear_matriz,
     leer_entero,
     leer_fraccion,
     matriz_en_linea,
     mensaje_error,
+    pegar_matriz_en_entradas,
     reemplazar_texto,
     reiniciar_celdas,
     subtitulo,
@@ -56,6 +59,7 @@ class ModuloMatrices(ctk.CTkFrame):
         self.on_back = on_back
         self.entradas_A = []
         self.entradas_B = []
+        self.ultima_matriz_resultado = None
         self._construir_interfaz()
         self.actualizar_entradas()
 
@@ -129,6 +133,16 @@ class ModuloMatrices(ctk.CTkFrame):
         self.scroll_A.grid(row=1, column=0, sticky="nw", padx=6)
         self.scroll_B = ctk.CTkFrame(self.tablas, fg_color="transparent")
         self.scroll_B.grid(row=1, column=1, sticky="nw", padx=(24, 6))
+        acciones_portapapeles = ctk.CTkFrame(contenido, fg_color="transparent")
+        acciones_portapapeles.pack(anchor="w", padx=10, pady=(8, 0))
+        for texto, callback, ancho in (
+            ("Copiar A", self.copiar_A, 90), ("Pegar en A", self.pegar_A, 100),
+            ("Copiar B", self.copiar_B, 90), ("Pegar en B", self.pegar_B, 100),
+            ("Copiar resultado", self.copiar_resultado, 130),
+        ):
+            boton_secundario(
+                acciones_portapapeles, texto, callback, width=ancho
+            ).pack(side="left", padx=(0, 5))
 
         acciones = zonas.acciones
         acciones.grid_columnconfigure((0, 1, 2), weight=1, uniform="ops")
@@ -170,6 +184,7 @@ class ModuloMatrices(ctk.CTkFrame):
         self.entradas_B = self._construir_tabla(
             self.scroll_B, dimensiones["bm"], dimensiones["bn"]
         )
+        self.ultima_matriz_resultado = None
         reemplazar_texto(self.resultado, "")
 
     def _construir_tabla(self, parent, filas, columnas):
@@ -198,6 +213,7 @@ class ModuloMatrices(ctk.CTkFrame):
 
     def calcular(self, operacion):
         """Ejecuta la operación seleccionada, equivalente a aplicar su definición matricial."""
+        self.ultima_matriz_resultado = None
         try:
             if operacion == "teoremas":
                 mostrar_teoremas(self, "matrices", "Álgebra de Matrices")
@@ -350,10 +366,27 @@ class ModuloMatrices(ctk.CTkFrame):
             reemplazar_texto(
                 self.resultado, texto + "\n", f"{nombre} = {matriz_en_linea(C)}"
             )
+            self.ultima_matriz_resultado = C
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def copiar_A(self):
+        copiar_entradas_al_portapapeles(self, self.entradas_A)
+
+    def pegar_A(self):
+        pegar_matriz_en_entradas(self, self.entradas_A)
+
+    def copiar_B(self):
+        copiar_entradas_al_portapapeles(self, self.entradas_B)
+
+    def pegar_B(self):
+        pegar_matriz_en_entradas(self, self.entradas_B)
+
+    def copiar_resultado(self):
+        copiar_matriz_al_portapapeles(self, self.ultima_matriz_resultado)
 
     def limpiar(self):
         """Restaura a cero todas las entradas de las matrices y el escalar."""
         reiniciar_celdas(self.entradas_A, self.entradas_B, [self.entry_escalar])
+        self.ultima_matriz_resultado = None
         reemplazar_texto(self.resultado, "")
