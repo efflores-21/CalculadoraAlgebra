@@ -5,6 +5,8 @@ import customtkinter as ctk
 from backend.clasificador import clasificar_sistema, columnas_pivote
 from backend.eliminacion import resolver_sistema
 from backend.matriz import formatear_valor, subindice
+from backend.matrices import invertir_gauss_jordan, resolver_cramer
+from backend.operaciones_matriciales import multiplicar_matriz_vector
 from modulos._comun import (
     Selector,
     boton_primario,
@@ -15,6 +17,7 @@ from modulos._comun import (
     etiqueta,
     formatear_expresion,
     formatear_matriz,
+    formatear_vector,
     leer_entero,
     leer_fraccion,
     mensaje_error,
@@ -22,6 +25,22 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _resolver_por_matriz_inversa(matriz_a, vector_b):
+    """Resuelve x=A⁻¹b y devuelve inversa, pasos y verificación exacta."""
+    if not matriz_a or any(len(fila) != len(matriz_a) for fila in matriz_a):
+        raise ValueError(
+            "El método de matriz inversa requiere que A sea cuadrada."
+        )
+    if vector_b is None or len(vector_b) != len(matriz_a):
+        raise ValueError(
+            "El vector b debe tener una entrada por cada fila de la matriz cuadrada A."
+        )
+    inversa, pasos = invertir_gauss_jordan(matriz_a)
+    solucion = multiplicar_matriz_vector(inversa, vector_b)
+    producto_ax = multiplicar_matriz_vector(matriz_a, solucion)
+    return inversa, pasos, solucion, producto_ax
 
 
 class ModuloSistemas(ctk.CTkFrame):
@@ -42,10 +61,10 @@ class ModuloSistemas(ctk.CTkFrame):
             self.on_back,
             numero=1,
             titulo="Sistemas de ecuaciones",
-            descripcion="Resuelve Ax = b por Gauss o Gauss-Jordan, paso a paso.",
+            descripcion="Resuelve Ax = b por Gauss, Gauss-Jordan, Cramer o matriz inversa.",
             logo=(
                 "[ [1 2 | 3] ]  MÓDULO: SISTEMAS DE ECUACIONES (SEL)\n"
-                "[ [0 1 | 5] ]  Métodos: Gauss, Gauss-Jordan"
+                "[ [0 1 | 5] ]  Métodos: Gauss, Gauss-Jordan, Cramer, A⁻¹b"
             ),
             pasos=[
                 "Escribe cuántas ecuaciones y cuántas variables tiene tu sistema "
@@ -72,7 +91,10 @@ class ModuloSistemas(ctk.CTkFrame):
         self.entry_m, self.entry_n = entradas["m"], entradas["n"]
 
         etiqueta(contenido, "Método").pack(anchor="w", padx=10, pady=(16, 2))
-        self.metodo = Selector(contenido, ["Gauss-Jordan", "Gauss"])
+        self.metodo = Selector(
+            contenido,
+            ["Gauss-Jordan", "Gauss", "Cramer", "Matriz inversa"],
+        )
         self.metodo.pack(anchor="w", padx=10)
 
         subtitulo(contenido, "Tu sistema").pack(anchor="w", padx=10, pady=(20, 6))
@@ -138,6 +160,22 @@ class ModuloSistemas(ctk.CTkFrame):
                 matriz_a[i][:] + [vector_b[i]] for i in range(m)
             ]
             metodo = self.metodo.get().lower()
+            if metodo == "cramer":
+                if m != n:
+                    raise ValueError(
+                        "La regla de Cramer requiere un sistema cuadrado: "
+                        "el número de ecuaciones debe igualar al de variables."
+                    )
+                self._mostrar_cramer(matriz_a, vector_b)
+                return
+            if metodo == "matriz inversa":
+                if m != n:
+                    raise ValueError(
+                        "El método de matriz inversa requiere un sistema cuadrado: "
+                        "el número de ecuaciones debe igualar al de variables."
+                    )
+                self._mostrar_inversa(matriz_a, vector_b)
+                return
             datos = resolver_sistema(matriz_aumentada, metodo=metodo)
             clase = clasificar_sistema(datos["matriz_escalonada"], datos["rango"])
 
@@ -227,6 +265,121 @@ class ModuloSistemas(ctk.CTkFrame):
             reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def _mostrar_inversa(self, matriz_a, vector_b):
+        """Muestra x=A⁻¹b, los pasos de inversión y la comprobación Ax=b."""
+        inversa, pasos, solucion, producto_ax = _resolver_por_matriz_inversa(
+            matriz_a, vector_b
+        )
+        lineas = [
+            "MODULO 1 | RESOLUCIÓN POR MATRIZ INVERSA",
+            "=" * 58,
+            "Matriz A:",
+            formatear_matriz(matriz_a),
+            "\nCálculo de A⁻¹ por Gauss-Jordan:",
+        ]
+        for indice, (descripcion, estado) in enumerate(pasos, 1):
+            lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(estado)])
+        lineas.extend([
+            "\nInversa final A⁻¹:",
+            formatear_matriz(inversa),
+            "\nVector b:",
+            formatear_vector(vector_b),
+            "\nProducto x = A⁻¹b:",
+        ])
+        for i, fila in enumerate(inversa):
+            terminos = " + ".join(
+                f"({formatear_valor(fila[j])})({formatear_valor(vector_b[j])})"
+                for j in range(len(vector_b))
+            )
+            lineas.append(
+                f"x{subindice(i + 1)} = {terminos} = "
+                f"{formatear_valor(solucion[i])}"
+            )
+        lineas.extend([
+            "Solución x = (" + ", ".join(formatear_valor(v) for v in solucion) + ")",
+            "\nVerificación exacta de Ax = b:",
+            "Ax = (" + ", ".join(formatear_valor(v) for v in producto_ax) + ")",
+        ])
+        cumple = producto_ax == vector_b
+        for i, fila in enumerate(matriz_a):
+            terminos = " + ".join(
+                f"({formatear_valor(fila[j])})({formatear_valor(solucion[j])})"
+                for j in range(len(solucion))
+            )
+            lineas.append(
+                f"Ecuación {i + 1}: {terminos} = {formatear_valor(producto_ax[i])} "
+                f"{'=' if producto_ax[i] == vector_b[i] else '≠'} "
+                f"{formatear_valor(vector_b[i])}"
+            )
+        lineas.append("Ax = b: " + ("Se cumple" if cumple else "No se cumple"))
+        reemplazar_texto(
+            self.resultado,
+            "\n".join(lineas) + "\n",
+            "Solución por matriz inversa: ("
+            + ", ".join(formatear_valor(v) for v in solucion) + ")",
+        )
+
+    def _mostrar_cramer(self, matriz_a, vector_b):
+        """Presenta D, cada determinante Dᵢ y la solución por Cramer."""
+        datos = resolver_cramer(matriz_a, vector_b)
+        lineas = [
+            "MODULO 1 | REGLA DE CRAMER PARA Ax=b",
+            "=" * 58,
+            "Paso 1: calcular D = det(A).",
+            "Matriz A:",
+            formatear_matriz(matriz_a),
+            "Vector b = (" + ", ".join(formatear_valor(valor) for valor in vector_b) + ")",
+            "Cálculo de D:",
+        ]
+        for descripcion, estado in datos["pasos_determinante"]:
+            lineas.extend([descripcion, formatear_matriz(estado)])
+        determinante = datos["determinante"]
+        lineas.append(f"D = {formatear_valor(determinante)}")
+        if datos["solucion"] is None:
+            lineas.extend([
+                "",
+                "D = 0: la regla de Cramer no permite obtener una solución única.",
+                "El sistema puede no tener solución o tener infinitas soluciones.",
+            ])
+            reemplazar_texto(
+                self.resultado,
+                "\n".join(lineas) + "\n",
+                "D = 0: Cramer no determina una solución única.",
+            )
+            return
+
+        valores_x = []
+        for reemplazo in datos["reemplazos"]:
+            indice = reemplazo["indice"]
+            determinante_i = reemplazo["determinante"]
+            valor = reemplazo["valor"]
+            lineas.extend([
+                "",
+                f"Paso 2: construir A{subindice(indice + 1)} "
+                f"(reemplazar la columna {indice + 1} de A por b):",
+                formatear_matriz(reemplazo["matriz"]),
+                f"Paso 3: calcular D{subindice(indice + 1)} = det(A{subindice(indice + 1)}).",
+            ])
+            for descripcion, estado in reemplazo["pasos_determinante"]:
+                lineas.extend([descripcion, formatear_matriz(estado)])
+            lineas.extend([
+                f"D{subindice(indice + 1)} = {formatear_valor(determinante_i)}",
+                f"Paso 4: x{subindice(indice + 1)} = "
+                f"D{subindice(indice + 1)}/D = "
+                f"{formatear_valor(determinante_i)}/{formatear_valor(determinante)} "
+                f"= {formatear_valor(valor)}",
+            ])
+            valores_x.append(f"x{subindice(indice + 1)} = {formatear_valor(valor)}")
+        lineas.extend([
+            "",
+            "Solución final: (" + ", ".join(formatear_valor(valor) for valor in datos["solucion"]) + ")",
+        ])
+        reemplazar_texto(
+            self.resultado,
+            "\n".join(lineas) + "\n",
+            "Solución única por Cramer: " + ",  ".join(valores_x),
+        )
 
     def _verificar_solucion(self, matriz_a, vector_b, expresiones, libres):
         """

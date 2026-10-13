@@ -27,6 +27,67 @@ def determinante_cofactores(A):
     return determinante_por_cofactores(A)
 
 
+def determinante_cofactores_con_pasos(A):
+    """Devuelve el determinante exacto y la expansión recursiva por cofactores."""
+    matriz = _validar_cuadrada(A)
+    pasos = []
+
+    def expandir(actual, nombre):
+        orden = len(actual)
+        if orden == 1:
+            valor = actual[0][0]
+            pasos.append((
+                f"Caso base: det({nombre}) = {formatear_valor(valor)}.",
+                [fila[:] for fila in actual],
+            ))
+            return valor
+
+        pasos.append((
+            f"Desarrollar det({nombre}) por la fila 1.",
+            [fila[:] for fila in actual],
+        ))
+        suma = Fraction(0)
+        terminos = []
+        for columna in range(orden):
+            menor = [
+                [actual[i][j] for j in range(orden) if j != columna]
+                for i in range(1, orden)
+            ]
+            nombre_menor = f"M_1,{columna + 1}({nombre})"
+            pasos.append((
+                f"Menor M_1,{columna + 1}: eliminar la fila 1 y la "
+                f"columna {columna + 1} de {nombre}.",
+                [fila[:] for fila in menor],
+            ))
+            determinante_menor = expandir(menor, nombre_menor)
+            signo = Fraction(1 if columna % 2 == 0 else -1)
+            cofactor = signo * determinante_menor
+            elemento = actual[0][columna]
+            termino = elemento * cofactor
+            pasos.append((
+                f"C_1,{columna + 1} = (-1)^(1+{columna + 1}) · "
+                f"det({nombre_menor}) = {formatear_valor(cofactor)}.",
+                None,
+            ))
+            pasos.append((
+                f"Término a_1,{columna + 1}·C_1,{columna + 1} = "
+                f"{formatear_valor(elemento)}·{formatear_valor(cofactor)} "
+                f"= {formatear_valor(termino)}.",
+                None,
+            ))
+            terminos.append(formatear_valor(termino))
+            suma += termino
+        pasos.append((
+            f"det({nombre}) = " + " + ".join(terminos)
+            + f" = {formatear_valor(suma)}.",
+            None,
+        ))
+        return suma
+
+    resultado = expandir(matriz, "A")
+    return resultado, pasos
+
+
 def sarrus_3x3(A):
     """Calcula el determinante 3×3 mediante la regla de Sarrus."""
     matriz = _validar_cuadrada(A)
@@ -44,7 +105,6 @@ def determinante_triangular(A):
     n = len(matriz)
     pasos = [("Matriz inicial", [fila[:] for fila in matriz])]
     signo = 1
-    producto_pivotes = Fraction(1)
     for columna in range(n):
         fila_pivote = next(
             (fila for fila in range(columna, n) if matriz[fila][columna] != 0), None
@@ -59,7 +119,6 @@ def determinante_triangular(A):
             pasos.append((f"Intercambiar F{columna + 1} y F{fila_pivote + 1}; cambia el signo.",
                           [fila[:] for fila in matriz]))
         pivote = matriz[columna][columna]
-        producto_pivotes *= pivote
         pasos.append((f"Pivote {columna + 1}: {formatear_valor(pivote)}.",
                       [fila[:] for fila in matriz]))
         for fila in range(columna + 1, n):
@@ -69,10 +128,64 @@ def determinante_triangular(A):
                     matriz[fila][j] -= factor * matriz[columna][j]
                 pasos.append((f"F{fila + 1} <- F{fila + 1} - ({formatear_valor(factor)})F{columna + 1}.",
                               [fila_actual[:] for fila_actual in matriz]))
-    resultado = signo * producto_pivotes
-    pasos.append((f"det(A) = {signo} por {formatear_valor(producto_pivotes)} = {formatear_valor(resultado)}.",
-                  [fila[:] for fila in matriz]))
+    diagonal = [matriz[i][i] for i in range(n)]
+    producto_diagonal = Fraction(1)
+    for valor in diagonal:
+        producto_diagonal *= valor
+    resultado = signo * producto_diagonal
+    pasos.append((
+        "Diagonal final: (" + ", ".join(formatear_valor(valor) for valor in diagonal) + ").",
+        [fila[:] for fila in matriz],
+    ))
+    pasos.append((
+        f"det(A) = signo ({signo:+d}) × producto diagonal "
+        f"({formatear_valor(producto_diagonal)}) = {formatear_valor(resultado)}.",
+        [fila[:] for fila in matriz],
+    ))
     return resultado, pasos
+
+
+def resolver_cramer(A, b):
+    """Resuelve un sistema cuadrado por Cramer y devuelve la traza completa."""
+    matriz = _validar_cuadrada(A)
+    try:
+        dimension_b = len(b)
+    except TypeError as error:
+        raise ValueError("El vector b debe ser una secuencia de valores numéricos.") from error
+    if dimension_b != len(matriz):
+        raise ValueError("El vector b debe tener tantas entradas como filas tiene A.")
+    vector = [_a_fraction(valor) for valor in b]
+    determinante, pasos_determinante = determinante_triangular(matriz)
+    if determinante == 0:
+        return {
+            "determinante": determinante,
+            "pasos_determinante": pasos_determinante,
+            "reemplazos": [],
+            "solucion": None,
+        }
+
+    reemplazos = []
+    solucion = []
+    for columna in range(len(matriz)):
+        matriz_reemplazo = [fila[:] for fila in matriz]
+        for fila in range(len(matriz)):
+            matriz_reemplazo[fila][columna] = vector[fila]
+        determinante_i, pasos_i = determinante_triangular(matriz_reemplazo)
+        valor = determinante_i / determinante
+        reemplazos.append({
+            "indice": columna,
+            "matriz": matriz_reemplazo,
+            "determinante": determinante_i,
+            "pasos_determinante": pasos_i,
+            "valor": valor,
+        })
+        solucion.append(valor)
+    return {
+        "determinante": determinante,
+        "pasos_determinante": pasos_determinante,
+        "reemplazos": reemplazos,
+        "solucion": solucion,
+    }
 
 
 def matriz_menores(A):
@@ -115,6 +228,7 @@ def invertir_gauss_jordan(A):
                                    for j in range(2 * n)]
                 pasos.append((f"F{fila + 1} <- F{fila + 1} - ({formatear_valor(factor)})F{columna + 1}",
                               [r[:] for r in aumentada]))
+    pasos.append(("Forma reducida final [I|A⁻¹]", [fila[:] for fila in aumentada]))
     return [fila[n:] for fila in aumentada], pasos
 
 
