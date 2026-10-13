@@ -80,8 +80,8 @@ MODULOS = (
      "Calcula det(A) paso a paso y dice si A tiene inversa."),
     ("lu", "Factorización LU y solución Ax = b",
      "Factoriza A = LU y resuelve Ly = b y Ux = y."),
-    ("propiedades", "Producto matriz-vector",
-     "Comprueba A(u + v) = Au + Av y A(cu) = c(Au)."),
+    ("propiedades", "Propiedades de matrices",
+     "Producto, transposición, inversa y determinantes, con ejemplos."),
 )
 
 

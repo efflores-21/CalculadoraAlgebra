@@ -28,9 +28,10 @@ from backend.operaciones_matriciales import (
 )
 from backend.verificador import LIMITE_COFACTORES, verificar_propiedades_matrices
 from modulos._comun import (
-    boton_primario, boton_secundario, crear_controles, crear_estructura, entrada_numero,
+    boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
+    copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
     formatear_matriz, leer_entero, leer_fraccion, matriz_en_linea, mensaje_error,
-    mostrar_teoremas, reemplazar_texto, reiniciar_celdas, subtitulo,
+    mostrar_teoremas, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
 )
 
 LOGO = (
@@ -79,6 +80,7 @@ class ModuloMatrices(ctk.CTkFrame):
         super().__init__(master)
         self.on_back = on_back
         self.entradas_A, self.entradas_B, self.entradas_C = [], [], []
+        self.ultima_matriz_resultado = None
         self._construir_interfaz()
         self.actualizar_entradas()
 
@@ -103,6 +105,7 @@ class ModuloMatrices(ctk.CTkFrame):
         self.resultado = zonas.resultado
         self._crear_controles(zonas.contenido)
         self._crear_tablas(zonas.contenido)
+        self._crear_portapapeles(zonas.contenido)
         self._crear_botones(zonas.acciones)
 
     def _crear_controles(self, contenido):
@@ -133,6 +136,19 @@ class ModuloMatrices(ctk.CTkFrame):
             marco = ctk.CTkFrame(self.tablas, fg_color="transparent")
             marco.grid(row=1, column=columna, sticky="nw", padx=(6, 18))
             self.marcos.append(marco)
+
+    def _crear_portapapeles(self, contenido):
+        """Botones para copiar y pegar matrices (compatibles con Excel)."""
+        fila = ctk.CTkFrame(contenido, fg_color="transparent")
+        fila.pack(anchor="w", padx=10, pady=(6, 0))
+        for texto, accion, ancho in (
+            ("Copiar A", lambda: copiar_entradas_al_portapapeles(self, self.entradas_A), 84),
+            ("Pegar en A", lambda: pegar_matriz_en_entradas(self, self.entradas_A), 94),
+            ("Copiar B", lambda: copiar_entradas_al_portapapeles(self, self.entradas_B), 84),
+            ("Pegar en B", lambda: pegar_matriz_en_entradas(self, self.entradas_B), 94),
+            ("Copiar resultado", lambda: copiar_matriz_al_portapapeles(self, self.ultima_matriz_resultado), 124),
+        ):
+            boton_secundario(fila, texto, accion, width=ancho, height=30).pack(side="left", padx=(0, 5))
 
     def _crear_botones(self, acciones):
         """Botones 1 a 9, 0 y Limpiar, en tres columnas para no tapar las tablas."""
@@ -195,6 +211,7 @@ class ModuloMatrices(ctk.CTkFrame):
             "determinante": self._determinante, "inversa": self._inversa_gauss_jordan,
             "adjunta": self._inversa_adjunta, "propiedades": self._verificador,
         }
+        self.ultima_matriz_resultado = None
         try:
             A = self._leer_matriz(self.entradas_A, "A")
             lineas, resumen = metodos[operacion](A)
@@ -207,6 +224,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Opción 1: A + B entrada a entrada."""
         B = self._leer_matriz(self.entradas_B, "B")
         C = suma_matrices(A, B)
+        self.ultima_matriz_resultado = C
         return (["A + B, entrada a entrada:"] + _detalle_entradas(A, B, C, "+")
                 + ["", f"A + B ({len(C)} × {len(C[0])}) =", formatear_matriz(C)],
                 f"A + B = {matriz_en_linea(C)}")
@@ -215,6 +233,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Opción 2: A − B entrada a entrada."""
         B = self._leer_matriz(self.entradas_B, "B")
         C = resta_matrices(A, B)
+        self.ultima_matriz_resultado = C
         return (["A − B, entrada a entrada:"] + _detalle_entradas(A, B, C, "−")
                 + ["", f"A − B ({len(C)} × {len(C[0])}) =", formatear_matriz(C)],
                 f"A − B = {matriz_en_linea(C)}")
@@ -223,6 +242,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Opción 3: k · A, multiplicando cada entrada por k."""
         k = leer_fraccion(self.entry_escalar, "El escalar k")
         C = multiplicar_escalar_matriz(k, A)
+        self.ultima_matriz_resultado = C
         detalle = [f"c{subindice(i + 1)},{subindice(j + 1)} = {formatear_valor(k)} · {formatear_valor(A[i][j])} "
                    f"= {formatear_valor(C[i][j])}" for i in range(len(A)) for j in range(len(A[0]))]
         return ([f"k = {formatear_valor(k)}; cada entrada de A se multiplica por k:"] + detalle
@@ -233,6 +253,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Opción 4: A · B, cada entrada es el producto punto de una fila de A por una columna de B."""
         B = self._leer_matriz(self.entradas_B, "B")
         C = multiplicar_matrices(A, B)
+        self.ultima_matriz_resultado = C
         lineas = ["A · B: cada entrada es el producto punto de una fila de A por una columna de B."]
         for i in range(len(A)):
             for j in range(len(B[0])):
@@ -245,6 +266,7 @@ class ModuloMatrices(ctk.CTkFrame):
     def _transpuesta(self, A):
         """Opción 5: Aᵀ, las filas de A pasan a ser columnas."""
         C = transponer_matriz(A)
+        self.ultima_matriz_resultado = C
         return (["Transpuesta: las filas de A pasan a ser columnas.", "A =", formatear_matriz(A), "",
                  f"Aᵀ ({len(C)} × {len(C[0])}) =", formatear_matriz(C)], f"Aᵀ = {matriz_en_linea(C)}")
 
@@ -301,6 +323,7 @@ class ModuloMatrices(ctk.CTkFrame):
         lineas = [titulo]
         for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
             lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(matriz_paso)])
+        self.ultima_matriz_resultado = inversa
         producto, identidad, cumple = verificar_inversa(A, inversa, multiplicar_matrices)
         lineas.extend(["", "A⁻¹ =", formatear_matriz(inversa), "", "Comprobación: A · A⁻¹ =",
                        formatear_matriz(producto), "A · A⁻¹ = I: " + ("Se cumple" if cumple else "No se cumple")])
@@ -341,6 +364,7 @@ class ModuloMatrices(ctk.CTkFrame):
     def limpiar(self):
         """Pone en cero A, B, C y el escalar, y vuelve a mostrar la guía."""
         reiniciar_celdas(self.entradas_A, self.entradas_B, self.entradas_C, [self.entry_escalar])
+        self.ultima_matriz_resultado = None
         reemplazar_texto(self.resultado, "")
 
 
