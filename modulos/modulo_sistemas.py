@@ -1,4 +1,9 @@
-"""Ventana independiente para resolver sistemas de ecuaciones lineales."""
+"""
+Pantalla del módulo de sistemas de ecuaciones (Gauss y Gauss-Jordan).
+
+Unidad I, Sistemas de ecuaciones lineales [P1 · P2].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import customtkinter as ctk
 

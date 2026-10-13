@@ -1,8 +1,8 @@
 """
-Operaciones con vectores en R^n.
+Operaciones con vectores en R^n y planteamiento de la combinación lineal.
 
-Todas las componentes se representan con fractions.Fraction para conservar
-exactitud racional (sin redondeo de punto flotante).
+Unidad I, Vectores y ecuaciones matriciales [P3].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
 from backend.matriz import _a_fraction

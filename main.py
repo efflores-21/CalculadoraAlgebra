@@ -1,4 +1,10 @@
-"""Menú principal que navega entre módulos dentro de una sola ventana."""
+"""
+Menú principal de la Calculadora de Álgebra Lineal.
+
+Proyecto integrador: abre cada módulo en una sola ventana e instala
+CustomTkinter la primera vez si la computadora no lo tiene.
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import importlib
 import os
@@ -46,7 +52,7 @@ _asegurar_customtkinter()
 
 import customtkinter as ctk  # noqa: E402
 
-from modulos._comun import COLOR, boton_texto, etiqueta, fuente, tarjeta
+from modulos._comun import COLOR, MARCAS, boton_texto, etiqueta, fuente, tarjeta
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
 from modulos.modulo_lu import ModuloLU
@@ -72,8 +78,8 @@ MODULOS = (
      "Suma, resta, producto, traspuesta e inversa de matrices."),
     ("determinantes", "Determinantes",
      "Calcula det(A) paso a paso y dice si A tiene inversa."),
-    ("lu", "Factorización LU",
-     "Factoriza A = LU y resuelve Ax = b por sustituciones."),
+    ("lu", "Factorización LU y solución Ax = b",
+     "Factoriza A = LU y resuelve Ly = b y Ux = y."),
     ("propiedades", "Producto matriz-vector",
      "Comprueba A(u + v) = Au + Av y A(cu) = c(Au)."),
 )
@@ -164,6 +170,9 @@ class MenuPrincipal(ctk.CTk):
         ).grid(row=1, column=1, sticky="nw", padx=(0, 22), pady=(2, 0))
         etiqueta(caja, "Abrir  →", tamano=13, color="texto", negrita=True).grid(
             row=2, column=1, sticky="w", padx=(0, 22), pady=(0, 14)
+        )
+        etiqueta(caja, MARCAS.get(clave, ""), tamano=10, color="marca").grid(
+            row=2, column=1, sticky="e", padx=(0, 22), pady=(0, 14)
         )
         caja.grid_rowconfigure(1, weight=1)
 

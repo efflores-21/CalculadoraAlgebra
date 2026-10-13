@@ -1,6 +1,8 @@
 """
-Módulo de clasificación de sistemas lineales
-Clasifica el sistema según el tipo de solución que presenta
+Clasificación de sistemas lineales y detección de columnas pivote.
+
+Unidad I, Sistemas de ecuaciones lineales [P1 · P2].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
 from backend.matriz import es_cero
@@ -25,9 +27,8 @@ def clasificar_sistema(matriz_escalonada, rango):
     m = len(matriz_escalonada)  # número de filas
     n = len(matriz_escalonada[0]) - 1  # número de variables
     
-    # Verificar si existe una fila inconsistente: [0 0 ... 0 | k] con k ≠ 0
+    # Una fila [0 0 ... 0 | k] con k ≠ 0 equivale a 0 = k: el sistema no tiene solución.
     for fila in range(rango, m):
-        # Verificar si la fila tiene todos ceros en la parte de coeficientes
         todos_ceros = all(es_cero(matriz_escalonada[fila][j]) for j in range(n))
         
         # Si tiene todos ceros pero término independiente ≠ 0, es inconsistente
@@ -39,7 +40,6 @@ def clasificar_sistema(matriz_escalonada, rango):
                 'fila_inconsistente': fila
             }
     
-    # Calcular número de variables libres
     numero_variables_libres = n - rango
     
     if numero_variables_libres == 0:

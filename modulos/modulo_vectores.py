@@ -1,4 +1,9 @@
-"""Panel del Módulo 3: independencia lineal de vectores."""
+"""
+Pantalla del módulo de independencia lineal (L.I. / L.D.).
+
+Unidad I, Vectores e independencia lineal [P4].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from fractions import Fraction
 import customtkinter as ctk

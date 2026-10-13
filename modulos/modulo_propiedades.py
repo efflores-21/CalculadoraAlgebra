@@ -1,4 +1,9 @@
-"""Panel que verifica la linealidad del producto matriz-vector."""
+"""
+Pantalla que verifica A(u + v) = Au + Av y A(cu) = c(Au).
+
+Unidad I, Ecuaciones matriciales Ax = b [P3].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import customtkinter as ctk
 

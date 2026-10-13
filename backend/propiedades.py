@@ -1,4 +1,9 @@
-"""Verificación exacta de propiedades del producto matriz-vector."""
+"""
+Verificación de la linealidad del producto matriz-vector: A(u+v) y A(cu).
+
+Unidad I, Ecuaciones matriciales Ax = b [P3].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from backend.matriz import _a_fraction
 from backend.vectores import suma_vectores, multiplicar_escalar_vector

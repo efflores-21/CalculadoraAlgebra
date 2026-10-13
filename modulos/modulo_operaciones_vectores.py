@@ -1,4 +1,9 @@
-"""Panel para suma, resta, escalares y combinación lineal de vectores."""
+"""
+Pantalla de operaciones con vectores y combinación lineal.
+
+Unidad I, Vectores y ecuaciones matriciales [P3].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import customtkinter as ctk
 

@@ -1,4 +1,9 @@
-"""Algoritmos reutilizables de determinantes e inversas exactas."""
+"""
+Determinantes (triangular, cofactores, Sarrus) e inversas (Gauss-Jordan y adjunta).
+
+Unidad II, Álgebra de matrices y determinantes [P5].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from fractions import Fraction
 
@@ -134,57 +139,3 @@ def verificar_inversa(A, inversa, multiplicar_matrices):
     identidad = [[Fraction(int(i == j)) for j in range(len(matriz))]
                  for i in range(len(matriz))]
     return producto, identidad, producto == identidad
-
-
-def verificar_seis_propiedades(A, B, tipo_fila, fila_i, fila_j, escalar,
-                                multiplicar_matrices):
-    """Calcula ambos lados de las seis propiedades requeridas de matrices."""
-    a = _validar_cuadrada(A)
-    b = _validar_cuadrada(B)
-    if len(a) != len(b):
-        raise ValueError("A y B deben ser cuadradas y del mismo orden.")
-    inv_a, _ = invertir_gauss_jordan(a)
-    inv_b, _ = invertir_gauss_jordan(b)
-    n = len(a)
-    ab = multiplicar_matrices(a, b)
-    inv_ab, _ = invertir_gauss_jordan(ab)
-    inv_at, _ = invertir_gauss_jordan(transponer_matriz(a))
-    det_a = determinante_cofactores(a)
-    det_tri, pasos_tri = determinante_triangular(a)
-    if not 0 <= fila_i < n or not 0 <= fila_j < n:
-        raise ValueError("Las filas elegidas deben estar dentro de la matriz.")
-
-    if tipo_fila == "Intercambiar filas":
-        if fila_i == fila_j:
-            raise ValueError("Para intercambiar filas, elija dos filas distintas.")
-        transformada = [fila[:] for fila in a]
-        transformada[fila_i], transformada[fila_j] = transformada[fila_j], transformada[fila_i]
-        lado_izq = determinante_cofactores(transformada)
-        lado_der = -det_a
-    elif tipo_fila == "Sumar múltiplo de fila":
-        if fila_i == fila_j:
-            raise ValueError("Para sumar un múltiplo, elija dos filas distintas.")
-        k = _a_fraction(escalar)
-        transformada = [fila[:] for fila in a]
-        transformada[fila_i] = [x + k * y for x, y in zip(transformada[fila_i], transformada[fila_j])]
-        lado_izq, lado_der = determinante_cofactores(transformada), det_a
-    elif tipo_fila == "Multiplicar fila por escalar":
-        k = _a_fraction(escalar)
-        transformada = [fila[:] for fila in a]
-        transformada[fila_i] = [k * x for x in transformada[fila_i]]
-        lado_izq, lado_der = determinante_cofactores(transformada), k * det_a
-    else:
-        raise ValueError("Seleccione una operación elemental de fila válida.")
-
-    triangular = det_tri
-    propiedades = [
-        ("Propiedad 1: (A⁻¹)⁻¹ = A", invertir_gauss_jordan(inv_a)[0], a),
-        ("Propiedad 2: (AB)⁻¹ = B⁻¹A⁻¹", inv_ab, multiplicar_matrices(inv_b, inv_a)),
-        ("Propiedad 3: (Aᵀ)⁻¹ = (A⁻¹)ᵀ", inv_at, transponer_matriz(inv_a)),
-        ("Propiedad 4: det(A⁻¹) = 1/det(A)", determinante_cofactores(inv_a), Fraction(1, 1) / det_a),
-        (f"Propiedad 5 ({tipo_fila}): det(A modificada) = resultado esperado", lado_izq, lado_der),
-        ("Propiedad 6: determinante triangular corregido = expansión por cofactores",
-         triangular, determinante_cofactores(a)),
-    ]
-    propiedades.append(("Pasos de triangularización de la propiedad 6", pasos_tri, None))
-    return propiedades

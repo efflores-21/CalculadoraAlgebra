@@ -1,6 +1,8 @@
 """
-Módulo de operaciones con matrices.
-Contiene la representación de una matriz aumentada y funciones auxiliares.
+Conversión a fracciones exactas, formato de valores y operaciones elementales de fila.
+
+Proyecto integrador: funciones base que usan todos los módulos.
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
 from fractions import Fraction

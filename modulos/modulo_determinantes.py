@@ -1,4 +1,9 @@
-"""Ventana independiente para calcular determinantes de matrices cuadradas."""
+"""
+Pantalla del módulo de determinantes por eliminación triangular.
+
+Unidad II, Determinantes [P5].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import customtkinter as ctk
 

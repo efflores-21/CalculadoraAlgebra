@@ -1,4 +1,9 @@
-"""Textos breves de los teoremas relacionados con cada módulo."""
+"""
+Textos de la opción «0. Ver Teoremas Clave del Módulo» de cada módulo.
+
+Proyecto integrador (todas las unidades).
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 TEOREMAS = {
     "sistemas": (
@@ -56,7 +61,18 @@ TEOREMAS = {
         "c) A tiene n posiciones pivote.\n"
         "e) Las columnas de A son linealmente independientes.\n"
         "h) Las columnas de A generan R^n.\n"
-        "La reduccion [A | I] -> [I | A^-1] calcula la inversa por Gauss-Jordan.\n"
+        "A es invertible si y solo si det(A) != 0.\n"
+        "A^-1 = (1/det(A)) · adj(A), donde adj(A) es la transpuesta de la matriz de cofactores.\n"
+        "La reducción [A | I] -> [I | A^-1] calcula la inversa por Gauss-Jordan.\n"
+        "\nPROPIEDADES QUE COMPRUEBA EL VERIFICADOR (opción 9)\n"
+        "Transposición: (A^T)^T = A; (A+B)^T = A^T + B^T; (kA)^T = kA^T; (AB)^T = B^T A^T; "
+        "A(B+C) = AB + AC; (AB)C = A(BC).\n"
+        "Inversa: (A^-1)^-1 = A; (AB)^-1 = B^-1 A^-1; (A^T)^-1 = (A^-1)^T; A·A^-1 = I.\n"
+        "Determinantes: det(A^T) = det(A); det(AB) = det(A)det(B); det(A^-1) = 1/det(A); "
+        "det(kA) = k^n det(A).\n"
+        "Operaciones de fila: una permutación cambia el signo del determinante, un reemplazo "
+        "lo conserva y multiplicar una fila por k lo multiplica por k.\n"
+        "Matriz triangular: su determinante es el producto de la diagonal.\n"
     ),
     "determinantes": (
         "PROPIEDADES DEL DETERMINANTE\n\n"
@@ -74,12 +90,22 @@ TEOREMAS = {
     ),
     "lu": (
         "FACTORIZACIÓN LU\n\n"
-        "A = LU.\n"
-        "L es una matriz triangular inferior con unos en la diagonal.\n"
-        "U es una matriz triangular superior.\n\n"
-        "Para resolver Ax = b mediante LU:\n"
-        "1) Resolver Ly = b mediante sustitución hacia adelante.\n"
-        "2) Resolver Ux = y mediante sustitución hacia atrás.\n"
+        "Si A (m×n) se puede llevar a su forma escalonada U usando solo reemplazos "
+        "de fila (Fi ← Fi − l·Fj), entonces A = LU, donde:\n"
+        "• U (m×n) es la forma escalonada de A.\n"
+        "• L (m×m) es triangular inferior con unos en la diagonal y guarda cada "
+        "multiplicador l = (elemento a eliminar) / (pivote) en la posición (i, j).\n\n"
+        "PERMUTACIONES\n"
+        "Si un pivote es cero y hace falta intercambiar filas, A no admite A = LU; "
+        "se necesita pivoteo parcial: PA = LU.\n\n"
+        "SOLUCIÓN DE Ax = b (A de n×n)\n"
+        "Como Ax = L(Ux) = b, se resuelve en dos etapas:\n"
+        "1) Ly = b, por sustitución hacia adelante sobre [L | b].\n"
+        "2) Ux = y, por sustitución hacia atrás sobre [U | y].\n"
+        "Si U tiene un cero en la diagonal, A es singular y no hay solución única.\n\n"
+        "VENTAJA\n"
+        "La factorización se hace una sola vez y sirve para resolver Ax = b con "
+        "muchos vectores b distintos.\n"
     ),
     "propiedades": (
         "LINEALIDAD DEL PRODUCTO MATRIZ-VECTOR\n\n"
