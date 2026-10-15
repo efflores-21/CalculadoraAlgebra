@@ -112,6 +112,15 @@ def formatear_matriz(matriz):
     )
 
 
+def formatear_paso_explicado(paso, incluir_estado=True):
+    """Renderiza un paso pedagógico estructurado; reutilizable entre módulos."""
+    lineas = [f"Objetivo: {paso['objetivo']}", f"Fundamento: {paso['fundamento']}",
+              f"Procedimiento: {paso['procedimiento']}", f"Resultado: {paso['resultado']}"]
+    if incluir_estado and paso.get("matriz") is not None:
+        lineas.append(formatear_matriz(paso["matriz"]))
+    return lineas
+
+
 def matriz_a_texto_portapapeles(matriz):
     """Serializa una matriz en filas tabuladas, compatible con hojas de cálculo."""
     if not matriz or not matriz[0]:

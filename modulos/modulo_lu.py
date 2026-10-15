@@ -9,13 +9,13 @@ Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorg
 import customtkinter as ctk
 
 from backend.factorizacion_lu import resolver_lu, resolver_sistema_lu
-from backend.matriz import subindice
+from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import multiplicar_matrices
 from modulos._comun import (
     Selector, boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
     etiqueta, formatear_matriz, formatear_vector, leer_entero, leer_fraccion,
-    mensaje_error, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
+    formatear_paso_explicado, mensaje_error, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
 )
 
 LOGO = (
@@ -178,11 +178,13 @@ def _texto_factorizacion(A, datos):
               "1. Reducción a la forma escalonada U (solo reemplazos Fᵢ ← Fᵢ − l·Fⱼ):"]
     if not datos["pasos"]:
         lineas.append("   No hace falta ningún reemplazo: A ya está en forma escalonada.")
-    for descripcion, matriz in datos["pasos"]:
-        lineas.extend([f"   {descripcion}", formatear_matriz(matriz)])
+    for indice, paso in enumerate(datos.get("pasos_explicados", []), 1):
+        lineas.append(f"   Paso {indice}:")
+        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso))
     lineas.extend(["", f"L ({m} × {m}, triangular inferior con unos en la diagonal) =",
                    formatear_matriz(datos["L"]), "", f"U ({m} × {n}, forma escalonada) =",
-                   formatear_matriz(datos["U"]), "", "2. Verificación: L · U =", formatear_matriz(datos["LU"]),
+                   formatear_matriz(datos["U"]), "", "Construcción: la diagonal de L es 1 y cada lᵢₖ guarda el multiplicador usado para anular la entrada inferior correspondiente.",
+                   "2. Verificación: L · U reconstruye A porque L conserva esos multiplicadores; L · U =", formatear_matriz(datos["LU"]),
                    "La factorización es correcta (L · U == A)" if datos["factorizacion_correcta"]
                    else "La factorización NO es correcta (L · U ≠ A)"])
     return lineas
@@ -199,8 +201,11 @@ def _texto_pasos(titulo, etapa):
 def _texto_solucion(datos):
     """Devuelve las líneas de las etapas Ly = b y Ux = y y de la comprobación A·x = b."""
     lineas = _texto_pasos("3. Etapa 1: Ly = b (sustitución hacia adelante sobre [L | b])", datos["etapa_y"])
+    lineas.extend(_ecuaciones_triangulares(datos["L"], datos["b"], datos["y"], "y", True))
     lineas.append(f"y = {formatear_vector(datos['y'])}")
     lineas += _texto_pasos("4. Etapa 2: Ux = y (sustitución hacia atrás sobre [U | y])", datos["etapa_x"])
+    if "x" in datos:
+        lineas.extend(_ecuaciones_triangulares(datos["U"], datos["y"], datos["x"], "x", False))
     if "x" not in datos:
         return lineas + [f"U tiene un cero en la diagonal: A es singular y Ax = b no tiene "
                          f"solución única ({datos['clase_x']['descripcion']})"]
@@ -216,6 +221,7 @@ def _texto_pasos_registrados(pasos):
     lineas = []
     for indice, paso in enumerate(pasos, 1):
         lineas.append(f"Paso {indice}: {paso['descripcion']}")
+        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso, incluir_estado=False))
         if paso["mostrar_matrices"]:
             lineas.extend(["L =", formatear_matriz(paso["L"]), "U =", formatear_matriz(paso["U"])])
             if "P" in paso:
@@ -226,17 +232,43 @@ def _texto_pasos_registrados(pasos):
     return lineas
 
 
+def _ecuaciones_triangulares(matriz, rhs, solucion, variable, adelante):
+    """Muestra la ecuación de cada fila y su sustitución numérica exacta."""
+    filas = range(len(matriz)) if adelante else range(len(matriz) - 1, -1, -1)
+    lineas = ["Ecuación de fila y sustitución:"]
+    for i in filas:
+        pivote_col = i if adelante else next((j for j, v in enumerate(matriz[i]) if v != 0), None)
+        if pivote_col is None or pivote_col >= len(matriz[i]):
+            lineas.append(f"   Fila {i + 1}: no tiene variable pivote; se usa para clasificar el sistema.")
+            continue
+        cols = range(pivote_col) if adelante else range(pivote_col + 1, len(matriz[i]))
+        terminos = [(j, matriz[i][j]) for j in cols if matriz[i][j] != 0]
+        suma = sum(matriz[i][j] * solucion[j] for j, _ in terminos)
+        expresion = " + ".join(f"({formatear_valor(a)})·{variable}{j + 1}" for j, a in terminos) or "0"
+        sustitucion = " + ".join(f"({formatear_valor(a)})({formatear_valor(solucion[j])})" for j, a in terminos) or "0"
+        if adelante:
+            valor = rhs[i] - suma
+            lineas.append(f"   {formatear_valor(matriz[i][pivote_col])}·{variable}{pivote_col + 1} + {expresion} = {formatear_valor(rhs[i])}; {variable}{pivote_col + 1} = {formatear_valor(rhs[i])} − ({sustitucion}) = {formatear_valor(valor)}.")
+        else:
+            valor = (rhs[i] - suma) / matriz[i][pivote_col]
+            lineas.append(f"   {formatear_valor(matriz[i][pivote_col])}·{variable}{pivote_col + 1} + {expresion} = {formatear_valor(rhs[i])}; {variable}{pivote_col + 1} = ({formatear_valor(rhs[i])} − ({sustitucion})) / {formatear_valor(matriz[i][pivote_col])} = {formatear_valor(valor)}.")
+    return lineas
+
+
 def _texto_clasificacion(A, b, sistema):
     """Líneas con y, la clasificación de Ax = b y su solución (particular más núcleo)."""
     lineas = [f"y = {formatear_vector(sistema['y'])}"]
     if sistema["estado"] == "incompatible":
-        return lineas + ["Sistema incompatible: una fila cero de U corresponde a un valor no nulo de y."]
+        return lineas + ["No existe solución: alguna fila de U es cero mientras su componente de y no lo es, lo que produciría 0 = c (c ≠ 0)."]
+    rhs_y = [sum(sistema["P"][i][j] * b[j] for j in range(len(b))) for i in range(len(b))]
+    lineas.extend(_ecuaciones_triangulares(sistema["L"], rhs_y, sistema["y"], "y", True))
     x0 = sistema["solucion_particular"]
     lineas.append(("x = " if sistema["estado"] == "unica" else "x₀ = ") + formatear_vector(x0))
+    lineas.extend(_ecuaciones_triangulares(sistema["U"], sistema["y"], x0, "x", False))
     if sistema["estado"] == "infinitas":
         libres = ", ".join(f"x{subindice(j + 1)}" for j in sistema["columnas_libres"])
         bases = " + ".join(f"t{subindice(k)}·{formatear_vector(v)}" for k, v in enumerate(sistema["bases_nucleo"], 1))
-        lineas.extend([f"Infinitas soluciones; variables libres: {libres}.", f"x = x₀ + {bases}"])
+        lineas.extend([f"Infinitas soluciones: hay columnas sin pivote y las variables {libres} son libres; asignarlas permite parametrizar la solución.", f"x = x₀ + {bases}"])
     producto = [sum(A[i][j] * x0[j] for j in range(len(x0))) for i in range(len(A))]
     lineas.extend([f"A · x = {formatear_vector(producto)}",
                    "Comprobación exitosa: A · x == b" if sistema["verificacion"]
