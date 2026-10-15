@@ -138,7 +138,7 @@ class ModuloLU(ctk.CTkFrame):
         self.ultima_L, self.ultima_U = L, U
         lineas = ["FACTORIZACIÓN P·A = L·U CON PIVOTEO PARCIAL", "A =", formatear_matriz(A), "",
                   "Pasos (intercambios, multiplicadores y eliminación):"]
-        lineas.extend(_texto_pasos_registrados(pasos))
+        lineas.extend(_texto_pasos_registrados(pasos, estado_final={"P": P, "L": L, "U": U}))
         producto_LU, PA = multiplicar_matrices(L, U), multiplicar_matrices(P, A)
         lineas.extend(["", "P =", formatear_matriz(P), "L =", formatear_matriz(L), "U =", formatear_matriz(U),
                        "", "Verificación: L · U =", formatear_matriz(producto_LU),
@@ -176,11 +176,20 @@ def _texto_factorizacion(A, datos):
     m, n = len(A), len(A[0])
     lineas = [f"FACTORIZACIÓN LU DE A ({m} × {n})", "A =", formatear_matriz(A), "",
               "1. Reducción a la forma escalonada U (solo reemplazos Fᵢ ← Fᵢ − l·Fⱼ):"]
-    if not datos["pasos"]:
-        lineas.append("   No hace falta ningún reemplazo: A ya está en forma escalonada.")
-    for indice, paso in enumerate(datos.get("pasos_explicados", []), 1):
-        lineas.append(f"   Paso {indice}:")
-        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso))
+    if datos["pasos"]:
+        lineas.append("   Traza técnica:")
+        for indice, (descripcion, matriz) in enumerate(datos["pasos"], 1):
+            lineas.append(f"   {indice}. {descripcion}")
+            if matriz != datos["U"]:
+                lineas.append(formatear_matriz(matriz))
+    else:
+        lineas.append("   No se aplicó ninguna operación de eliminación.")
+    explicaciones = datos.get("pasos_explicados", [])
+    if explicaciones:
+        lineas.append("   Explicación pedagógica:")
+        for indice, paso in enumerate(explicaciones, 1):
+            lineas.append(f"   Paso {indice}:")
+            lineas.extend("   " + texto for texto in formatear_paso_explicado(paso, incluir_estado=False))
     lineas.extend(["", f"L ({m} × {m}, triangular inferior con unos en la diagonal) =",
                    formatear_matriz(datos["L"]), "", f"U ({m} × {n}, forma escalonada) =",
                    formatear_matriz(datos["U"]), "", "Construcción: la diagonal de L es 1 y cada lᵢₖ guarda el multiplicador usado para anular la entrada inferior correspondiente.",
@@ -191,44 +200,65 @@ def _texto_factorizacion(A, datos):
 
 
 def _texto_pasos(titulo, etapa):
-    """Devuelve las líneas de una reducción [matriz | vector] con sus operaciones de fila."""
-    lineas = ["", titulo]
-    for paso in etapa["pasos"]:
-        lineas.extend([f"   {paso['descripcion']}", formatear_matriz(paso["matriz"])])
+    """Presenta la traza técnica sin volver a imprimir estados idénticos."""
+    lineas = ["", titulo, "Traza técnica:"]
+    matriz_anterior = None
+    total = len(etapa["pasos"])
+    for indice, paso in enumerate(etapa["pasos"]):
+        lineas.append(f"   {paso['descripcion']}")
+        matriz = paso["matriz"]
+        es_estado_final = total > 1 and indice == total - 1
+        if matriz != matriz_anterior and not es_estado_final:
+            lineas.append(formatear_matriz(matriz))
+            matriz_anterior = matriz
     return lineas
 
 
 def _texto_solucion(datos):
     """Devuelve las líneas de las etapas Ly = b y Ux = y y de la comprobación A·x = b."""
     lineas = _texto_pasos("3. Etapa 1: Ly = b (sustitución hacia adelante sobre [L | b])", datos["etapa_y"])
+    lineas.append("Explicación pedagógica: como L es triangular inferior con diagonal unitaria, se despeja y en orden ascendente.")
     lineas.extend(_ecuaciones_triangulares(datos["L"], datos["b"], datos["y"], "y", True))
-    lineas.append(f"y = {formatear_vector(datos['y'])}")
+    lineas.append(f"Resultado intermedio: y = {formatear_vector(datos['y'])}")
     lineas += _texto_pasos("4. Etapa 2: Ux = y (sustitución hacia atrás sobre [U | y])", datos["etapa_x"])
+    lineas.append("Explicación pedagógica: como U es triangular superior, se despeja x desde la última fila hacia arriba.")
     if "x" in datos:
         lineas.extend(_ecuaciones_triangulares(datos["U"], datos["y"], datos["x"], "x", False))
     if "x" not in datos:
         return lineas + [f"U tiene un cero en la diagonal: A es singular y Ax = b no tiene "
                          f"solución única ({datos['clase_x']['descripcion']})"]
-    lineas.extend([f"x = {formatear_vector(datos['x'])}", "", "5. Comprobación: A · x =",
+    lineas.extend(["Resultado final:", f"x = {formatear_vector(datos['x'])}", "", "5. Comprobación: A · x =",
                    formatear_vector(datos["Ax"]),
                    "Comprobación exitosa: A · x == b" if datos["comprobacion"]
                    else "La comprobación falló: A · x ≠ b"])
     return lineas
 
 
-def _texto_pasos_registrados(pasos):
+def _texto_pasos_registrados(pasos, estado_final=None):
     """Convierte los pasos registrados por la factorización con traza en líneas de texto."""
-    lineas = []
-    for indice, paso in enumerate(pasos, 1):
+    pasos_visibles = [
+        paso for paso in pasos
+        if not paso["objetivo"].startswith(("Cerrar la eliminación", "Comprobar que la solución particular",
+                                            "Calcular y_", "Despejar x_", "Determinar si el sistema triangular"))
+    ]
+    lineas = ["TRAZA TÉCNICA"]
+    anterior = None
+    for indice, paso in enumerate(pasos_visibles, 1):
         lineas.append(f"Paso {indice}: {paso['descripcion']}")
-        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso, incluir_estado=False))
         if paso["mostrar_matrices"]:
-            lineas.extend(["L =", formatear_matriz(paso["L"]), "U =", formatear_matriz(paso["U"])])
-            if "P" in paso:
-                lineas.extend(["P =", formatear_matriz(paso["P"])])
+            for nombre in ("P", "L", "U"):
+                if (nombre in paso and (anterior is None or paso[nombre] != anterior.get(nombre))
+                        and (estado_final is None or paso[nombre] != estado_final.get(nombre))):
+                    lineas.extend([f"{nombre} =", formatear_matriz(paso[nombre])])
         if "vector" in paso:
             nombre, valores = paso["vector"]
-            lineas.append(f"{nombre} = {formatear_vector(valores)}")
+            if nombre == "Pb":
+                lineas.append(f"{nombre} = {formatear_vector(valores)}")
+        anterior = paso
+    lineas.append("\nEXPLICACIÓN PEDAGÓGICA")
+    for indice, paso in enumerate(pasos_visibles, 1):
+        lineas.append(f"Paso {indice}:")
+        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso, incluir_estado=False))
     return lineas
 
 
@@ -257,18 +287,27 @@ def _ecuaciones_triangulares(matriz, rhs, solucion, variable, adelante):
 
 def _texto_clasificacion(A, b, sistema):
     """Líneas con y, la clasificación de Ax = b y su solución (particular más núcleo)."""
-    lineas = [f"y = {formatear_vector(sistema['y'])}"]
     if sistema["estado"] == "incompatible":
-        return lineas + ["No existe solución: alguna fila de U es cero mientras su componente de y no lo es, lo que produciría 0 = c (c ≠ 0)."]
+        fila = next(i for i, valores in enumerate(sistema["U"])
+                    if all(valor == 0 for valor in valores) and sistema["y"][i] != 0)
+        return ["Clasificación: sistema incompatible.",
+                f"Fila {fila + 1} de U: 0 = {formatear_valor(sistema['y'][fila])} ≠ 0; por eso no existe solución."]
     rhs_y = [sum(sistema["P"][i][j] * b[j] for j in range(len(b))) for i in range(len(b))]
+    lado_derecho = "Pb" if sistema["P"] != [[int(i == j) for j in range(len(b))] for i in range(len(b))] else "b"
+    lineas = [f"Explicación pedagógica: resolver Ly={lado_derecho} hacia adelante porque L es triangular inferior y su diagonal es unitaria."]
     lineas.extend(_ecuaciones_triangulares(sistema["L"], rhs_y, sistema["y"], "y", True))
+    lineas.append(f"Resultado intermedio: y = {formatear_vector(sistema['y'])}")
     x0 = sistema["solucion_particular"]
-    lineas.append(("x = " if sistema["estado"] == "unica" else "x₀ = ") + formatear_vector(x0))
+    lineas.append("Explicación pedagógica: resolver Ux=y hacia atrás desde la última fila no nula, usando los valores ya despejados.")
     lineas.extend(_ecuaciones_triangulares(sistema["U"], sistema["y"], x0, "x", False))
-    if sistema["estado"] == "infinitas":
+    lineas.append("Resultado final:")
+    if sistema["estado"] == "unica":
+        lineas.append("x = " + formatear_vector(x0))
+    else:
         libres = ", ".join(f"x{subindice(j + 1)}" for j in sistema["columnas_libres"])
         bases = " + ".join(f"t{subindice(k)}·{formatear_vector(v)}" for k, v in enumerate(sistema["bases_nucleo"], 1))
-        lineas.extend([f"Infinitas soluciones: hay columnas sin pivote y las variables {libres} son libres; asignarlas permite parametrizar la solución.", f"x = x₀ + {bases}"])
+        lineas.extend([f"Infinitas soluciones: las variables {libres} son libres.",
+                       f"x = {formatear_vector(x0)} + {bases}"])
     producto = [sum(A[i][j] * x0[j] for j in range(len(x0))) for i in range(len(A))]
     lineas.extend([f"A · x = {formatear_vector(producto)}",
                    "Comprobación exitosa: A · x == b" if sistema["verificacion"]
@@ -278,10 +317,9 @@ def _texto_clasificacion(A, b, sistema):
 
 def _resumen(datos):
     """Texto del recuadro negro con la respuesta final (método sin pivoteo, A cuadrada)."""
-    factorizacion = "L·U = A ✓" if datos["factorizacion_correcta"] else "L·U ≠ A"
     if "x" not in datos:
-        return f"{factorizacion}   ·   Ax = b no tiene solución única (A es singular)"
-    return f"x = {formatear_vector(datos['x'])}   ·   {factorizacion}   ·   A·x = b ✓"
+        return "Ax = b no tiene solución única (A es singular)"
+    return "Ax = b tiene solución única"
 
 
 def _resumen_sistema(sistema):
@@ -289,5 +327,5 @@ def _resumen_sistema(sistema):
     if sistema["estado"] == "incompatible":
         return "Ax = b no tiene solución"
     if sistema["estado"] == "unica":
-        return f"x = {formatear_vector(sistema['solucion_particular'])}"
+        return "Solución única"
     return "Ax = b tiene infinitas soluciones"

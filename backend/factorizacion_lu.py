@@ -54,7 +54,7 @@ def factorizar_lu(A, incluir_explicaciones=False):
             continue
         pasos_explicados.append({
             "objetivo": f"Seleccionar el pivote de la etapa {fila_pivote + 1} en la columna {columna + 1}.",
-            "fundamento": "En LU sin permutación se usa la entrada no nula de la fila activa y columna actual; tras omitir columnas sin pivote, esa posición no necesariamente es diagonal.",
+            "fundamento": "Sin permutar filas, el pivote es la entrada de la fila activa y la columna actual; la fila activa avanza solo después de encontrarlo.",
             "procedimiento": f"p = U[{fila_pivote + 1},{columna + 1}] = {formatear_valor(pivote)}.",
             "resultado": "Este pivote será el divisor para calcular cada multiplicador debajo de él.",
             "matriz": [fila[:] for fila in matriz_U],
@@ -141,10 +141,10 @@ def _registrar_paso(callback, descripcion, L, U, mostrar_matrices=True, vector=N
     if callback is not None:
         paso = {
             "descripcion": descripcion,
-            "objetivo": objetivo or "Completar la etapa actual de factorización o resolución.",
-            "fundamento": fundamento or "Se aplican operaciones algebraicas equivalentes sobre la factorización o el sistema.",
-            "procedimiento": procedimiento or descripcion,
-            "resultado": resultado or "El estado mostrado refleja el resultado de esta operación.",
+            "objetivo": objetivo,
+            "fundamento": fundamento,
+            "procedimiento": procedimiento,
+            "resultado": resultado,
             "L": [fila[:] for fila in L],
             "U": [fila[:] for fila in U],
             "mostrar_matrices": mostrar_matrices,
@@ -167,6 +167,10 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
     _registrar_paso(
         registrar_paso, "Estado inicial: P=I, L=I y U=A.", L, U,
         P=P if pivoteo_parcial else None,
+        objetivo="Inicializar las matrices para la factorización.",
+        fundamento="I·A=A; P registra los intercambios y L conservará los multiplicadores de eliminación.",
+        procedimiento="Asignar P=I, L=I y U=A.",
+        resultado="U parte de A; todavía no se ha eliminado ninguna entrada.",
     )
     fila_pivote = 0
     for columna in range(n):
@@ -182,7 +186,7 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
                     registrar_paso,
                     f"Columna {columna + 1} sin pivote: las entradas restantes son cero; "
                     "se continúa a la columna siguiente.",
-                    L, U, P=P,
+                    L, U, P=P, mostrar_matrices=False,
                     objetivo=f"Seleccionar un pivote válido en la columna {columna + 1}.",
                     fundamento="Si todas las entradas disponibles valen cero, ningún intercambio produce un pivote no nulo.",
                     procedimiento="Comparar los valores absolutos candidatos de la columna activa.",
@@ -190,6 +194,8 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
                 )
                 continue
             if fila_elegida != fila_pivote:
+                pivote_anterior = U[fila_pivote][columna]
+                pivote_elegido = U[fila_elegida][columna]
                 U[fila_pivote], U[fila_elegida] = U[fila_elegida], U[fila_pivote]
                 P[fila_pivote], P[fila_elegida] = P[fila_elegida], P[fila_pivote]
                 for j in range(fila_pivote):
@@ -201,11 +207,13 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
                     f"Intercambio parcial F{fila_pivote + 1} ↔ F{fila_elegida + 1}; "
                     "se permutan P y las columnas previas de L.",
                     L, U, P=P,
-                    objetivo="Colocar el mejor pivote disponible en la fila activa.",
-                    fundamento="El pivoteo parcial escoge el mayor valor absoluto de la columna restante; permutar las mismas filas mantiene una factorización equivalente.",
-                    procedimiento=("Candidatos: " + ", ".join(f"U[{i + 1},{columna + 1}]={formatear_valor(v)}" for i, v in candidatos)
-                                   + f"; intercambio F{fila_pivote + 1} ↔ F{fila_elegida + 1}."),
-                    resultado="P y U reflejan el intercambio; los multiplicadores ya calculados en L permanecen alineados.",
+                    objetivo="Colocar en la fila activa el candidato seleccionado por pivoteo parcial.",
+                    fundamento=("El pivote actual es cero y no se puede usar como divisor. Se intercambia por un candidato no nulo."
+                                if pivote_anterior == 0 else
+                                "El pivote actual no tiene el mayor valor absoluto disponible. El pivoteo parcial elige el de mayor magnitud para limitar el tamaño de los multiplicadores."),
+                    procedimiento=("Candidatos antes del intercambio: " + ", ".join(f"U[{i + 1},{columna + 1}]={formatear_valor(v)}" for i, v in candidatos)
+                                   + f"; |{formatear_valor(pivote_anterior)}| < |{formatear_valor(pivote_elegido)}|, así que se intercambian F{fila_pivote + 1} y F{fila_elegida + 1}."),
+                    resultado="P y U ya contienen las filas permutadas; también se reordenaron en L los multiplicadores de columnas previas.",
                 )
         elif U[fila_pivote][columna] == 0:
             if all(U[i][columna] == 0 for i in range(fila_pivote + 1, m)):
@@ -213,27 +221,30 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
                     registrar_paso,
                     f"Columna {columna + 1} sin pivote: las entradas restantes son cero; "
                     "se continúa a la columna siguiente.",
-                    L, U,
+                    L, U, mostrar_matrices=False,
                     objetivo=f"Buscar un pivote sin permutar filas en la columna {columna + 1}.",
                     fundamento="Si las entradas restantes son cero, la columna no permite ni requiere eliminación adicional.",
                     procedimiento="Inspeccionar las filas desde la fila activa hacia abajo.",
-                    resultado="Se continúa a la siguiente columna, manteniendo A = LU.",
+                    resultado="Se avanza a la columna siguiente sin mover la fila activa ni intercambiar filas.",
                 )
                 continue
             raise ValueError(MENSAJE_PERMUTACION)
         pivote = U[fila_pivote][columna]
+        candidatos_actuales = ([(i, U[i][columna]) for i in range(fila_pivote, m)]
+                               if pivoteo_parcial else [])
         _registrar_paso(
             registrar_paso,
             f"Pivote de la etapa {fila_pivote + 1}, columna {columna + 1}: "
             f"U[{fila_pivote + 1},{columna + 1}] = {formatear_valor(pivote)}.",
-            L, U, P=P if pivoteo_parcial else None,
-            objetivo="Elegir el elemento que permitirá eliminar las entradas inferiores.",
-            fundamento=("El pivote parcial elige el mayor valor absoluto disponible en la columna para evitar dividir por cero y reducir divisiones por valores pequeños."
-                        if pivoteo_parcial else "Sin pivoteo se usa la entrada de la fila activa en la columna actual; una columna sin pivote se omite conservando la fila activa, y un cero con entradas inferiores no nulas requiere permutar filas."),
-            procedimiento=(("Candidatos: " + ", ".join(f"U[{i + 1},{columna + 1}]={formatear_valor(v)}" for i, v in candidatos)
-                            + f"; se elige U[{fila_pivote + 1},{columna + 1}] = {formatear_valor(pivote)}." )
-                           if pivoteo_parcial else f"Se usa U[{fila_pivote + 1},{columna + 1}] = {formatear_valor(pivote)} como pivote."),
-            resultado="Las entradas debajo de este pivote se anularán mediante operaciones de fila.",
+            L, U, mostrar_matrices=False, P=P if pivoteo_parcial else None,
+            objetivo="Fijar el pivote que se usará en las eliminaciones de esta columna.",
+            fundamento=("Se selecciona el mayor valor absoluto entre las filas restantes; así se evita dividir por cero y se limita la magnitud de los multiplicadores."
+                        if pivoteo_parcial else
+                        "Sin permutar filas, se toma la entrada de la fila activa en la columna actual; la fila avanza únicamente cuando se encuentra un pivote."),
+            procedimiento=(("Candidatos actuales en U: " + ", ".join(f"U[{i + 1},{columna + 1}]={formatear_valor(v)}" for i, v in candidatos_actuales)
+                            + f". Pivote: U[{fila_pivote + 1},{columna + 1}]={formatear_valor(pivote)}.")
+                           if pivoteo_parcial else f"Pivote U[{fila_pivote + 1},{columna + 1}]={formatear_valor(pivote)}."),
+            resultado=f"Se usará {formatear_valor(pivote)} para calcular los multiplicadores de las filas inferiores.",
         )
         for i in range(fila_pivote + 1, m):
             if U[i][columna] == 0:
@@ -269,7 +280,11 @@ def _factorizar_con_traza(A, registrar_paso=None, pivoteo_parcial=False):
             registrar_paso,
             f"Matrices L y U al finalizar la etapa {fila_pivote + 1} "
             f"(columna pivote {columna + 1}).",
-            L, U, P=P if pivoteo_parcial else None,
+            L, U, mostrar_matrices=False, P=P if pivoteo_parcial else None,
+            objetivo=f"Cerrar la eliminación de la columna {columna + 1}.",
+            fundamento="Al terminar esta columna, sus entradas debajo del pivote deben ser cero; las etapas posteriores no alteran las columnas ya eliminadas.",
+            procedimiento=f"Conservar los valores actuales de L y U después de procesar el pivote de la columna {columna + 1}.",
+            resultado=f"L y U muestran la factorización parcial tras la etapa {fila_pivote + 1}.",
         )
         fila_pivote += 1
     return P, L, U
@@ -342,6 +357,10 @@ def resolver_sistema_lu(A, b, registrar_paso=None, pivoteo_parcial=False):
                 f"Incompatibilidad: fila {i + 1} de U es cero, pero y_{i + 1} "
                 f"= {formatear_valor(y[i])} ≠ 0; no existe solución.",
                 L, U, mostrar_matrices=False, vector=("y", y), P=P if pivoteo_parcial else None,
+                objetivo="Determinar si el sistema triangular es compatible.",
+                fundamento="Una fila nula de U representa 0 en el lado izquierdo; su término independiente también debe ser cero.",
+                procedimiento=f"En la fila {i + 1}, U es nula y y_{i + 1}={formatear_valor(y[i])}≠0.",
+                resultado="La ecuación exigiría 0={formatear_valor(y[i])}; el sistema es incompatible.",
             )
         return {
             "P": P, "L": L, "U": U, "y": y, "estado": "incompatible",
@@ -402,6 +421,12 @@ def resolver_sistema_lu(A, b, registrar_paso=None, pivoteo_parcial=False):
         registrar_paso,
         "Verificación exacta Ax=b: " + ("se cumple." if verificacion else "no se cumple."),
         L, U, mostrar_matrices=False, vector=("Ax", producto), P=P if pivoteo_parcial else None,
+        objetivo="Comprobar que la solución particular satisface el sistema original.",
+        fundamento="Una solución de Ax=b debe reproducir b al multiplicar x por la matriz original A.",
+        procedimiento=("Calcular Ax=(" + ", ".join(formatear_valor(v) for v in producto)
+                       + ") y comparar con b=(" + ", ".join(formatear_valor(v) for v in vector_original) + ")."),
+        resultado=("Ax=b; la solución satisface el sistema." if verificacion
+                   else "Ax≠b; la solución no satisface el sistema."),
     )
     return {
         "P": P, "L": L, "U": U, "y": y, "estado": estado,
