@@ -13,7 +13,6 @@ from backend.matrices import determinante_triangular, invertir_gauss_jordan
 from backend.matriz import _a_fraction
 from backend.operaciones_matriciales import (
     _matriz_a_fraction,
-    determinante_por_cofactores,
     identidad,
     multiplicar_escalar_matriz,
     multiplicar_matrices,
@@ -21,10 +20,6 @@ from backend.operaciones_matriciales import (
     suma_matrices,
     transponer_matriz,
 )
-
-# La expansión por cofactores necesita cerca de n! productos: con n > 8 congelaría la app.
-LIMITE_COFACTORES = 8
-
 
 def _propiedad(nombre, izquierda, derecha):
     """Devuelve el registro de una igualdad con sus dos miembros y si se cumple."""
@@ -53,7 +48,7 @@ def inversa_o_nada(M):
 def triangular_superior(A):
     """Lleva A a una matriz triangular superior T con intercambios y reemplazos de fila.
     Devuelve (T, número de intercambios)."""
-    matriz_T = [fila[:] for fila in A]
+    matriz_T = _matriz_a_fraction(A)
     n = len(matriz_T)
     intercambios = 0
     for columna in range(n):
@@ -139,17 +134,16 @@ def propiedades_operaciones_fila(A, det_A, fila_i, fila_j, k):
 
 
 def propiedad_triangular(A):
-    """Compara det(T) por cofactores con el producto de la diagonal de T (T triangular).
-    Devuelve (registro, T, intercambios)."""
+    """Compara el determinante de la triangularización con su diagonal.
+    Devuelve (registro, T, intercambios); corrige el signo de cada intercambio."""
     matriz_T, intercambios = triangular_superior(A)
     producto_diagonal = Fraction(1)
     for i in range(len(matriz_T)):
         producto_diagonal *= matriz_T[i][i]
     nombre = "det(T) = producto de la diagonal (T triangular)"
-    if len(A) > LIMITE_COFACTORES:
-        registro = _no_aplica(nombre, f"La expansión por cofactores se omite para n > {LIMITE_COFACTORES}.")
-    else:
-        registro = _propiedad(nombre, determinante_por_cofactores(matriz_T), producto_diagonal)
+    determinante_original = determinante(A)
+    determinante_T = (-1) ** intercambios * determinante_original
+    registro = _propiedad(nombre, determinante_T, producto_diagonal)
     return registro, matriz_T, intercambios
 
 

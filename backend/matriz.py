@@ -62,10 +62,10 @@ class MatrizAumentada:
             fila_i[k] += multiplicador * fila_j[k]
 
     def mostrar(self, mensaje="Matriz"):
-        """Imprime la matriz en la consola, una fila por línea."""
-        print(f"\n{mensaje}:")
-        for fila in self.datos:
-            print("  ".join(formatear_valor(v) for v in fila))
+        """Muestra la matriz mediante la capa de consola separada."""
+        from backend.salida_consola import mostrar_lineas
+        mostrar_lineas([f"\n{mensaje}:"] + ["  ".join(formatear_valor(v) for v in fila)
+                                             for fila in self.datos])
 
     def __len__(self):
         return len(self.datos)
@@ -88,9 +88,9 @@ def crear_matriz_aumentada(m, n, coeficientes, terminos):
 
 def mostrar_matriz(matriz, mensaje="Matriz"):
     """Imprime una matriz (lista de listas) en la consola, una fila por línea."""
-    print(f"\n{mensaje}:")
-    for fila in matriz:
-        print("  ".join(formatear_valor(valor) for valor in fila))
+    from backend.salida_consola import mostrar_lineas
+    mostrar_lineas([f"\n{mensaje}:"] + ["  ".join(formatear_valor(valor) for valor in fila)
+                                         for fila in matriz])
 
 
 def intercambiar_filas(matriz, i, j):

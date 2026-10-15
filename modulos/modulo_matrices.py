@@ -20,13 +20,14 @@ from backend.matrices import (
 )
 from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import (
+    LIMITE_COFACTORES,
     multiplicar_escalar_matriz,
     multiplicar_matrices,
     resta_matrices,
     suma_matrices,
     transponer_matriz,
 )
-from backend.verificador import LIMITE_COFACTORES, verificar_propiedades_matrices
+from backend.verificador import verificar_propiedades_matrices
 from modulos._comun import (
     boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,

@@ -8,6 +8,9 @@ Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorg
 from fractions import Fraction
 from backend.matriz import _a_fraction
 
+# Las expansiones por cofactores crecen factorialmente; se conserva el límite de la interfaz.
+LIMITE_COFACTORES = 8
+
 
 def _matriz_a_fraction(M):
     """Convierte una matriz a lista de listas de Fraction y valida que sea rectangular."""

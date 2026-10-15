@@ -80,11 +80,11 @@ def mostrar_clasificacion(clasificacion):
     Args:
         clasificacion: diccionario con la clasificación
     """
-    print("\n" + "="*70)
-    print("CLASIFICACIÓN DEL SISTEMA")
-    print("="*70)
-    print(f"Tipo: {clasificacion['tipo']}")
-    print(f"Descripción: {clasificacion['descripcion']}")
+    from backend.salida_consola import mostrar_lineas
+    lineas = ["\n" + "="*70, "CLASIFICACIÓN DEL SISTEMA", "="*70,
+              f"Tipo: {clasificacion['tipo']}",
+              f"Descripción: {clasificacion['descripcion']}"]
     if clasificacion.get('variables_libres', 0) > 0:
-        print(f"Número de variables libres: {clasificacion['variables_libres']}")
-    print("="*70)
+        lineas.append(f"Número de variables libres: {clasificacion['variables_libres']}")
+    lineas.append("="*70)
+    mostrar_lineas(lineas)
