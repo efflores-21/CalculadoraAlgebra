@@ -5,7 +5,9 @@ from fractions import Fraction
 
 from backend.factorizacion_lu import factorizar_lu, resolver_lu, resolver_sistema_lu
 from backend.operaciones_matriciales import multiplicar_matrices
-from modulos.modulo_lu import _texto_clasificacion, _texto_factorizacion, _texto_pasos_registrados, _texto_solucion
+from modulos.modulo_lu import (
+    ModuloLU, _texto_clasificacion, _texto_factorizacion, _texto_pasos_registrados, _texto_solucion,
+)
 
 
 class ExplicacionesPivoteLU(unittest.TestCase):
@@ -71,11 +73,43 @@ class ExplicacionesPivoteLU(unittest.TestCase):
         self.assertNotIn("U[1,1]=0, U[2,1]=2", pivote["procedimiento"])
         self.assertEqual(intercambio["U"], [[2, 3], [0, 1]])
         texto = "\n".join(_texto_pasos_registrados(pasos) + _texto_clasificacion(A, [1, 5], resultado))
-        self.assertIn("EXPLICACIÓN PEDAGÓGICA", texto)
+        self.assertIn("DETALLE DE LOS PASOS", texto)
         self.assertIn("1·y1 + 0 = 5", texto)
-        self.assertIn("1·y2 + 0 = 1", texto)
+        self.assertIn("1·y2 + (0)·y1 = 1", texto)
         self.assertIn("1·x2 + 0 = 1", texto)
         self.assertIn("2·x1 + (3)·x2 = 5", texto)
+
+    def test_pivoteo_permutado_resuelve_con_pb_y_verifica_ax_con_b_original(self):
+        A, b = [[0, 1], [2, 4]], [5, 1]
+        pasos = []
+        resultado = resolver_sistema_lu(A, b, registrar_paso=pasos.append, pivoteo_parcial=True)
+
+        self.assertEqual(resultado["P"], [[0, 1], [1, 0]])
+        self.assertEqual(resultado["L"], [[1, 0], [0, 1]])
+        self.assertEqual(resultado["U"], [[2, 4], [0, 1]])
+        self.assertEqual(resultado["y"], [1, 5])
+        self.assertEqual(resultado["solucion_particular"], [Fraction(-19, 2), 5])
+        paso_pb = next(paso for paso in pasos if paso.get("vector", (None,))[0] == "Pb")
+        self.assertEqual(paso_pb["vector"][1], [1, 5])
+        texto = "\n".join(_texto_clasificacion(A, b, resultado))
+        self.assertIn("resolver Ly=Pb", texto)
+        self.assertIn("1·y2 + (0)·y1 = 5", texto)
+        self.assertTrue(resultado["verificacion"])
+        self.assertEqual(
+            [sum(A[i][j] * resultado["solucion_particular"][j] for j in range(2)) for i in range(2)],
+            b,
+        )
+
+    def test_salida_consola_pivoteada_muestra_vectores_permutados_y_comprobacion_original(self):
+        modulo = object.__new__(ModuloLU)
+        lineas, _ = modulo._con_pivoteo([[0, 1], [2, 4]], [5, 1])
+        texto = "\n".join(lineas)
+
+        self.assertIn("Pb = (1, 5)", texto)
+        self.assertIn("Resultado intermedio: y = (1, 5)", texto)
+        self.assertIn("x = (-19/2, 5)", texto)
+        self.assertIn("A · x = (5, 1)", texto)
+        self.assertIn("Comprobación exitosa: A · x == b", texto)
 
     def test_pivoteo_cambia_pivote_no_nulo_si_hay_candidato_mayor(self):
         pasos = []

@@ -141,7 +141,8 @@ class ModuloLU(ctk.CTkFrame):
         lineas.extend(_texto_pasos_registrados(pasos, estado_final={"P": P, "L": L, "U": U}))
         producto_LU, PA = multiplicar_matrices(L, U), multiplicar_matrices(P, A)
         lineas.extend(["", "P =", formatear_matriz(P), "L =", formatear_matriz(L), "U =", formatear_matriz(U),
-                       "", "Verificación: L · U =", formatear_matriz(producto_LU),
+                       "", "Comparación para verificar PA = LU:", "P · A =", formatear_matriz(PA),
+                       "L · U =", formatear_matriz(producto_LU),
                        "La factorización es correcta (L · U == P · A)" if producto_LU == PA
                        else "La factorización NO es correcta (L · U ≠ P · A)",
                        "", "Solución de Ax = b (Ly = Pb y Ux = y):"])
@@ -241,10 +242,9 @@ def _texto_pasos_registrados(pasos, estado_final=None):
         if not paso["objetivo"].startswith(("Cerrar la eliminación", "Comprobar que la solución particular",
                                             "Calcular y_", "Despejar x_", "Determinar si el sistema triangular"))
     ]
-    lineas = ["TRAZA TÉCNICA"]
+    lineas = ["Matrices de estado (solo cuando cambian):"]
     anterior = None
     for indice, paso in enumerate(pasos_visibles, 1):
-        lineas.append(f"Paso {indice}: {paso['descripcion']}")
         if paso["mostrar_matrices"]:
             for nombre in ("P", "L", "U"):
                 if (nombre in paso and (anterior is None or paso[nombre] != anterior.get(nombre))
@@ -255,10 +255,36 @@ def _texto_pasos_registrados(pasos, estado_final=None):
             if nombre == "Pb":
                 lineas.append(f"{nombre} = {formatear_vector(valores)}")
         anterior = paso
-    lineas.append("\nEXPLICACIÓN PEDAGÓGICA")
-    for indice, paso in enumerate(pasos_visibles, 1):
-        lineas.append(f"Paso {indice}:")
-        lineas.extend("   " + texto for texto in formatear_paso_explicado(paso, incluir_estado=False))
+    lineas.append("\nDETALLE DE LOS PASOS")
+    pivote_fundamento_mostrado = False
+    for indice, paso in enumerate(pasos_visibles):
+        lineas.append(f"Paso {indice + 1}: {paso['descripcion']}")
+        detalle = formatear_paso_explicado(paso, incluir_estado=False)
+        es_pivote = "Pivote de la etapa" in paso["descripcion"]
+        if es_pivote and pivote_fundamento_mostrado:
+            detalle = [texto for texto in detalle if not texto.startswith("Fundamento:")]
+        lineas.extend("   " + texto for texto in detalle if not texto.startswith("Objetivo:"))
+        pivote_fundamento_mostrado = pivote_fundamento_mostrado or es_pivote
+        if es_pivote:
+            posteriores = pasos_visibles[indice + 1:]
+            siguientes_etapa = []
+            for siguiente in posteriores:
+                if "Pivote de la etapa" in siguiente["descripcion"]:
+                    break
+                siguientes_etapa.append(siguiente)
+            sin_eliminacion = not any("Multiplicador" in siguiente["descripcion"]
+                                      for siguiente in siguientes_etapa)
+            if sin_eliminacion:
+                lineas.append("   Eliminación: no se requiere; no hay entradas no nulas debajo del pivote.")
+    return lineas
+
+
+
+def _formatear_paso_lu(paso, fundamento_pivote_mostrado=False):
+    """Renderiza el detalle sin repetir el criterio de selecci?n de pivote."""
+    lineas = formatear_paso_explicado(paso, incluir_estado=False)
+    if fundamento_pivote_mostrado and "Pivote de la etapa" in paso["descripcion"]:
+        lineas = [linea for linea in lineas if not linea.startswith("Fundamento:")]
     return lineas
 
 
@@ -272,7 +298,7 @@ def _ecuaciones_triangulares(matriz, rhs, solucion, variable, adelante):
             lineas.append(f"   Fila {i + 1}: no tiene variable pivote; se usa para clasificar el sistema.")
             continue
         cols = range(pivote_col) if adelante else range(pivote_col + 1, len(matriz[i]))
-        terminos = [(j, matriz[i][j]) for j in cols if matriz[i][j] != 0]
+        terminos = [(j, matriz[i][j]) for j in cols]
         suma = sum(matriz[i][j] * solucion[j] for j, _ in terminos)
         expresion = " + ".join(f"({formatear_valor(a)})·{variable}{j + 1}" for j, a in terminos) or "0"
         sustitucion = " + ".join(f"({formatear_valor(a)})({formatear_valor(solucion[j])})" for j, a in terminos) or "0"
