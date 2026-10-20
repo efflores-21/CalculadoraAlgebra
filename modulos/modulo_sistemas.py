@@ -48,6 +48,111 @@ def _resolver_por_matriz_inversa(matriz_a, vector_b):
     return inversa, pasos, solucion, producto_ax
 
 
+def _texto_pasos_gauss(pasos, matriz_final, n_variables):
+    """Explica operaciones de Gauss con cálculos de fila y una sola matriz final."""
+    estado_anterior = pasos[0]["matriz"]
+    lineas = ["PASOS DE ELIMINACIÓN DE GAUSS:"]
+    eliminadas = set()
+    pivotes_explicados = set()
+    for indice_paso, paso in enumerate(pasos[1:], 1):
+        descripcion, estado = paso["descripcion"], paso["matriz"]
+        if descripcion.startswith("Intercambio F"):
+            izquierda, derecha = descripcion.removeprefix("Intercambio F").split(" ↔ F")
+            fila_activa, fila_candidata = int(izquierda) - 1, int(derecha) - 1
+            columna = next((j for j in range(n_variables) if estado[fila_activa][j] != 0), 0)
+            lineas.extend([
+                f"Paso {indice_paso}: selección e intercambio de pivote.",
+                f"Objetivo: colocar en la fila activa el candidato de mayor valor absoluto en la columna {columna + 1}.",
+                f"Fundamento: el pivoteo parcial reduce el tamaño de los multiplicadores y evita dividir por cero.",
+                "Candidatos en la columna: " + ", ".join(formatear_valor(estado_anterior[i][columna])
+                    for i in range(fila_activa, len(estado))) + ".",
+                f"Operación: F{fila_activa + 1} ↔ F{fila_candidata + 1}; se intercambian las filas completas de [A|b].",
+            ])
+        elif descripcion.startswith("Normalizar F"):
+            fila = int(descripcion.split("F", 1)[1].split()[0]) - 1
+            columna = next(j for j in range(n_variables) if estado_anterior[fila][j] != 0)
+            pivote = estado_anterior[fila][columna]
+            pivotes_explicados.add(columna)
+            lineas.extend([
+                f"Paso {indice_paso}: normalizar el pivote de la fila {fila + 1}, columna {columna + 1}.",
+                f"Objetivo: convertir el pivote {formatear_valor(pivote)} en 1 para facilitar la sustitución.",
+                "Fundamento: dividir una fila completa por un escalar no nulo conserva las soluciones.",
+                f"Cálculo: F{fila + 1} ← F{fila + 1} / ({formatear_valor(pivote)}); fila resultante = "
+                + "(" + ", ".join(formatear_valor(v) for v in estado[fila]) + ").",
+            ])
+        elif " ← " in descripcion:
+            izquierda, operacion = descripcion.split(" ← ")
+            fila_objetivo = int(izquierda[1:]) - 1
+            parte_filas = operacion.split("·F")
+            fila_pivote = int(parte_filas[1]) - 1
+            columna = next(j for j in range(n_variables) if estado_anterior[fila_pivote][j] != 0)
+            pivote = estado_anterior[fila_pivote][columna]
+            factor = estado_anterior[fila_objetivo][columna] / pivote
+            pivotes_explicados.add(columna)
+            lineas.extend([
+                f"Paso {indice_paso}: eliminar la entrada de la fila {fila_objetivo + 1}, columna {columna + 1}.",
+                f"Objetivo: hacer cero la entrada {formatear_valor(estado_anterior[fila_objetivo][columna])} debajo del pivote.",
+                "Fundamento: reemplazar una fila por ella menos un múltiplo de otra conserva un sistema equivalente.",
+                f"Pivote: a{fila_pivote + 1},{columna + 1} = {formatear_valor(pivote)}.",
+                f"Multiplicador: m = {formatear_valor(estado_anterior[fila_objetivo][columna])} / "
+                f"{formatear_valor(pivote)} = {formatear_valor(factor)}.",
+                f"Operación: F{fila_objetivo + 1} ← F{fila_objetivo + 1} − ({formatear_valor(factor)})·F{fila_pivote + 1}.",
+                "Cálculo de la fila: " + "; ".join(
+                    f"{formatear_valor(estado_anterior[fila_objetivo][j])} − "
+                    f"({formatear_valor(factor)})({formatear_valor(estado_anterior[fila_pivote][j])})"
+                    f" = {formatear_valor(estado[fila_objetivo][j])}"
+                    for j in range(columna, n_variables + 1)
+                ) + ".",
+            ])
+            eliminadas.add(columna)
+        estado_anterior = estado
+
+    lineas.extend(["", "Matriz final en forma escalonada:", formatear_matriz(matriz_final)])
+    for fila in range(len(matriz_final)):
+        columna = next((j for j in range(n_variables) if matriz_final[fila][j] != 0), None)
+        if columna is not None:
+            if columna not in pivotes_explicados:
+                lineas.append(f"Pivote seleccionado: a{fila + 1},{columna + 1} = "
+                              f"{formatear_valor(matriz_final[fila][columna])}.")
+            if columna not in eliminadas and all(
+                matriz_final[i][columna] == 0 for i in range(fila + 1, len(matriz_final))
+            ):
+                lineas.append(f"Columna {columna + 1}: no requiere eliminación; las entradas inferiores ya son cero.")
+    return lineas
+
+
+def _texto_sustitucion_gauss(datos, n_variables):
+    """Presenta sustitución hacia atrás sin asignar valores a variables libres."""
+    matriz = datos["matriz_escalonada"]
+    expresiones = datos["soluciones_generales"]
+    libres = datos["variables_libres"]
+    lineas = ["", "SUSTITUCIÓN HACIA ATRÁS:"]
+    if libres:
+        lineas.append("Las variables libres permanecen como parámetros; se expresan las variables básicas en función de ellas.")
+    for fila in range(datos["rango"] - 1, -1, -1):
+        pivote = next((j for j in range(n_variables) if matriz[fila][j] != 0), None)
+        if pivote is None:
+            continue
+        lhs = " + ".join(f"({formatear_valor(matriz[fila][j])})·x{subindice(j + 1)}"
+                          for j in range(pivote, n_variables) if matriz[fila][j] != 0)
+        constante, terminos = expresiones[pivote]
+        resultado = formatear_expresion(constante, terminos)
+        if libres:
+            lineas.append(f"Fila {fila + 1}: {lhs} = {formatear_valor(matriz[fila][-1])}; "
+                          f"x{subindice(pivote + 1)} = {resultado}.")
+        else:
+            sustituidos = [f"({formatear_valor(matriz[fila][j])})({formatear_valor(expresiones[j][0])})"
+                           for j in range(pivote + 1, n_variables) if matriz[fila][j] != 0]
+            suma = sum(matriz[fila][j] * expresiones[j][0]
+                       for j in range(pivote + 1, n_variables))
+            numerador = matriz[fila][-1] - suma
+            lineas.append(f"Fila {fila + 1}: {lhs} = {formatear_valor(matriz[fila][-1])}; "
+                          f"x{subindice(pivote + 1)} = ({formatear_valor(matriz[fila][-1])} − "
+                          f"({' + '.join(sustituidos) or '0'})) / {formatear_valor(matriz[fila][pivote])} "
+                          f"= {formatear_valor(numerador / matriz[fila][pivote])}.")
+    return lineas
+
+
 class ModuloSistemas(ctk.CTkFrame):
     """Presenta un panel propio para el sistema matricial A*x=b."""
 
@@ -191,22 +296,23 @@ class ModuloSistemas(ctk.CTkFrame):
                 "Matriz aumentada inicial [A|b]:",
                 formatear_matriz(matriz_aumentada),
                 "",
-                "PASOS DE ELIMINACION:",
             ]
-            for i, paso in enumerate(datos["pasos"], 1):
-                lineas.extend([
-                    f"Paso {i}: {paso['descripcion']}",
-                    formatear_matriz(paso["matriz"]),
-                ])
+            if metodo == "gauss":
+                lineas.extend(_texto_pasos_gauss(datos["pasos"], datos["matriz_escalonada"], n))
+            else:
+                lineas.append("PASOS DE ELIMINACION:")
+                for i, paso in enumerate(datos["pasos"], 1):
+                    lineas.extend([f"Paso {i}: {paso['descripcion']}", formatear_matriz(paso["matriz"])])
             nombre_final = (
                 "forma escalonada reducida (RREF)"
                 if metodo == "gauss-jordan" else "forma escalonada"
             )
-            lineas.extend([
-                "",
-                f"Matriz final en {nombre_final}:",
-                formatear_matriz(datos["matriz_escalonada"]),
-            ])
+            if metodo != "gauss":
+                lineas.extend([
+                    "",
+                    f"Matriz final en {nombre_final}:",
+                    formatear_matriz(datos["matriz_escalonada"]),
+                ])
 
             # Una columna es pivote si contiene el primer valor no nulo de
             # alguna fila; sus variables son básicas y las demás son libres.
@@ -236,6 +342,8 @@ class ModuloSistemas(ctk.CTkFrame):
                 clase["descripcion"],
             ])
             if clase["tipo"] != "Inconsistente":
+                if metodo == "gauss":
+                    lineas.extend(_texto_sustitucion_gauss(datos, n))
                 lineas.append("Solución:")
                 expresiones = datos["soluciones_generales"]
                 for variable in range(n):
