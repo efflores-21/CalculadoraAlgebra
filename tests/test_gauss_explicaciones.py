@@ -30,7 +30,7 @@ class ExplicacionesGauss(unittest.TestCase):
         self.assertEqual(clase["tipo"], "Consistente Determinado")
         self.assertEqual(datos["soluciones"], {0: Fraction(13, 6), 1: Fraction(1, 2)})
         self.assertIn("selección e intercambio de pivote", texto)
-        self.assertIn("Multiplicador: m = 0 / 3 = 0", texto) if "Multiplicador: m = 0 / 3 = 0" in texto else None
+        self.assertIn("Candidatos en la columna: 0, 3.", texto)
         self.assertIn("SUSTITUCIÓN HACIA ATRÁS:", texto)
         self.assertIn("Resultado: la solución satisface todas las ecuaciones.", texto)
         x = [datos["soluciones"][j] for j in range(2)]

@@ -153,6 +153,89 @@ def _texto_sustitucion_gauss(datos, n_variables):
     return lineas
 
 
+def _texto_pasos_gauss_jordan(pasos, n_variables):
+    """Explica las operaciones de Gauss-Jordan usando los estados registrados."""
+    estado_anterior = pasos[0]["matriz"]
+    lineas = ["PASOS DE REDUCCIÓN DE GAUSS-JORDAN:"]
+    for indice, paso in enumerate(pasos[1:], 1):
+        descripcion, estado = paso["descripcion"], paso["matriz"]
+        if descripcion.startswith("Intercambio F"):
+            filas = descripcion.removeprefix("Intercambio F").split(" ↔ F")
+            fila_pivote, fila_candidata = int(filas[0]) - 1, int(filas[1]) - 1
+            columna = next((j for j in range(n_variables) if estado[fila_pivote][j] != 0), 0)
+            candidatos = [estado_anterior[i][columna] for i in range(fila_pivote, len(estado))]
+            lineas.extend([
+                f"Paso {indice}: intercambio para colocar el pivote en la fila activa.",
+                f"Objetivo: elegir en la columna {columna + 1} un pivote no nulo de mayor valor absoluto.",
+                "Fundamento: el pivoteo parcial evita dividir entre cero y limita el tamaño de los factores.",
+                "Candidatos: " + ", ".join(formatear_valor(v) for v in candidatos) + ".",
+                "Magnitudes comparadas: " + ", ".join(f"|{formatear_valor(v)}|" for v in candidatos) + ".",
+                f"Operación: F{fila_pivote + 1} ↔ F{fila_candidata + 1}; se intercambian las filas completas de [A|b].",
+            ])
+        elif descripcion.startswith("Normalizar F"):
+            fila = int(descripcion.split("F", 1)[1].split()[0]) - 1
+            columna = next(j for j in range(n_variables) if estado_anterior[fila][j] != 0)
+            pivote = estado_anterior[fila][columna]
+            calculos = "; ".join(
+                f"{formatear_valor(estado_anterior[fila][j])} / {formatear_valor(pivote)}"
+                f" = {formatear_valor(estado[fila][j])}"
+                for j in range(n_variables + 1)
+            )
+            lineas.extend([
+                f"Paso {indice}: normalización de la fila {fila + 1}, columna pivote {columna + 1}.",
+                f"Objetivo: convertir el pivote {formatear_valor(pivote)} en 1.",
+                "Fundamento: dividir toda la fila por el mismo escalar no nulo conserva el sistema equivalente.",
+                f"Pivote: a{fila + 1},{columna + 1} = {formatear_valor(pivote)}.",
+                f"Cálculo de la fila: {calculos}.",
+            ])
+        elif " ← " in descripcion:
+            izquierda, operacion = descripcion.split(" ← ")
+            fila_objetivo = int(izquierda[1:]) - 1
+            fila_pivote = int(operacion.split("·F")[1]) - 1
+            columna = next(j for j in range(n_variables) if estado_anterior[fila_pivote][j] != 0)
+            pivote = estado_anterior[fila_pivote][columna]
+            entrada = estado_anterior[fila_objetivo][columna]
+            factor = entrada / pivote
+            ubicacion = "debajo" if fila_objetivo > fila_pivote else "encima"
+            calculos = "; ".join(
+                f"{formatear_valor(estado_anterior[fila_objetivo][j])} − "
+                f"({formatear_valor(factor)})({formatear_valor(estado_anterior[fila_pivote][j])})"
+                f" = {formatear_valor(estado[fila_objetivo][j])}"
+                for j in range(columna, n_variables + 1)
+            )
+            lineas.extend([
+                f"Paso {indice}: eliminación {ubicacion} del pivote en la fila {fila_pivote + 1}, columna {columna + 1}.",
+                f"Objetivo: anular la entrada {formatear_valor(entrada)} de la fila {fila_objetivo + 1}.",
+                "Fundamento: reemplazar una fila por ella menos un múltiplo de otra preserva el conjunto de soluciones.",
+                f"Pivote: a{fila_pivote + 1},{columna + 1} = {formatear_valor(pivote)}.",
+                f"Multiplicador: m = {formatear_valor(entrada)} / {formatear_valor(pivote)} = {formatear_valor(factor)}.",
+                f"Operación: F{fila_objetivo + 1} ← F{fila_objetivo + 1} − ({formatear_valor(factor)})·F{fila_pivote + 1}.",
+                f"Cálculo de la fila: {calculos}.",
+            ])
+        estado_anterior = estado
+    return lineas
+
+
+def _texto_lectura_rref(datos, tipo, n_variables):
+    """Explica cómo leer pivotes, variables libres y contradicciones en la RREF."""
+    matriz = datos["matriz_escalonada"]
+    lineas = ["", "CÓMO LEER LA RREF:"]
+    if tipo == "Inconsistente":
+        fila = next((i for i in range(datos["rango"], len(matriz))
+                     if all(matriz[i][j] == 0 for j in range(n_variables))), None)
+        if fila is not None:
+            lineas.append(f"La fila {fila + 1} representa 0 = {formatear_valor(matriz[fila][-1])}; el sistema es incompatible.")
+        return lineas
+    pivotes = columnas_pivote(matriz, datos["rango"])
+    libres = [j for j in range(n_variables) if j not in pivotes]
+    lineas.append("Cada columna pivote tiene un 1 líder y ceros en las demás filas; su ecuación permite leer la variable básica.")
+    if libres:
+        lineas.append("Las columnas sin pivote corresponden a variables libres, que se conservan como parámetros en la solución general.")
+    else:
+        lineas.append("No hay variables libres; los términos independientes de las filas pivote dan directamente la solución única.")
+    return lineas
+
+
 class ModuloSistemas(ctk.CTkFrame):
     """Presenta un panel propio para el sistema matricial A*x=b."""
 
@@ -299,6 +382,8 @@ class ModuloSistemas(ctk.CTkFrame):
             ]
             if metodo == "gauss":
                 lineas.extend(_texto_pasos_gauss(datos["pasos"], datos["matriz_escalonada"], n))
+            elif metodo == "gauss-jordan":
+                lineas.extend(_texto_pasos_gauss_jordan(datos["pasos"], n))
             else:
                 lineas.append("PASOS DE ELIMINACION:")
                 for i, paso in enumerate(datos["pasos"], 1):
@@ -341,6 +426,8 @@ class ModuloSistemas(ctk.CTkFrame):
                 f"Clasificacion: {clase['tipo']}.",
                 clase["descripcion"],
             ])
+            if metodo == "gauss-jordan":
+                lineas.extend(_texto_lectura_rref(datos, clase["tipo"], n))
             if clase["tipo"] != "Inconsistente":
                 if metodo == "gauss":
                     lineas.extend(_texto_sustitucion_gauss(datos, n))
