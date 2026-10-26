@@ -48,6 +48,64 @@ def _resolver_por_matriz_inversa(matriz_a, vector_b):
     return inversa, pasos, solucion, producto_ax
 
 
+def _explicar_pasos_determinante(pasos, nombre):
+    """Presenta los estados del determinante y calcula solo las sustituciones visibles."""
+    if not pasos:
+        return []
+    descripcion_inicial, estado = pasos[0]
+    lineas = [f"{nombre}: {descripcion_inicial}", formatear_matriz(estado)]
+    estado_anterior = estado
+    for descripcion, estado in pasos[1:]:
+        if descripcion.startswith("Intercambiar F"):
+            lineas.extend([
+                descripcion,
+                "Antes del intercambio:",
+                formatear_matriz(estado_anterior),
+                "Intercambiar dos filas cambia el signo del determinante; "
+                "el algoritmo acumula ese cambio.",
+                "Después del intercambio:",
+                formatear_matriz(estado),
+            ])
+        elif descripcion.startswith("Pivote "):
+            columna = int(descripcion.split()[1].rstrip(":")) - 1
+            pivote = estado[columna][columna]
+            lineas.extend([
+                f"Pivote de la columna {columna + 1}: {formatear_valor(pivote)}.",
+                formatear_matriz(estado),
+            ])
+        elif " <- " in descripcion:
+            destino = descripcion.split(" <- ", 1)[0]
+            fila_destino = int(destino.removeprefix("F")) - 1
+            lado_derecho = descripcion.split(" <- ", 1)[1]
+            fila_pivote = int(lado_derecho.rsplit("F", 1)[1].rstrip(".")) - 1
+            columna_pivote = fila_pivote
+            pivote = estado_anterior[fila_pivote][columna_pivote]
+            factor = estado_anterior[fila_destino][columna_pivote] / pivote
+            lineas.extend([
+                f"Operación por filas: {descripcion}",
+                "Antes de la operación:",
+                formatear_matriz(estado_anterior),
+                "Sumar un múltiplo de otra fila conserva el determinante. "
+                "Se sustituye cada entrada modificada de la fila:",
+            ])
+            for columna in range(columna_pivote, len(estado[fila_destino])):
+                antes = estado_anterior[fila_destino][columna]
+                base = estado_anterior[fila_pivote][columna]
+                despues = estado[fila_destino][columna]
+                if antes != despues:
+                    lineas.append(
+                        f"  Entrada ({fila_destino + 1},{columna + 1}): "
+                        f"{formatear_valor(antes)} - "
+                        f"({formatear_valor(factor)})({formatear_valor(base)}) "
+                        f"= {formatear_valor(despues)}"
+                    )
+            lineas.extend(["Después de la operación:", formatear_matriz(estado)])
+        else:
+            lineas.extend([descripcion, formatear_matriz(estado)])
+        estado_anterior = estado
+    return lineas
+
+
 def _texto_pasos_gauss(pasos, matriz_final, n_variables):
     """Explica operaciones de Gauss con cálculos de fila y una sola matriz final."""
     estado_anterior = pasos[0]["matriz"]
@@ -468,51 +526,170 @@ class ModuloSistemas(ctk.CTkFrame):
 
     def _mostrar_inversa(self, matriz_a, vector_b):
         """Muestra x=A⁻¹b, los pasos de inversión y la comprobación Ax=b."""
-        inversa, pasos, solucion, producto_ax = _resolver_por_matriz_inversa(
-            matriz_a, vector_b
-        )
+        try:
+            inversa, pasos, solucion, producto_ax = _resolver_por_matriz_inversa(
+                matriz_a, vector_b
+            )
+        except ValueError as error:
+            if "singular" not in str(error).lower():
+                raise
+            lineas = [
+                "MODULO 1 | RESOLUCIÓN POR MATRIZ INVERSA",
+                "=" * 58,
+                "Para una matriz cuadrada, A⁻¹ existe exactamente cuando det(A) ≠ 0.",
+                "Si det(A) = 0, A es singular: sus filas o columnas son dependientes y no existe A⁻¹.",
+                "Por tanto, x = A⁻¹b no se puede usar para resolver este sistema.",
+            ]
+            reemplazar_texto(
+                self.resultado,
+                "\n".join(lineas) + "\n",
+                "A es singular: no tiene inversa.",
+            )
+            return
         lineas = [
             "MODULO 1 | RESOLUCIÓN POR MATRIZ INVERSA",
             "=" * 58,
-            "Matriz A:",
-            formatear_matriz(matriz_a),
-            "\nCálculo de A⁻¹ por Gauss-Jordan:",
+            "Para una matriz cuadrada, A⁻¹ existe exactamente cuando det(A) ≠ 0.",
+            "Si det(A) = 0, A es singular y este método no puede calcular x = A⁻¹b.",
+            "Construimos [A|I], donde I es la identidad del mismo orden que A.",
+            "El objetivo de Gauss-Jordan es transformar [A|I] → [I|A⁻¹].",
+            "Cada operación elemental es reversible y se aplica a la fila aumentada completa.",
+            "Las operaciones componen una transformación invertible E aplicada a ambos bloques: [A|I] → [EA|E].",
+            "Al llegar a [I|B], EA=I y B=E. Como A es cuadrada, E=A⁻¹; por eso el bloque derecho B es A⁻¹.",
+            "Matriz aumentada inicial [A|I]:",
+            formatear_matriz(pasos[0][1]),
         ]
-        for indice, (descripcion, estado) in enumerate(pasos, 1):
-            lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(estado)])
+        estado_anterior = pasos[0][1]
+        for indice, (descripcion, estado) in enumerate(pasos[1:], 1):
+            if descripcion.startswith("Forma reducida final"):
+                lineas.extend([
+                    f"\n{descripcion}:",
+                    "Resultado final de Gauss-Jordan (no es una operación adicional):",
+                    formatear_matriz(estado),
+                ])
+                estado_anterior = estado
+                continue
+            lineas.extend([
+                f"\nPaso {indice}: {descripcion}.",
+                "Matriz aumentada antes de la operación:",
+                formatear_matriz(estado_anterior),
+            ])
+            if descripcion.startswith("Intercambiar F"):
+                partes = descripcion.removeprefix("Intercambiar F").split(" y F")
+                fila_1, fila_2 = int(partes[0]) - 1, int(partes[1]) - 1
+                valor_pivote = estado[fila_1][fila_1]
+                interpretacion = (
+                    f"Se busca llevar a la fila {fila_1 + 1} un pivote no nulo; "
+                    f"la fila {fila_2 + 1} aporta {formatear_valor(valor_pivote)} "
+                    "en esa columna. Intercambiar filas es reversible y se aplica "
+                    "a todas las entradas de ambas filas, en los dos bloques."
+                )
+                lineas.extend([interpretacion, "Matriz aumentada después del intercambio:"])
+            elif descripcion.startswith("Dividir F"):
+                partes = descripcion.removeprefix("Dividir F").split(" entre ")
+                fila = int(partes[0]) - 1
+                pivote = estado_anterior[fila][fila]
+                interpretacion = (
+                    f"El pivote de F{fila + 1} es {formatear_valor(pivote)}. "
+                    "Se divide cada entrada de la fila aumentada completa por ese "
+                    "valor para convertir el pivote en 1. Como el pivote no es "
+                    "cero, la operación es reversible."
+                )
+                lineas.extend([interpretacion, "Cálculo de cada entrada de la fila:"])
+                for columna, (antes, despues) in enumerate(
+                    zip(estado_anterior[fila], estado[fila]), 1
+                ):
+                    lineas.append(
+                        f"  columna {columna}: {formatear_valor(antes)} / "
+                        f"{formatear_valor(pivote)} = {formatear_valor(despues)}"
+                    )
+                lineas.append("Matriz aumentada después de dividir la fila:")
+            elif " <- " in descripcion:
+                partes = descripcion.split(" <- ", 1)[0]
+                fila_destino = int(partes.removeprefix("F")) - 1
+                fila_pivote = int(descripcion.rsplit("F", 1)[1]) - 1
+                columna_pivote = fila_pivote
+                factor = estado_anterior[fila_destino][columna_pivote]
+                valor_pivote = estado_anterior[fila_pivote][columna_pivote]
+                interpretacion = (
+                    f"Se usa el pivote {formatear_valor(valor_pivote)} de "
+                    f"F{fila_pivote + 1} para hacer cero la entrada "
+                    f"{formatear_valor(factor)} de F{fila_destino + 1}. "
+                    f"La operación reversible es F{fila_destino + 1} ← "
+                    f"F{fila_destino + 1} − ({formatear_valor(factor)})"
+                    f"F{fila_pivote + 1}; transforma la fila aumentada completa."
+                )
+                lineas.extend([interpretacion, "Cálculo de cada entrada de la fila:"])
+                for columna, (antes, base, despues) in enumerate(zip(
+                    estado_anterior[fila_destino],
+                    estado_anterior[fila_pivote],
+                    estado[fila_destino],
+                ), 1):
+                    lineas.append(
+                        f"  columna {columna}: {formatear_valor(antes)} - "
+                        f"({formatear_valor(factor)})({formatear_valor(base)}) "
+                        f"= {formatear_valor(despues)}"
+                    )
+                lineas.append("Matriz aumentada después de eliminar la entrada:")
+            else:
+                lineas.extend(["Estado final alcanzado:", formatear_matriz(estado)])
+                estado_anterior = estado
+                continue
+            lineas.append(formatear_matriz(estado))
+            estado_anterior = estado
         lineas.extend([
-            "\nInversa final A⁻¹:",
+            "\nEl bloque izquierdo es I; por la equivalencia conservada, el derecho es A⁻¹.",
+            "Inversa final A⁻¹:",
             formatear_matriz(inversa),
             "\nVector b:",
             formatear_vector(vector_b),
             "\nProducto x = A⁻¹b:",
         ])
         for i, fila in enumerate(inversa):
+            productos = [fila[j] * vector_b[j] for j in range(len(vector_b))]
             terminos = " + ".join(
                 f"({formatear_valor(fila[j])})({formatear_valor(vector_b[j])})"
                 for j in range(len(vector_b))
             )
             lineas.append(
-                f"x{subindice(i + 1)} = {terminos} = "
+                f"x{subindice(i + 1)} = {terminos}"
+            )
+            lineas.append(
+                "  Productos: " + " + ".join(formatear_valor(v) for v in productos)
+                + " = " + formatear_valor(solucion[i])
+            )
+            lineas.append(
+                f"  Por tanto, x{subindice(i + 1)} = "
                 f"{formatear_valor(solucion[i])}"
             )
         lineas.extend([
             "Solución x = (" + ", ".join(formatear_valor(v) for v in solucion) + ")",
             "\nVerificación exacta de Ax = b:",
+            "Sustituimos x en cada ecuación original: el resultado de la fila i debe coincidir con bᵢ.",
             "Ax = (" + ", ".join(formatear_valor(v) for v in producto_ax) + ")",
         ])
         cumple = producto_ax == vector_b
         for i, fila in enumerate(matriz_a):
+            productos = [fila[j] * solucion[j] for j in range(len(solucion))]
             terminos = " + ".join(
                 f"({formatear_valor(fila[j])})({formatear_valor(solucion[j])})"
                 for j in range(len(solucion))
             )
             lineas.append(
-                f"Ecuación {i + 1}: {terminos} = {formatear_valor(producto_ax[i])} "
+                f"Ecuación {i + 1}: {terminos}"
+            )
+            lineas.append(
+                "  Productos: " + " + ".join(formatear_valor(v) for v in productos)
+                + f" = {formatear_valor(producto_ax[i])}; "
                 f"{'=' if producto_ax[i] == vector_b[i] else '≠'} "
                 f"{formatear_valor(vector_b[i])}"
             )
         lineas.append("Ax = b: " + ("Se cumple" if cumple else "No se cumple"))
+        if cumple:
+            lineas.append(
+                "Como cada componente calculado coincide con el de b, "
+                "la solución satisface todas las ecuaciones del sistema."
+            )
         reemplazar_texto(
             self.resultado,
             "\n".join(lineas) + "\n",
@@ -526,21 +703,32 @@ class ModuloSistemas(ctk.CTkFrame):
         lineas = [
             "MODULO 1 | REGLA DE CRAMER PARA Ax=b",
             "=" * 58,
+            "Objetivo: obtener la solución única de Ax=b mediante determinantes.",
+            f"A debe ser cuadrada de orden {len(matriz_a)} para que det(A) esté definido.",
+            "Si D = det(A) ≠ 0, las columnas de A son independientes, A es invertible "
+            "y Ax=b tiene una solución única.",
+            "Fundamento de los determinantes sustituidos:",
+            "Escribimos las columnas de A como a₁,…,aₙ. Como b=Ax, "
+            "b=x₁a₁+⋯+xₙaₙ.",
+            "Al sustituir la columna i por b y usar la linealidad del determinante "
+            "en esa columna, cada término con aⱼ para j≠i tiene dos columnas "
+            "iguales y vale cero; queda Dᵢ=xᵢD.",
+            "Cuando D≠0, dividimos Dᵢ entre D para obtener xᵢ=Dᵢ/D.",
             "Paso 1: calcular D = det(A).",
             "Matriz A:",
             formatear_matriz(matriz_a),
             "Vector b = (" + ", ".join(formatear_valor(valor) for valor in vector_b) + ")",
-            "Cálculo de D:",
         ]
-        for descripcion, estado in datos["pasos_determinante"]:
-            lineas.extend([descripcion, formatear_matriz(estado)])
+        lineas.extend(
+            _explicar_pasos_determinante(datos["pasos_determinante"], "Cálculo de D")
+        )
         determinante = datos["determinante"]
         lineas.append(f"D = {formatear_valor(determinante)}")
         if datos["solucion"] is None:
             lineas.extend([
                 "",
-                "D = 0: la regla de Cramer no permite obtener una solución única.",
-                "El sistema puede no tener solución o tener infinitas soluciones.",
+                "D = 0: la regla de Cramer no determina una solución única y no se puede dividir entre D.",
+                "El sistema puede ser incompatible o tener infinitas soluciones; este cálculo no distingue esos casos.",
             ])
             reemplazar_texto(
                 self.resultado,
@@ -558,11 +746,17 @@ class ModuloSistemas(ctk.CTkFrame):
                 "",
                 f"Paso 2: construir A{subindice(indice + 1)} "
                 f"(reemplazar la columna {indice + 1} de A por b):",
+                f"Esta sustitución produce D{subindice(indice + 1)} y, por el fundamento anterior, "
+                f"D{subindice(indice + 1)} = x{subindice(indice + 1)}D.",
                 formatear_matriz(reemplazo["matriz"]),
                 f"Paso 3: calcular D{subindice(indice + 1)} = det(A{subindice(indice + 1)}).",
             ])
-            for descripcion, estado in reemplazo["pasos_determinante"]:
-                lineas.extend([descripcion, formatear_matriz(estado)])
+            lineas.extend(
+                _explicar_pasos_determinante(
+                    reemplazo["pasos_determinante"],
+                    f"Cálculo de D{subindice(indice + 1)}",
+                )
+            )
             lineas.extend([
                 f"D{subindice(indice + 1)} = {formatear_valor(determinante_i)}",
                 f"Paso 4: x{subindice(indice + 1)} = "
@@ -574,7 +768,26 @@ class ModuloSistemas(ctk.CTkFrame):
         lineas.extend([
             "",
             "Solución final: (" + ", ".join(formatear_valor(valor) for valor in datos["solucion"]) + ")",
+            "",
+            "VERIFICACIÓN EN LAS ECUACIONES ORIGINALES:",
         ])
+        cumple = True
+        for i, fila in enumerate(matriz_a):
+            productos = " + ".join(
+                f"({formatear_valor(fila[j])})({formatear_valor(datos['solucion'][j])})"
+                for j in range(len(fila))
+            )
+            total = sum(fila[j] * datos["solucion"][j] for j in range(len(fila)))
+            coincide = total == vector_b[i]
+            cumple = cumple and coincide
+            lineas.append(
+                f"Ecuación {i + 1}: {productos} = {formatear_valor(total)} "
+                f"{'=' if coincide else '≠'} {formatear_valor(vector_b[i])}"
+            )
+        lineas.append(
+            "Conclusión: la solución satisface todas las ecuaciones originales."
+            if cumple else "Conclusión: la solución no satisface todas las ecuaciones originales."
+        )
         reemplazar_texto(
             self.resultado,
             "\n".join(lineas) + "\n",
