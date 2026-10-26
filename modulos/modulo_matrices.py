@@ -34,6 +34,7 @@ from modulos._comun import (
     formatear_matriz, leer_entero, leer_fraccion, matriz_en_linea, mensaje_error,
     mostrar_teoremas, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
 )
+from modulos.modulo_determinantes import _texto_sarrus, _texto_traza_triangular
 
 LOGO = (
     "[ A ][ B ]  MÓDULO III: ÁLGEBRA DE MATRICES\n"
@@ -275,8 +276,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Opción 6: det(A) por triangularización, cofactores y (en 3 × 3) Sarrus."""
         det_A, pasos = determinante_triangular(A)
         lineas = ["DETERMINANTE", "", "Reducción a forma triangular (método eficiente):"]
-        for descripcion, estado in pasos:
-            lineas.extend([f"   {descripcion}", formatear_matriz(estado)])
+        lineas.extend(_texto_traza_triangular(pasos))
         lineas.extend(["", f"det(A) por triangularización = {formatear_valor(det_A)}"])
         lineas.extend(self._otros_metodos_determinante(A, det_A))
         diagnostico = diagnostico_invertibilidad(A, det_A)
@@ -294,8 +294,13 @@ class ModuloMatrices(ctk.CTkFrame):
                   f"   →   {'coincide' if det_cofactores == det_A else 'NO coincide'}"]
         if len(A) == 3:
             det_sarrus = sarrus_3x3(A)
-            lineas.append(f"det(A) por Sarrus = {formatear_valor(det_sarrus)}"
-                          f"   →   {'coincide' if det_sarrus == det_A else 'NO coincide'}")
+            texto_sarrus, resultado_mostrado = _texto_sarrus(A)
+            lineas.extend(texto_sarrus)
+            lineas.append(
+                f"Comprobación con Sarrus: {formatear_valor(det_sarrus)} "
+                f"{'coincide' if resultado_mostrado == det_sarrus == det_A else 'NO coincide'} "
+                "con la triangularización."
+            )
         return lineas
 
     def _inversa_gauss_jordan(self, A):
