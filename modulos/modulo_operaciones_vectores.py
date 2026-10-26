@@ -6,6 +6,7 @@ Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorg
 """
 
 import customtkinter as ctk
+from fractions import Fraction
 
 from backend.matriz import formatear_valor, subindice
 from backend.vectores import (
@@ -33,6 +34,99 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _texto_traza_combinacion(pasos, cantidad_variables):
+    """Vincula cada operaciÃ³n de Gauss-Jordan con sus matrices registradas."""
+    if not pasos:
+        return []
+    anterior = pasos[0]["matriz"]
+    lineas = ["Estado inicial del sistema [V|b]:", formatear_matriz(anterior)]
+    for indice, paso in enumerate(pasos[1:], 1):
+        estado = paso["matriz"]
+        descripcion = paso["descripcion"]
+        lineas.extend([f"Paso {indice}: {descripcion}", "Antes:", formatear_matriz(anterior)])
+        if descripcion.startswith("Intercambio F"):
+            filas = descripcion.removeprefix("Intercambio F").split(" ↔ F")
+            lineas.append(
+                f"Se intercambian las filas completas de [V|b] para mantener un sistema equivalente "
+                f"(F{filas[0]} ↔ F{filas[1]})."
+            )
+        elif descripcion.startswith("Normalizar F"):
+            fila = int(descripcion.split("F", 1)[1].split()[0]) - 1
+            columna = next(j for j in range(cantidad_variables) if anterior[fila][j] != 0)
+            pivote = anterior[fila][columna]
+            calculos = "; ".join(
+                f"{formatear_valor(anterior[fila][j])}/{formatear_valor(pivote)}="
+                f"{formatear_valor(estado[fila][j])}"
+                for j in range(len(estado[fila]))
+            )
+            lineas.extend([
+                f"El pivote de la columna {columna + 1} es {formatear_valor(pivote)}. "
+                "Dividir la fila completa entre un valor no nulo conserva un sistema equivalente.",
+                "Cálculos de la fila (incluido el término b): " + calculos + ".",
+            ])
+        elif " ← " in descripcion:
+            izquierda, operacion = descripcion.split(" ← ")
+            fila_objetivo = int(izquierda[1:]) - 1
+            fila_pivote = int(operacion.split("·F")[1]) - 1
+            columna = next(j for j in range(cantidad_variables) if anterior[fila_pivote][j] != 0)
+            pivote = anterior[fila_pivote][columna]
+            factor = anterior[fila_objetivo][columna] / pivote
+            calculos = "; ".join(
+                f"{formatear_valor(anterior[fila_objetivo][j])} - "
+                f"({formatear_valor(factor)})({formatear_valor(anterior[fila_pivote][j])})="
+                f"{formatear_valor(estado[fila_objetivo][j])}"
+                for j in range(len(estado[fila_objetivo]))
+            )
+            lineas.extend([
+                f"Pivote: {formatear_valor(pivote)} en la columna {columna + 1}; "
+                f"se elimina la entrada de F{fila_objetivo + 1}.",
+                "Restar un múltiplo de otra fila conserva las soluciones; se opera también "
+                "sobre la columna aumentada b.",
+                "Cálculos de la fila: " + calculos + ".",
+            ])
+        lineas.extend(["Después:", formatear_matriz(estado)])
+        anterior = estado
+    return lineas
+
+
+def _texto_reconstruccion_combinacion(vectores, coeficientes, objetivo):
+    """Desarrolla c₁v₁+…+cₖvₖ con operaciones exactas ya existentes."""
+    lineas = ["Reconstrucción de la combinación con estos coeficientes:"]
+    escalados = []
+    for indice, (vector, coeficiente) in enumerate(zip(vectores, coeficientes), 1):
+        escalado = multiplicar_escalar_vector(coeficiente, vector)
+        escalados.append(escalado)
+        etiqueta_coeficiente = f"c{subindice(indice)}"
+        etiqueta_vector = f"v{subindice(indice)}"
+        lineas.append(
+            f"{etiqueta_coeficiente} = {formatear_valor(coeficiente)}; "
+            f"{etiqueta_vector} = {formatear_vector(vector)}."
+        )
+        lineas.append(
+            f"{etiqueta_coeficiente}·{etiqueta_vector}: " + "; ".join(
+                f"componente {i + 1}: ({formatear_valor(coeficiente)})"
+                f"({formatear_valor(componente)})={formatear_valor(escalado[i])}"
+                for i, componente in enumerate(vector)
+            ) + f"; vector escalado = {formatear_vector(escalado)}"
+        )
+    resultado = [sum((vector[i] for vector in escalados), Fraction(0))
+                 for i in range(len(objetivo))]
+    lineas.append("Suma componente por componente:")
+    lineas.extend(
+        f"Componente {i + 1}: " + " + ".join(
+            formatear_valor(vector[i]) for vector in escalados
+        ) + f" = {formatear_valor(resultado[i])} (objetivo b{i + 1} = "
+        f"{formatear_valor(objetivo[i])})."
+        for i in range(len(resultado))
+    )
+    lineas.append(f"Vector obtenido: {formatear_vector(resultado)}.")
+    lineas.append(
+        "La reconstrucción " + ("coincide" if resultado == objetivo else "NO coincide")
+        + " con b; la igualdad verifica la representación."
+    )
+    return lineas
 
 
 class ModuloOperacionesVectores(ctk.CTkFrame):
@@ -234,17 +328,21 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             )
             lineas = [
                 "COMBINACIÓN LINEAL",
-                "Se buscan escalares c₁, …, cₖ tales que c₁·v₁ + … + cₖ·vₖ = b.",
+                f"Se buscan coeficientes para expresar b en R^{len(objetivo)} "
+                f"como c₁·v₁ + … + cₖ·vₖ, usando k={len(vectores)} vectores:",
+                *[
+                    f"v{subindice(j + 1)} = {formatear_vector(vector)} "
+                    f"(dimensión {len(vector)})."
+                    for j, vector in enumerate(vectores)
+                ],
                 f"b = {formatear_vector(objetivo)}",
                 "Matriz aumentada [V|b]:",
                 formatear_matriz(aumentada),
-                "Reducción por filas:",
+                "El sistema Vc=b decide si b pertenece al espacio generado por estos vectores; "
+                "aquí se buscan sus coeficientes.",
+                "Reducción por filas de [V|b]:",
             ]
-            for indice, paso in enumerate(calculo["pasos"], 1):
-                lineas.extend([
-                    f"  Paso {indice}: {paso['descripcion']}",
-                    formatear_matriz(paso["matriz"]),
-                ])
+            lineas.extend(_texto_traza_combinacion(calculo["pasos"], len(vectores)))
             if clasificacion["tipo"] == "Inconsistente":
                 lineas.extend([
                     "Conclusión: b NO es combinación lineal de los vectores.",
@@ -268,18 +366,26 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                     for j, texto in enumerate(coeficientes)
                 )
                 if libres:
+                    coeficientes_ejemplo = [
+                        calculo["soluciones_generales"][j][0]
+                        for j in range(len(vectores))
+                    ]
                     lineas.extend([
                         "Existen infinitas representaciones de b: cada valor de "
                         + ", ".join(f"t{subindice(j + 1)}" for j in libres)
                         + " da una distinta.",
-                        "Ejemplo con "
-                        + ", ".join(f"t{subindice(j + 1)}" for j in libres) + " = 0:  "
-                        + ",  ".join(
-                            f"c{subindice(j + 1)} = "
-                            f"{formatear_valor(calculo['soluciones_generales'][j][0])}"
-                            for j in range(len(vectores))
+                        "Para obtener una representación concreta, se fija cada parámetro libre en 0.",
+                        *_texto_reconstruccion_combinacion(
+                            vectores, coeficientes_ejemplo, objetivo
                         ),
                     ])
+                else:
+                    coeficientes_unicos = [
+                        calculo["soluciones"][j] for j in range(len(vectores))
+                    ]
+                    lineas.extend(_texto_reconstruccion_combinacion(
+                        vectores, coeficientes_unicos, objetivo
+                    ))
             if clasificacion["tipo"] == "Inconsistente":
                 resumen = "b NO es combinación lineal de los vectores."
             elif calculo["variables_libres"]:
