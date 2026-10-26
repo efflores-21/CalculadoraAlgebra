@@ -140,6 +140,82 @@ def _explicar_suma_matrices(nombre, izquierda, derecha, resultado):
     return "\n".join(lineas)
 
 
+def _explicar_transposicion_producto(A, B, pasos, lado_izq, lado_der, coincide):
+    """Explica (AB)^T = B^T A^T reutilizando los resultados ya calculados."""
+    resultados = dict(pasos)
+    producto = resultados["AB"]
+    transpuesta_producto = resultados["(AB)ᵀ"]
+    transpuesta_b = resultados["Bᵀ"]
+    transpuesta_a = resultados["Aᵀ"]
+    producto_transpuestas = resultados["BᵀAᵀ"]
+    m, n = _dimensiones_matriz(A)
+    filas_b, p = _dimensiones_matriz(B)
+
+    lineas = [
+        f"Dimensiones: A es {m}×{n} y B es {filas_b}×{p}. "
+        f"El producto AB es compatible porque columnas(A) = {n} = filas(B).",
+        f"Por tanto, AB es {m}×{p}; (AB)ᵀ es {p}×{m}; "
+        f"Bᵀ es {p}×{filas_b}; Aᵀ es {n}×{m}; y BᵀAᵀ es {p}×{m}.",
+        "Resultados intermedios calculados:",
+    ]
+    for nombre, matriz in pasos:
+        lineas.extend([f"{nombre} =", formatear_matriz(matriz)])
+
+    lineas.extend([
+        "Desarrollo del lado izquierdo: primero calculamos AB por fila y columna.",
+        _explicar_producto_matrices("AB", A, B, producto),
+        "Transponer intercambia los índices: la entrada (i,j) de AB pasa "
+        "a la posición (j,i) de (AB)ᵀ.",
+    ])
+    for i in range(len(producto)):
+        for j in range(len(producto[0])):
+            lineas.append(
+                f"  (AB)[{i + 1},{j + 1}] = "
+                f"{formatear_valor(producto[i][j])}; "
+                f"(AB)ᵀ[{j + 1},{i + 1}] = "
+                f"{formatear_valor(transpuesta_producto[j][i])}"
+            )
+
+    lineas.extend([
+        "Desarrollo del lado derecho: al multiplicar Bᵀ por Aᵀ, "
+        "cada entrada se obtiene con productos fila por columna.",
+        _explicar_producto_matrices(
+            "BᵀAᵀ", transpuesta_b, transpuesta_a, producto_transpuestas
+        ),
+        "Comparación entrada por entrada de (AB)ᵀ y BᵀAᵀ:",
+    ])
+    diferencias = []
+    for i, (fila_izq, fila_der) in enumerate(
+        zip(lado_izq, lado_der), start=1
+    ):
+        for j, (valor_izq, valor_der) in enumerate(
+            zip(fila_izq, fila_der), start=1
+        ):
+            if valor_izq == valor_der:
+                lineas.append(
+                    f"  Entrada ({i},{j}): {formatear_valor(valor_izq)} = "
+                    f"{formatear_valor(valor_der)} (coinciden)"
+                )
+            else:
+                diferencias.append((i, j, valor_izq, valor_der))
+                lineas.append(
+                    f"  Entrada ({i},{j}): {formatear_valor(valor_izq)} ≠ "
+                    f"{formatear_valor(valor_der)} (difieren)"
+                )
+    if coincide and not diferencias:
+        lineas.append(
+            "Conclusión: (AB)ᵀ = BᵀAᵀ se cumple para las matrices ingresadas. "
+            "Este cálculo ilustra la identidad, pero no es por sí solo una "
+            "demostración universal."
+        )
+    else:
+        lineas.append(
+            "Conclusión: la identidad no coincide para estas matrices ingresadas. "
+            "Se señalan arriba las posiciones y los valores diferentes."
+        )
+    return "\n".join(lineas)
+
+
 def _comparar_matrices_distributividad(izquierda, derecha):
     """Explicita coincidencias y diferencias entre las entradas de ambos lados."""
     lineas = []
@@ -1235,6 +1311,24 @@ class ModuloPropiedades(ctk.CTkFrame):
             pasos, nombre_izq, lado_izq, nombre_der, lado_der, coincide = (
                 calcular_teorema_transposicion(teorema, A, B, c)
             )
+            if teorema == TEOREMAS_TRANSPOSICION[3]:
+                texto = "\n".join([
+                    f"Verificación: {teorema}",
+                    f"Matriz A ({len(A)}×{len(A[0])}) =",
+                    formatear_matriz(A),
+                    f"Matriz B ({len(B)}×{len(B[0])}) =",
+                    formatear_matriz(B),
+                    _explicar_transposicion_producto(
+                        A, B, pasos, lado_izq, lado_der, coincide
+                    ),
+                ])
+                reemplazar_texto(
+                    self.resultado,
+                    texto,
+                    f"{nombre_izq} = {nombre_der}: "
+                    f"{'se cumple' if coincide else 'no se cumple'}",
+                )
+                return
             lineas = [f"Verificación: {teorema}", "Matriz A:", formatear_matriz(A)]
             if B is not None:
                 lineas.extend(["Matriz B:", formatear_matriz(B)])
