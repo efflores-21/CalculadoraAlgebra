@@ -39,6 +39,47 @@ from modulos._comun import (
 )
 
 
+def _explicar_suma_vectores(u, v, resultado):
+    """Desglosa una suma componente a componente usando el resultado exacto."""
+    return "\n".join(
+        f"    Componente {indice}: {formatear_valor(a)} + "
+        f"{formatear_valor(b)} = {formatear_valor(r)}"
+        for indice, (a, b, r) in enumerate(zip(u, v, resultado), start=1)
+    )
+
+
+def _explicar_producto_matriz_vector(A, vector, resultado, nombre):
+    """Presenta cada producto fila-vector y su suma exacta del backend."""
+    lineas = []
+    for indice_fila, (fila, valor) in enumerate(zip(A, resultado), start=1):
+        productos = [a * x for a, x in zip(fila, vector)]
+        desarrollo = "; ".join(
+            f"({formatear_valor(a)})({formatear_valor(x)}) = "
+            f"{formatear_valor(producto)}"
+            for a, x, producto in zip(fila, vector, productos)
+        )
+        suma = formatear_valor(productos[0])
+        for producto in productos[1:]:
+            if producto < 0:
+                suma += f" - {formatear_valor(-producto)}"
+            else:
+                suma += f" + {formatear_valor(producto)}"
+        lineas.append(
+            f"    Componente {indice_fila}: {nombre}: productos: {desarrollo}; "
+            f"suma: {suma} = {formatear_valor(valor)}"
+        )
+    return "\n".join(lineas)
+
+
+def _explicar_escalado(escalar, vector, resultado):
+    """Muestra las multiplicaciones escalares y los resultados del backend."""
+    return "\n".join(
+        f"    Componente {indice}: ({formatear_valor(escalar)})"
+        f"({formatear_valor(valor)}) = {formatear_valor(resultado[indice - 1])}"
+        for indice, valor in enumerate(vector, start=1)
+    )
+
+
 TEOREMAS_TRANSPOSICION = (
     "(Aᵀ)ᵀ = A",
     "(A + B)ᵀ = Aᵀ + Bᵀ",
@@ -928,25 +969,59 @@ class ModuloPropiedades(ctk.CTkFrame):
 
             estado_a = "SE CUMPLE" if datos["a_se_cumple"] else "NO SE CUMPLE"
             estado_b = "SE CUMPLE" if datos["b_se_cumple"] else "NO SE CUMPLE"
+            u_mas_v = datos["a_u_mas_v"]
+            au = datos["a_Au"]
+            av = datos["a_Av"]
+            au_mas_av = datos["a_Au_mas_Av"]
+            cu = datos["b_c_por_u"]
+            c_au = datos["b_c_por_Au"]
             texto = (
                 "MÓDULO 6: PROPIEDADES DEL PRODUCTO MATRIZ-VECTOR\n"
+                f"A es de dimensión {len(A)}×{len(A[0])}; u y v tienen "
+                f"dimensión {len(u)} y sus imágenes tienen dimensión {len(A)}.\n"
                 f"A =\n{formatear_matriz(A)}\n"
                 f"u = {formatear_vector(u)};  v = {formatear_vector(v)};  "
                 f"c = {formatear_valor(c)}\n\n"
                 "A) A(u+v) = Au+Av\n"
-                f"  1. u+v = {vector('a_u_mas_v')}\n"
-                f"  2. A(u+v) = {vector('a_A_por_u_mas_v')}\n"
-                f"  3. Au = {vector('a_Au')}; Av = {vector('a_Av')}\n"
-                f"  4. Au+Av = {vector('a_Au_mas_Av')}\n"
+                "  La aditividad afirma que aplicar A a la suma equivale a "
+                "sumar las imágenes. Es válida porque cada componente de Ax "
+                "es una suma de productos y la suma distribuye sobre sus términos. "
+                "Comprobamos esta igualdad para los datos ingresados.\n"
+                "  1. Sumamos u y v componente a componente:\n"
+                f"{_explicar_suma_vectores(u, v, u_mas_v)}\n"
+                f"     u+v = {vector('a_u_mas_v')}\n"
+                "  2. Lado izquierdo: multiplicamos cada fila de A por u+v.\n"
+                f"{_explicar_producto_matriz_vector(A, u_mas_v, datos['a_A_por_u_mas_v'], 'A(u+v)')}\n"
+                f"     A(u+v) = {vector('a_A_por_u_mas_v')}\n"
+                "  3. Calculamos por separado Au y Av:\n"
+                f"{_explicar_producto_matriz_vector(A, u, au, 'Au')}\n"
+                f"     Au = {vector('a_Au')}\n"
+                f"{_explicar_producto_matriz_vector(A, v, av, 'Av')}\n"
+                f"     Av = {vector('a_Av')}\n"
+                "  4. Lado derecho: sumamos Au y Av componente a componente:\n"
+                f"{_explicar_suma_vectores(au, av, au_mas_av)}\n"
+                f"     Au+Av = {vector('a_Au_mas_Av')}\n"
                 f"  Comparación: {vector('a_A_por_u_mas_v')} = "
                 f"{vector('a_Au_mas_Av')} -> {estado_a}\n\n"
                 "B) A(cu) = c(Au)\n"
-                f"  1. cu = {vector('b_c_por_u')}\n"
-                f"  2. A(cu) = {vector('b_A_por_cu')}\n"
+                "  La homogeneidad afirma que multiplicar u por c antes de "
+                "aplicar A equivale a multiplicar Au por c, ya que el escalar "
+                "puede factorizarse en cada suma de productos de las filas.\n"
+                "  1. Multiplicamos cada componente de u por c:\n"
+                f"{_explicar_escalado(c, u, cu)}\n"
+                f"     cu = {vector('b_c_por_u')}\n"
+                "  2. Lado izquierdo: aplicamos A a cu:\n"
+                f"{_explicar_producto_matriz_vector(A, cu, datos['b_A_por_cu'], 'A(cu)')}\n"
+                f"     A(cu) = {vector('b_A_por_cu')}\n"
                 f"  3. Au = {vector('b_Au')}\n"
-                f"  4. c(Au) = {vector('b_c_por_Au')}\n"
+                "  4. Lado derecho: multiplicamos cada componente de Au por c:\n"
+                f"{_explicar_escalado(c, au, c_au)}\n"
+                f"     c(Au) = {vector('b_c_por_Au')}\n"
                 f"  Comparación: {vector('b_A_por_cu')} = "
-                f"{vector('b_c_por_Au')} -> {estado_b}\n"
+                f"{vector('b_c_por_Au')} -> {estado_b}\n\n"
+                "La coincidencia confirma las igualdades para estos valores; "
+                "esta comprobación numérica no sustituye una demostración "
+                "para todos los vectores y escalares.\n"
             )
             resumen = (
                 f"A(u + v) = Au + Av:  {estado_a.lower()}    ·    "
