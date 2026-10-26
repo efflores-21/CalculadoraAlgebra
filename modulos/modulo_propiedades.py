@@ -216,6 +216,66 @@ def _explicar_transposicion_producto(A, B, pasos, lado_izq, lado_der, coincide):
     return "\n".join(lineas)
 
 
+def _explicar_transposicion_suma(A, B, pasos, lado_izq, lado_der, coincide):
+    """Desarrolla (A+B)^T = A^T+B^T con los resultados ya calculados."""
+    resultados = dict(pasos)
+    suma = resultados["A + B"]
+    transpuesta_suma = resultados["(A + B)ᵀ"]
+    transpuesta_a = resultados["Aᵀ"]
+    transpuesta_b = resultados["Bᵀ"]
+    suma_transpuestas = resultados["Aᵀ + Bᵀ"]
+    filas, columnas = _dimensiones_matriz(A)
+
+    lineas = [
+        f"Dimensiones: A y B son ambas {filas}×{columnas}; "
+        "la suma está definida porque tienen el mismo tamaño.",
+        f"A+B es {filas}×{columnas} y (A+B)ᵀ es {columnas}×{filas}. "
+        f"Aᵀ y Bᵀ son ambas {columnas}×{filas}; su suma también es "
+        f"{columnas}×{filas}.",
+        "Resultados intermedios calculados:",
+    ]
+    for nombre, matriz in pasos:
+        lineas.extend([f"{nombre} =", formatear_matriz(matriz)])
+
+    lineas.extend([
+        "Lado izquierdo: sumamos A+B entrada por entrada.",
+        _explicar_suma_matrices("A+B", A, B, suma),
+        "Al transponer, la entrada de posición (i,j) pasa a (j,i). "
+        "Así se forma (A+B)ᵀ con las entradas de la suma anterior:",
+    ])
+    for i in range(filas):
+        for j in range(columnas):
+            lineas.append(
+                f"  (A+B)[{i + 1},{j + 1}] = "
+                f"{formatear_valor(suma[i][j])}; "
+                f"(A+B)ᵀ[{j + 1},{i + 1}] = "
+                f"{formatear_valor(transpuesta_suma[j][i])}"
+            )
+
+    lineas.extend([
+        f"Lado derecho: Aᵀ y Bᵀ son matrices de {columnas}×{filas}; "
+        "sumamos sus entradas correspondientes:",
+        _explicar_suma_matrices(
+            "Aᵀ+Bᵀ", transpuesta_a, transpuesta_b, suma_transpuestas
+        ),
+        "Comparación entrada por entrada de (A+B)ᵀ y Aᵀ+Bᵀ:",
+        _comparar_matrices_distributividad(lado_izq, lado_der),
+    ])
+    if coincide:
+        lineas.append(
+            "Conclusión: (A+B)ᵀ = Aᵀ+Bᵀ se verifica para las matrices "
+            "ingresadas. Este ejemplo numérico no constituye por sí solo "
+            "una demostración universal."
+        )
+    else:
+        lineas.append(
+            "Conclusión: la identidad no coincide para estas matrices "
+            "ingresadas; las posiciones y valores diferentes aparecen "
+            "en la comparación."
+        )
+    return "\n".join(lineas)
+
+
 def _comparar_matrices_distributividad(izquierda, derecha):
     """Explicita coincidencias y diferencias entre las entradas de ambos lados."""
     lineas = []
@@ -1311,6 +1371,24 @@ class ModuloPropiedades(ctk.CTkFrame):
             pasos, nombre_izq, lado_izq, nombre_der, lado_der, coincide = (
                 calcular_teorema_transposicion(teorema, A, B, c)
             )
+            if teorema == TEOREMAS_TRANSPOSICION[1]:
+                texto = "\n".join([
+                    f"Verificación: {teorema}",
+                    f"Matriz A ({len(A)}×{len(A[0])}) =",
+                    formatear_matriz(A),
+                    f"Matriz B ({len(B)}×{len(B[0])}) =",
+                    formatear_matriz(B),
+                    _explicar_transposicion_suma(
+                        A, B, pasos, lado_izq, lado_der, coincide
+                    ),
+                ])
+                reemplazar_texto(
+                    self.resultado,
+                    texto,
+                    f"{nombre_izq} = {nombre_der}: "
+                    f"{'se cumple' if coincide else 'no se cumple'}",
+                )
+                return
             if teorema == TEOREMAS_TRANSPOSICION[3]:
                 texto = "\n".join([
                     f"Verificación: {teorema}",
