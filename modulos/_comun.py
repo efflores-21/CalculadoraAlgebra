@@ -1,4 +1,9 @@
-"""Estilo visual, componentes y validaciones comunes para todos los módulos."""
+"""
+Estilo visual, componentes compartidos y validaciones de la interfaz.
+
+Proyecto integrador: estructura común de todas las pantallas.
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import re
 import sys
@@ -25,6 +30,18 @@ COLOR = {
     "negro": "#111111",
     "hover": "#2E2E2E",
     "hover_claro": "#EFEFEF",
+    "marca": "#B5B5B5",
+}
+
+# Marca discreta de cada módulo, en el orden de entrega de los programas del curso.
+MARCAS = {
+    "sistemas": "P1 · P2",
+    "operaciones_vectores": "P3",
+    "vectores": "P4",
+    "matrices": "P3 · P5 · P6",
+    "determinantes": "P5",
+    "lu": "P6",
+    "propiedades": "P3 · P5",
 }
 
 if sys.platform.startswith("win"):
@@ -46,10 +63,6 @@ def fuente_mono(tamano=13, negrita=False):
         family=_FAMILIA_MONO, size=tamano, weight="bold" if negrita else "normal"
     )
 
-
-# ----------------------------------------------------------------------------
-# Validaciones y formato
-# ----------------------------------------------------------------------------
 
 def leer_entero(entry, etiqueta, minimo=1, maximo=DIMENSION_MAXIMA):
     """Valida una dimensión entera, equivalente a fijar el orden del objeto."""
@@ -97,6 +110,15 @@ def formatear_matriz(matriz):
         ) + " ]"
         for fila in textos
     )
+
+
+def formatear_paso_explicado(paso, incluir_estado=True):
+    """Renderiza un paso pedagógico estructurado; reutilizable entre módulos."""
+    lineas = [f"Objetivo: {paso['objetivo']}", f"Fundamento: {paso['fundamento']}",
+              f"Procedimiento: {paso['procedimiento']}", f"Resultado: {paso['resultado']}"]
+    if incluir_estado and paso.get("matriz") is not None:
+        lineas.append(formatear_matriz(paso["matriz"]))
+    return lineas
 
 
 def matriz_a_texto_portapapeles(matriz):
@@ -232,10 +254,6 @@ def mensaje_error(error):
     """Muestra al usuario un error de validación de forma explícita."""
     messagebox.showerror("Revisa los datos", str(error))
 
-
-# ----------------------------------------------------------------------------
-# Componentes básicos
-# ----------------------------------------------------------------------------
 
 def tarjeta(parent, **opciones):
     """Superficie blanca con esquinas redondeadas y borde fino."""
@@ -523,10 +541,6 @@ def reiniciar_celdas(*grupos):
                 celda.insert(0, "0")
 
 
-# ----------------------------------------------------------------------------
-# Área de resultados
-# ----------------------------------------------------------------------------
-
 def reemplazar_texto(caja, texto, resumen=None):
     """
     Sustituye todo el texto visible sin acumular resultados anteriores.
@@ -588,10 +602,6 @@ def matriz_en_linea(matriz):
         "  ".join(formatear_valor(valor) for valor in fila) for fila in matriz
     ) + "]"
 
-
-# ----------------------------------------------------------------------------
-# Estructura de cada módulo
-# ----------------------------------------------------------------------------
 
 def _crear_guia(parent, pasos, nota, indicacion):
     """Guía 'Cómo usar': pasos numerados, una nota y qué mostrará el resultado."""
@@ -700,9 +710,13 @@ def crear_estructura(
     encabezado = ctk.CTkFrame(panel, fg_color="transparent")
     encabezado.grid(row=1, column=0, sticky="ew", padx=34, pady=(0, 16))
     encabezado.grid_columnconfigure(0, weight=1)
-    etiqueta(encabezado, f"MÓDULO {numero}", tamano=11, negrita=True).grid(
-        row=0, column=0, sticky="w"
-    )
+    linea_modulo = ctk.CTkFrame(encabezado, fg_color="transparent")
+    linea_modulo.grid(row=0, column=0, sticky="w")
+    etiqueta(linea_modulo, f"MÓDULO {numero}", tamano=11, negrita=True).pack(side="left")
+    if clave_teoremas in MARCAS:
+        etiqueta(linea_modulo, MARCAS[clave_teoremas], tamano=10, color="marca").pack(
+            side="left", padx=(10, 0)
+        )
     ctk.CTkLabel(
         encabezado, text=titulo, font=fuente(28, negrita=True), text_color=COLOR["texto"]
     ).grid(row=1, column=0, sticky="w")

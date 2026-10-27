@@ -1,12 +1,15 @@
 """
-Operaciones elementales con matrices sobre Q (racionales).
+Operaciones con matrices: suma, resta, escalar, productos, transpuesta y cofactores.
 
-Las matrices se representan como listas de listas. Todos los valores se
-convierten internamente a fractions.Fraction. No se usa NumPy ni SciPy.
+Unidad II, Álgebra de matrices [P3 · P5 · P6].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
 from fractions import Fraction
 from backend.matriz import _a_fraction
+
+# Las expansiones por cofactores crecen factorialmente; se conserva el límite de la interfaz.
+LIMITE_COFACTORES = 8
 
 
 def _matriz_a_fraction(M):
@@ -165,7 +168,7 @@ def multiplicar_matrices(A, B):
     m, n = _dimensiones(mat_a)
     filas_b, p = _dimensiones(mat_b)
     if n != filas_b:
-        raise ValueError(f"columnas de A ({n}) ≠ filas de B ({filas_b})")
+        raise ValueError(f"No se puede multiplicar: Columnas de A [{n}] ≠ Filas de B [{filas_b}]")
 
     producto = []
     for i in range(m):
@@ -177,6 +180,18 @@ def multiplicar_matrices(A, B):
             fila.append(acumulado)
         producto.append(fila)
     return producto
+
+
+def identidad(n):
+    """Devuelve la matriz identidad I de orden n (lista de listas de Fraction)."""
+    return [[Fraction(int(i == j)) for j in range(n)] for i in range(n)]
+
+
+def son_iguales(X, Y):
+    """Indica si dos matrices (o vectores) son exactamente iguales, entrada por entrada."""
+    if isinstance(X, list) and isinstance(Y, list):
+        return len(X) == len(Y) and all(son_iguales(x, y) for x, y in zip(X, Y))
+    return _a_fraction(X) == _a_fraction(Y)
 
 
 def multiplicar_matriz_vector(A, x):
@@ -217,11 +232,6 @@ def multiplicar_matriz_vector(A, x):
             acumulado += matriz[i][j] * vector[j]
         resultado.append(acumulado)
     return resultado
-
-
-# ============================================================================
-# FUNCIONES PARA INVERSA POR MATRIZ ADJUNTA
-# ============================================================================
 
 
 def _determinante_2x2(A):
@@ -273,26 +283,22 @@ def determinante_por_cofactores(A):
             f"Se recibió una matriz {m}×{n}."
         )
     
-    # Caso base: matriz 1×1
     if n == 1:
         return mat_a[0][0]
     
-    # Caso base: matriz 2×2 (más eficiente que recursión)
+    # En 2×2 se usa ad − bc directamente: evita una recursión innecesaria.
     if n == 2:
         return _determinante_2x2(mat_a)
     
-    # Caso recursivo: expansión por la primera fila
     determinante = Fraction(0, 1)
     
     for j in range(n):
-        # Elemento de la primera fila
         elemento = mat_a[0][j]
         
-        # Si elemento es cero, no aporta al determinante
+        # Un elemento nulo anula su término: se evita calcular un menor que no aporta.
         if elemento == 0:
             continue
         
-        # Crear submatriz sin fila 0 y sin columna j
         submatriz = []
         for i in range(1, n):
             fila_sub = []
@@ -301,12 +307,11 @@ def determinante_por_cofactores(A):
                     fila_sub.append(mat_a[i][k])
             submatriz.append(fila_sub)
         
-        # Cofactor = (-1)^(0+j) × det(submatriz)
+        # El signo (-1)^j sigue el patrón de cofactores: alterna según la columna.
         signo = Fraction(1, 1) if j % 2 == 0 else Fraction(-1, 1)
         det_sub = determinante_por_cofactores(submatriz)
         cofactor = signo * det_sub
         
-        # Acumular en determinante
         determinante += elemento * cofactor
     
     return determinante
@@ -344,7 +349,6 @@ def matriz_menores(A):
         fila_menores = []
         
         for j in range(n):
-            # Crear submatriz sin fila i y sin columna j
             submatriz = []
             for fila in range(n):
                 if fila == i:
@@ -356,7 +360,6 @@ def matriz_menores(A):
                     fila_sub.append(mat_a[fila][col])
                 submatriz.append(fila_sub)
             
-            # Calcular determinante de la submatriz
             if len(submatriz) == 0:
                 # El determinante de la submatriz vacía es 1 por convención.
                 menor = Fraction(1, 1)
@@ -397,10 +400,9 @@ def matriz_cofactores(A):
             f"Se recibió una matriz {m}×{n}."
         )
     
-    # Obtener menores
     menores = matriz_menores(mat_a)
     
-    # Aplicar el signo (-1)^(i+j) a cada menor
+    # El signo (-1)^(i+j) alterna como un tablero de ajedrez: así se pasa de menor a cofactor.
     cofactores = []
     for i in range(n):
         fila_cofactores = []
@@ -431,7 +433,6 @@ def transponer_matriz(A):
     mat_a = _matriz_a_fraction(A)
     m, n = _dimensiones(mat_a)
     
-    # Transponer: recorrer columnas y convertirlas en filas
     transpuesta = []
     for j in range(n):
         fila_transpuesta = []
@@ -469,10 +470,8 @@ def matriz_adjunta(A):
             f"Se recibió una matriz {m}×{n}."
         )
     
-    # Obtener cofactores
     cofactores = matriz_cofactores(mat_a)
     
-    # Transponer los cofactores
     adjunta = transponer_matriz(cofactores)
     
     return adjunta
@@ -513,36 +512,30 @@ def inversa_por_adjunta(A):
             f"Se recibió una matriz {m}×{n}."
         )
     
-    # Calcular determinante
     determinante = determinante_por_cofactores(mat_a)
     
-    # Verificar que no sea singular
+    # Con det(A) = 0 la fórmula 1/det(A) no existe: la matriz no tiene inversa.
     if determinante == 0:
         raise ValueError(
             "La matriz es singular (determinante = 0) y no tiene inversa."
         )
     
-    # Inicializar pasos
     pasos = [
         ("Matriz original A", [fila[:] for fila in mat_a])
     ]
     
-    # Calcular menores
     menores = matriz_menores(mat_a)
     pasos.append(("Matriz de menores M", [fila[:] for fila in menores]))
     
-    # Calcular cofactores
     cofactores = matriz_cofactores(mat_a)
     pasos.append(("Matriz de cofactores C", [fila[:] for fila in cofactores]))
     
-    # Calcular adjunta (transpuesta de cofactores)
     adjunta = transponer_matriz(cofactores)
     pasos.append(("Matriz adjunta Adj(A) = C^T", [fila[:] for fila in adjunta]))
     
-    # Incluir determinante
     pasos.append((f"Determinante det(A) = {determinante}", [fila[:] for fila in mat_a]))
     
-    # Calcular inversa: A^-1 = (1/det(A)) × Adj(A)
+    # Fórmula de la adjunta: A^-1 = (1/det(A)) · adj(A).
     escalar_inverso = Fraction(1, 1) / determinante
     inversa = multiplicar_escalar_matriz(escalar_inverso, adjunta)
     

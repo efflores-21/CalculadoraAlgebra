@@ -1,4 +1,11 @@
-"""Panel de ejercicios interactivos sobre propiedades de matrices."""
+"""
+Pantalla de propiedades de matrices: producto, transposición, inversa y determinantes.
+
+Unidad II, Álgebra de matrices [P3 · P5]. Incluye la linealidad del producto
+matriz-vector, ejemplos de no conmutatividad, cancelación y producto nulo, y los
+criterios de invertibilidad.
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from fractions import Fraction
 
@@ -30,6 +37,259 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _explicar_suma_vectores(u, v, resultado):
+    """Desglosa una suma componente a componente usando el resultado exacto."""
+    return "\n".join(
+        f"    Componente {indice}: {formatear_valor(a)} + "
+        f"{formatear_valor(b)} = {formatear_valor(r)}"
+        for indice, (a, b, r) in enumerate(zip(u, v, resultado), start=1)
+    )
+
+
+def _explicar_producto_matriz_vector(A, vector, resultado, nombre):
+    """Presenta cada producto fila-vector y su suma exacta del backend."""
+    lineas = []
+    for indice_fila, (fila, valor) in enumerate(zip(A, resultado), start=1):
+        productos = [a * x for a, x in zip(fila, vector)]
+        desarrollo = "; ".join(
+            f"({formatear_valor(a)})({formatear_valor(x)}) = "
+            f"{formatear_valor(producto)}"
+            for a, x, producto in zip(fila, vector, productos)
+        )
+        suma = formatear_valor(productos[0])
+        for producto in productos[1:]:
+            if producto < 0:
+                suma += f" - {formatear_valor(-producto)}"
+            else:
+                suma += f" + {formatear_valor(producto)}"
+        lineas.append(
+            f"    Componente {indice_fila}: {nombre}: productos: {desarrollo}; "
+            f"suma: {suma} = {formatear_valor(valor)}"
+        )
+    return "\n".join(lineas)
+
+
+def _explicar_escalado(escalar, vector, resultado):
+    """Muestra las multiplicaciones escalares y los resultados del backend."""
+    return "\n".join(
+        f"    Componente {indice}: ({formatear_valor(escalar)})"
+        f"({formatear_valor(valor)}) = {formatear_valor(resultado[indice - 1])}"
+        for indice, valor in enumerate(vector, start=1)
+    )
+
+
+def _dimensiones_matriz(matriz):
+    """Devuelve filas y columnas de una matriz no vacía ya validada."""
+    return len(matriz), len(matriz[0])
+
+
+def _explicar_producto_matrices(nombre, izquierda, derecha, resultado):
+    """Desglosa las entradas de un producto y reutiliza su matriz resultante."""
+    filas, comunes = _dimensiones_matriz(izquierda)
+    filas_derecha, columnas = _dimensiones_matriz(derecha)
+    lineas = [
+        f"{nombre}: ({filas}×{comunes}) · ({filas_derecha}×{columnas}) "
+        f"= ({filas}×{columnas})"
+    ]
+    for i in range(filas):
+        for j in range(columnas):
+            productos = [izquierda[i][k] * derecha[k][j] for k in range(comunes)]
+            terminos = "; ".join(
+                f"({formatear_valor(izquierda[i][k])})·"
+                f"({formatear_valor(derecha[k][j])}) = "
+                f"{formatear_valor(productos[k])}"
+                for k in range(comunes)
+            )
+            suma = formatear_valor(productos[0])
+            for producto in productos[1:]:
+                if producto < 0:
+                    suma += f" - {formatear_valor(-producto)}"
+                else:
+                    suma += f" + {formatear_valor(producto)}"
+            lineas.append(
+                f"  Entrada ({i + 1},{j + 1}): {terminos}; "
+                f"suma: {suma} = {formatear_valor(resultado[i][j])}"
+            )
+    return "\n".join(lineas)
+
+
+def _explicar_comparacion_matrices(izquierda, derecha):
+    """Compara dos matrices entrada por entrada con valores exactos."""
+    return "\n".join(
+        f"  Entrada ({i + 1},{j + 1}): {formatear_valor(a)} = "
+        f"{formatear_valor(b)}"
+        for i, (fila_a, fila_b) in enumerate(zip(izquierda, derecha))
+        for j, (a, b) in enumerate(zip(fila_a, fila_b))
+    )
+
+
+def _explicar_suma_matrices(nombre, izquierda, derecha, resultado):
+    """Desarrolla una suma matricial por entradas usando su resultado calculado."""
+    filas, columnas = _dimensiones_matriz(izquierda)
+    lineas = [f"{nombre}: matrices de {filas}×{columnas}"]
+    for i in range(filas):
+        for j in range(columnas):
+            lineas.append(
+                f"  Entrada ({i + 1},{j + 1}): "
+                f"{formatear_valor(izquierda[i][j])} + "
+                f"{formatear_valor(derecha[i][j])} = "
+                f"{formatear_valor(resultado[i][j])}"
+            )
+    return "\n".join(lineas)
+
+
+def _explicar_transposicion_producto(A, B, pasos, lado_izq, lado_der, coincide):
+    """Explica (AB)^T = B^T A^T reutilizando los resultados ya calculados."""
+    resultados = dict(pasos)
+    producto = resultados["AB"]
+    transpuesta_producto = resultados["(AB)ᵀ"]
+    transpuesta_b = resultados["Bᵀ"]
+    transpuesta_a = resultados["Aᵀ"]
+    producto_transpuestas = resultados["BᵀAᵀ"]
+    m, n = _dimensiones_matriz(A)
+    filas_b, p = _dimensiones_matriz(B)
+
+    lineas = [
+        f"Dimensiones: A es {m}×{n} y B es {filas_b}×{p}. "
+        f"El producto AB es compatible porque columnas(A) = {n} = filas(B).",
+        f"Por tanto, AB es {m}×{p}; (AB)ᵀ es {p}×{m}; "
+        f"Bᵀ es {p}×{filas_b}; Aᵀ es {n}×{m}; y BᵀAᵀ es {p}×{m}.",
+        "Resultados intermedios calculados:",
+    ]
+    for nombre, matriz in pasos:
+        lineas.extend([f"{nombre} =", formatear_matriz(matriz)])
+
+    lineas.extend([
+        "Desarrollo del lado izquierdo: primero calculamos AB por fila y columna.",
+        _explicar_producto_matrices("AB", A, B, producto),
+        "Transponer intercambia los índices: la entrada (i,j) de AB pasa "
+        "a la posición (j,i) de (AB)ᵀ.",
+    ])
+    for i in range(len(producto)):
+        for j in range(len(producto[0])):
+            lineas.append(
+                f"  (AB)[{i + 1},{j + 1}] = "
+                f"{formatear_valor(producto[i][j])}; "
+                f"(AB)ᵀ[{j + 1},{i + 1}] = "
+                f"{formatear_valor(transpuesta_producto[j][i])}"
+            )
+
+    lineas.extend([
+        "Desarrollo del lado derecho: al multiplicar Bᵀ por Aᵀ, "
+        "cada entrada se obtiene con productos fila por columna.",
+        _explicar_producto_matrices(
+            "BᵀAᵀ", transpuesta_b, transpuesta_a, producto_transpuestas
+        ),
+        "Comparación entrada por entrada de (AB)ᵀ y BᵀAᵀ:",
+    ])
+    diferencias = []
+    for i, (fila_izq, fila_der) in enumerate(
+        zip(lado_izq, lado_der), start=1
+    ):
+        for j, (valor_izq, valor_der) in enumerate(
+            zip(fila_izq, fila_der), start=1
+        ):
+            if valor_izq == valor_der:
+                lineas.append(
+                    f"  Entrada ({i},{j}): {formatear_valor(valor_izq)} = "
+                    f"{formatear_valor(valor_der)} (coinciden)"
+                )
+            else:
+                diferencias.append((i, j, valor_izq, valor_der))
+                lineas.append(
+                    f"  Entrada ({i},{j}): {formatear_valor(valor_izq)} ≠ "
+                    f"{formatear_valor(valor_der)} (difieren)"
+                )
+    if coincide and not diferencias:
+        lineas.append(
+            "Conclusión: (AB)ᵀ = BᵀAᵀ se cumple para las matrices ingresadas. "
+            "Este cálculo ilustra la identidad, pero no es por sí solo una "
+            "demostración universal."
+        )
+    else:
+        lineas.append(
+            "Conclusión: la identidad no coincide para estas matrices ingresadas. "
+            "Se señalan arriba las posiciones y los valores diferentes."
+        )
+    return "\n".join(lineas)
+
+
+def _explicar_transposicion_suma(A, B, pasos, lado_izq, lado_der, coincide):
+    """Desarrolla (A+B)^T = A^T+B^T con los resultados ya calculados."""
+    resultados = dict(pasos)
+    suma = resultados["A + B"]
+    transpuesta_suma = resultados["(A + B)ᵀ"]
+    transpuesta_a = resultados["Aᵀ"]
+    transpuesta_b = resultados["Bᵀ"]
+    suma_transpuestas = resultados["Aᵀ + Bᵀ"]
+    filas, columnas = _dimensiones_matriz(A)
+
+    lineas = [
+        f"Dimensiones: A y B son ambas {filas}×{columnas}; "
+        "la suma está definida porque tienen el mismo tamaño.",
+        f"A+B es {filas}×{columnas} y (A+B)ᵀ es {columnas}×{filas}. "
+        f"Aᵀ y Bᵀ son ambas {columnas}×{filas}; su suma también es "
+        f"{columnas}×{filas}.",
+        "Resultados intermedios calculados:",
+    ]
+    for nombre, matriz in pasos:
+        lineas.extend([f"{nombre} =", formatear_matriz(matriz)])
+
+    lineas.extend([
+        "Lado izquierdo: sumamos A+B entrada por entrada.",
+        _explicar_suma_matrices("A+B", A, B, suma),
+        "Al transponer, la entrada de posición (i,j) pasa a (j,i). "
+        "Así se forma (A+B)ᵀ con las entradas de la suma anterior:",
+    ])
+    for i in range(filas):
+        for j in range(columnas):
+            lineas.append(
+                f"  (A+B)[{i + 1},{j + 1}] = "
+                f"{formatear_valor(suma[i][j])}; "
+                f"(A+B)ᵀ[{j + 1},{i + 1}] = "
+                f"{formatear_valor(transpuesta_suma[j][i])}"
+            )
+
+    lineas.extend([
+        f"Lado derecho: Aᵀ y Bᵀ son matrices de {columnas}×{filas}; "
+        "sumamos sus entradas correspondientes:",
+        _explicar_suma_matrices(
+            "Aᵀ+Bᵀ", transpuesta_a, transpuesta_b, suma_transpuestas
+        ),
+        "Comparación entrada por entrada de (A+B)ᵀ y Aᵀ+Bᵀ:",
+        _comparar_matrices_distributividad(lado_izq, lado_der),
+    ])
+    if coincide:
+        lineas.append(
+            "Conclusión: (A+B)ᵀ = Aᵀ+Bᵀ se verifica para las matrices "
+            "ingresadas. Este ejemplo numérico no constituye por sí solo "
+            "una demostración universal."
+        )
+    else:
+        lineas.append(
+            "Conclusión: la identidad no coincide para estas matrices "
+            "ingresadas; las posiciones y valores diferentes aparecen "
+            "en la comparación."
+        )
+    return "\n".join(lineas)
+
+
+def _comparar_matrices_distributividad(izquierda, derecha):
+    """Explicita coincidencias y diferencias entre las entradas de ambos lados."""
+    lineas = []
+    for i, (fila_izquierda, fila_derecha) in enumerate(
+        zip(izquierda, derecha), start=1
+    ):
+        for j, (a, b) in enumerate(zip(fila_izquierda, fila_derecha), start=1):
+            estado = "coinciden" if a == b else "difieren"
+            signo = "=" if a == b else "≠"
+            lineas.append(
+                f"  Entrada ({i},{j}): {formatear_valor(a)} {signo} "
+                f"{formatear_valor(b)} ({estado})"
+            )
+    return "\n".join(lineas)
 
 
 TEOREMAS_TRANSPOSICION = (
@@ -82,13 +342,18 @@ def calcular_teorema_producto(teorema, A, B=None, C=None):
     if teorema == TEOREMAS_PRODUCTO[0]:
         if B is None or C is None:
             raise ValueError("Ingrese las matrices B y C para verificar asociatividad.")
-        bc = producto("BC", B, C)
-        izquierda = producto("A(BC)", A, bc)
         ab = producto("AB", A, B)
-        derecha = producto("(AB)C", ab, C)
-        nombre_izq, nombre_der = "A(BC)", "(AB)C"
+        izquierda = producto("(AB)C", ab, C)
+        bc = producto("BC", B, C)
+        derecha = producto("A(BC)", A, bc)
+        nombre_izq, nombre_der = "(AB)C", "A(BC)"
         coincide = izquierda == derecha
-        conclusion = "La multiplicación es asociativa para estas matrices."
+        conclusion = (
+            "Para las matrices ingresadas, ambos lados coinciden. "
+            "La asociatividad general se debe a la asociatividad del producto "
+            "de escalares y a que se pueden reagrupar las sumas finitas."
+            if coincide else "Los resultados de este cálculo no coinciden."
+        )
     elif teorema == TEOREMAS_PRODUCTO[1]:
         if B is None or C is None:
             raise ValueError("Ingrese las matrices B y C para verificar distributividad.")
@@ -99,7 +364,10 @@ def calcular_teorema_producto(teorema, A, B=None, C=None):
         derecha = suma("AB + AC", ab, ac)
         nombre_izq, nombre_der = "A(B+C)", "AB+AC"
         coincide = izquierda == derecha
-        conclusion = "Se cumple la distributividad a la izquierda." if coincide else "No coincide la igualdad."
+        conclusion = (
+            "A(B+C) y AB+AC coinciden para las matrices ingresadas."
+            if coincide else "A(B+C) y AB+AC no coinciden para las matrices ingresadas."
+        )
     elif teorema == TEOREMAS_PRODUCTO[2]:
         if B is None or C is None:
             raise ValueError("Ingrese las matrices A, B y C para verificar distributividad.")
@@ -110,7 +378,10 @@ def calcular_teorema_producto(teorema, A, B=None, C=None):
         derecha = suma("AC + BC", ac, bc)
         nombre_izq, nombre_der = "(A+B)C", "AC+BC"
         coincide = izquierda == derecha
-        conclusion = "Se cumple la distributividad a la derecha." if coincide else "No coincide la igualdad."
+        conclusion = (
+            "(A+B)C y AC+BC coinciden para las matrices ingresadas."
+            if coincide else "(A+B)C y AC+BC no coinciden para las matrices ingresadas."
+        )
     elif teorema == TEOREMAS_PRODUCTO[3]:
         filas, columnas = len(A), len(A[0])
         identidad_filas = [[Fraction(int(i == j)) for j in range(filas)] for i in range(filas)]
@@ -705,16 +976,119 @@ class ModuloPropiedades(ctk.CTkFrame):
             )
             lineas = [f"Verificación: {teorema}", "Matrices de entrada:"]
             for nombre in necesarios:
-                lineas.extend([f"{nombre} =", formatear_matriz(matrices[nombre])])
-            lineas.append("Operaciones intermedias:")
-            for descripcion, resultado in pasos:
-                lineas.extend([f"{descripcion} =", formatear_matriz(resultado), ""])
-            lineas.extend([
-                f"Lado izquierdo: {nombre_izq} =", formatear_matriz(izquierda),
-                f"Lado derecho: {nombre_der} =", formatear_matriz(derecha),
-                "Criterio del ejercicio: " + ("confirmado" if coincide else "no confirmado"),
-                "Conclusión: " + conclusion,
-            ])
+                matriz = matrices[nombre]
+                filas, columnas = _dimensiones_matriz(matriz)
+                lineas.extend([
+                    f"{nombre} ({filas}×{columnas}) =",
+                    formatear_matriz(matriz),
+                ])
+
+            if teorema == TEOREMAS_PRODUCTO[0]:
+                resultados = dict(pasos)
+                ab = resultados["AB"]
+                bc = resultados["BC"]
+                lineas.extend([
+                    "\nPropiedad: (AB)C = A(BC). El producto de matrices usa "
+                    "sumas de productos de entradas; por la asociatividad de "
+                    "la multiplicación escalar y el reagrupamiento de sumas "
+                    "finitas, ambos agrupamientos representan la misma entrada.",
+                    "En una entrada: ((AB)C)ᵢⱼ = Σₖ(Σᵣ aᵢᵣbᵣₖ)cₖⱼ "
+                    "= Σᵣaᵢᵣ(Σₖ bᵣₖcₖⱼ) = (A(BC))ᵢⱼ; los índices recorren "
+                    "las dimensiones compatibles de las matrices.",
+                    "El desarrollo siguiente verifica esa igualdad para las "
+                    "matrices ingresadas; por sí solo no es una demostración universal.",
+                    "\nLado izquierdo: primero calculamos AB.",
+                    _explicar_producto_matrices("AB", matrices["A"], matrices["B"], ab),
+                    "AB =", formatear_matriz(ab),
+                    "\nAhora multiplicamos el resultado AB por C.",
+                    _explicar_producto_matrices("(AB)C", ab, matrices["C"], izquierda),
+                    "(AB)C =", formatear_matriz(izquierda),
+                    "\nLado derecho: primero calculamos BC.",
+                    _explicar_producto_matrices("BC", matrices["B"], matrices["C"], bc),
+                    "BC =", formatear_matriz(bc),
+                    "\nAhora multiplicamos A por el resultado BC.",
+                    _explicar_producto_matrices("A(BC)", matrices["A"], bc, derecha),
+                    "A(BC) =", formatear_matriz(derecha),
+                    "\nComparación entrada por entrada:",
+                    _explicar_comparacion_matrices(izquierda, derecha),
+                    "Conclusión para estas matrices: " + conclusion,
+                ])
+            elif teorema in (TEOREMAS_PRODUCTO[1], TEOREMAS_PRODUCTO[2]):
+                resultados = dict(pasos)
+                es_izquierda = teorema == TEOREMAS_PRODUCTO[1]
+                if es_izquierda:
+                    suma_entrada = resultados["B + C"]
+                    suma_final = resultados["AB + AC"]
+                    lineas.extend([
+                        "\nDistributividad por la izquierda: A(B + C) = AB + AC.",
+                        "En cada entrada, Σₖ aᵢₖ(bₖⱼ + cₖⱼ) "
+                        "= Σₖ(aᵢₖbₖⱼ) + Σₖ(aᵢₖcₖⱼ): la multiplicación "
+                        "escalar distribuye sobre la suma, y luego se suman "
+                        "las contribuciones de cada columna.",
+                        "La comprobación numérica corresponde a las matrices "
+                        "ingresadas; por sí sola no demuestra la ley para todas las matrices.",
+                        "\nPrimero sumamos B + C entrada por entrada.",
+                        _explicar_suma_matrices("B + C", matrices["B"], matrices["C"], suma_entrada),
+                        "B + C =", formatear_matriz(suma_entrada),
+                        "\nLado izquierdo: calculamos A(B + C).",
+                        _explicar_producto_matrices(
+                            "A(B + C)", matrices["A"], suma_entrada, izquierda
+                        ),
+                        "A(B + C) =", formatear_matriz(izquierda),
+                        "\nLado derecho: calculamos AB.",
+                        _explicar_producto_matrices("AB", matrices["A"], matrices["B"], resultados["AB"]),
+                        "AB =", formatear_matriz(resultados["AB"]),
+                        "\nCalculamos AC.",
+                        _explicar_producto_matrices("AC", matrices["A"], matrices["C"], resultados["AC"]),
+                        "AC =", formatear_matriz(resultados["AC"]),
+                        "\nSumamos AB + AC entrada por entrada.",
+                        _explicar_suma_matrices("AB + AC", resultados["AB"], resultados["AC"], suma_final),
+                        "AB + AC =", formatear_matriz(suma_final),
+                    ])
+                else:
+                    suma_entrada = resultados["A + B"]
+                    suma_final = resultados["AC + BC"]
+                    lineas.extend([
+                        "\nDistributividad por la derecha: (A + B)C = AC + BC.",
+                        "En cada entrada, Σₖ(aᵢₖ + bᵢₖ)cₖⱼ "
+                        "= Σₖ(aᵢₖcₖⱼ) + Σₖ(bᵢₖcₖⱼ): la multiplicación "
+                        "escalar distribuye sobre la suma, y luego se suman "
+                        "las contribuciones de cada fila.",
+                        "La comprobación numérica corresponde a las matrices "
+                        "ingresadas; por sí sola no demuestra la ley para todas las matrices.",
+                        "\nPrimero sumamos A + B entrada por entrada.",
+                        _explicar_suma_matrices("A + B", matrices["A"], matrices["B"], suma_entrada),
+                        "A + B =", formatear_matriz(suma_entrada),
+                        "\nLado izquierdo: calculamos (A + B)C.",
+                        _explicar_producto_matrices(
+                            "(A + B)C", suma_entrada, matrices["C"], izquierda
+                        ),
+                        "(A + B)C =", formatear_matriz(izquierda),
+                        "\nLado derecho: calculamos AC.",
+                        _explicar_producto_matrices("AC", matrices["A"], matrices["C"], resultados["AC"]),
+                        "AC =", formatear_matriz(resultados["AC"]),
+                        "\nCalculamos BC.",
+                        _explicar_producto_matrices("BC", matrices["B"], matrices["C"], resultados["BC"]),
+                        "BC =", formatear_matriz(resultados["BC"]),
+                        "\nSumamos AC + BC entrada por entrada.",
+                        _explicar_suma_matrices("AC + BC", resultados["AC"], resultados["BC"], suma_final),
+                        "AC + BC =", formatear_matriz(suma_final),
+                    ])
+                lineas.extend([
+                    "\nComparación entrada por entrada:",
+                    _comparar_matrices_distributividad(izquierda, derecha),
+                    "Conclusión: " + conclusion,
+                ])
+            else:
+                lineas.append("Operaciones intermedias:")
+                for descripcion, resultado in pasos:
+                    lineas.extend([f"{descripcion} =", formatear_matriz(resultado), ""])
+                lineas.extend([
+                    f"Lado izquierdo: {nombre_izq} =", formatear_matriz(izquierda),
+                    f"Lado derecho: {nombre_der} =", formatear_matriz(derecha),
+                    "Criterio del ejercicio: " + ("confirmado" if coincide else "no confirmado"),
+                    "Conclusión: " + conclusion,
+                ])
             reemplazar_texto(self.resultado, "\n".join(lineas))
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
@@ -921,25 +1295,59 @@ class ModuloPropiedades(ctk.CTkFrame):
 
             estado_a = "SE CUMPLE" if datos["a_se_cumple"] else "NO SE CUMPLE"
             estado_b = "SE CUMPLE" if datos["b_se_cumple"] else "NO SE CUMPLE"
+            u_mas_v = datos["a_u_mas_v"]
+            au = datos["a_Au"]
+            av = datos["a_Av"]
+            au_mas_av = datos["a_Au_mas_Av"]
+            cu = datos["b_c_por_u"]
+            c_au = datos["b_c_por_Au"]
             texto = (
                 "MÓDULO 6: PROPIEDADES DEL PRODUCTO MATRIZ-VECTOR\n"
+                f"A es de dimensión {len(A)}×{len(A[0])}; u y v tienen "
+                f"dimensión {len(u)} y sus imágenes tienen dimensión {len(A)}.\n"
                 f"A =\n{formatear_matriz(A)}\n"
                 f"u = {formatear_vector(u)};  v = {formatear_vector(v)};  "
                 f"c = {formatear_valor(c)}\n\n"
                 "A) A(u+v) = Au+Av\n"
-                f"  1. u+v = {vector('a_u_mas_v')}\n"
-                f"  2. A(u+v) = {vector('a_A_por_u_mas_v')}\n"
-                f"  3. Au = {vector('a_Au')}; Av = {vector('a_Av')}\n"
-                f"  4. Au+Av = {vector('a_Au_mas_Av')}\n"
+                "  La aditividad afirma que aplicar A a la suma equivale a "
+                "sumar las imágenes. Es válida porque cada componente de Ax "
+                "es una suma de productos y la suma distribuye sobre sus términos. "
+                "Comprobamos esta igualdad para los datos ingresados.\n"
+                "  1. Sumamos u y v componente a componente:\n"
+                f"{_explicar_suma_vectores(u, v, u_mas_v)}\n"
+                f"     u+v = {vector('a_u_mas_v')}\n"
+                "  2. Lado izquierdo: multiplicamos cada fila de A por u+v.\n"
+                f"{_explicar_producto_matriz_vector(A, u_mas_v, datos['a_A_por_u_mas_v'], 'A(u+v)')}\n"
+                f"     A(u+v) = {vector('a_A_por_u_mas_v')}\n"
+                "  3. Calculamos por separado Au y Av:\n"
+                f"{_explicar_producto_matriz_vector(A, u, au, 'Au')}\n"
+                f"     Au = {vector('a_Au')}\n"
+                f"{_explicar_producto_matriz_vector(A, v, av, 'Av')}\n"
+                f"     Av = {vector('a_Av')}\n"
+                "  4. Lado derecho: sumamos Au y Av componente a componente:\n"
+                f"{_explicar_suma_vectores(au, av, au_mas_av)}\n"
+                f"     Au+Av = {vector('a_Au_mas_Av')}\n"
                 f"  Comparación: {vector('a_A_por_u_mas_v')} = "
                 f"{vector('a_Au_mas_Av')} -> {estado_a}\n\n"
                 "B) A(cu) = c(Au)\n"
-                f"  1. cu = {vector('b_c_por_u')}\n"
-                f"  2. A(cu) = {vector('b_A_por_cu')}\n"
+                "  La homogeneidad afirma que multiplicar u por c antes de "
+                "aplicar A equivale a multiplicar Au por c, ya que el escalar "
+                "puede factorizarse en cada suma de productos de las filas.\n"
+                "  1. Multiplicamos cada componente de u por c:\n"
+                f"{_explicar_escalado(c, u, cu)}\n"
+                f"     cu = {vector('b_c_por_u')}\n"
+                "  2. Lado izquierdo: aplicamos A a cu:\n"
+                f"{_explicar_producto_matriz_vector(A, cu, datos['b_A_por_cu'], 'A(cu)')}\n"
+                f"     A(cu) = {vector('b_A_por_cu')}\n"
                 f"  3. Au = {vector('b_Au')}\n"
-                f"  4. c(Au) = {vector('b_c_por_Au')}\n"
+                "  4. Lado derecho: multiplicamos cada componente de Au por c:\n"
+                f"{_explicar_escalado(c, au, c_au)}\n"
+                f"     c(Au) = {vector('b_c_por_Au')}\n"
                 f"  Comparación: {vector('b_A_por_cu')} = "
-                f"{vector('b_c_por_Au')} -> {estado_b}\n"
+                f"{vector('b_c_por_Au')} -> {estado_b}\n\n"
+                "La coincidencia confirma las igualdades para estos valores; "
+                "esta comprobación numérica no sustituye una demostración "
+                "para todos los vectores y escalares.\n"
             )
             resumen = (
                 f"A(u + v) = Au + Av:  {estado_a.lower()}    ·    "
@@ -963,6 +1371,42 @@ class ModuloPropiedades(ctk.CTkFrame):
             pasos, nombre_izq, lado_izq, nombre_der, lado_der, coincide = (
                 calcular_teorema_transposicion(teorema, A, B, c)
             )
+            if teorema == TEOREMAS_TRANSPOSICION[1]:
+                texto = "\n".join([
+                    f"Verificación: {teorema}",
+                    f"Matriz A ({len(A)}×{len(A[0])}) =",
+                    formatear_matriz(A),
+                    f"Matriz B ({len(B)}×{len(B[0])}) =",
+                    formatear_matriz(B),
+                    _explicar_transposicion_suma(
+                        A, B, pasos, lado_izq, lado_der, coincide
+                    ),
+                ])
+                reemplazar_texto(
+                    self.resultado,
+                    texto,
+                    f"{nombre_izq} = {nombre_der}: "
+                    f"{'se cumple' if coincide else 'no se cumple'}",
+                )
+                return
+            if teorema == TEOREMAS_TRANSPOSICION[3]:
+                texto = "\n".join([
+                    f"Verificación: {teorema}",
+                    f"Matriz A ({len(A)}×{len(A[0])}) =",
+                    formatear_matriz(A),
+                    f"Matriz B ({len(B)}×{len(B[0])}) =",
+                    formatear_matriz(B),
+                    _explicar_transposicion_producto(
+                        A, B, pasos, lado_izq, lado_der, coincide
+                    ),
+                ])
+                reemplazar_texto(
+                    self.resultado,
+                    texto,
+                    f"{nombre_izq} = {nombre_der}: "
+                    f"{'se cumple' if coincide else 'no se cumple'}",
+                )
+                return
             lineas = [f"Verificación: {teorema}", "Matriz A:", formatear_matriz(A)]
             if B is not None:
                 lineas.extend(["Matriz B:", formatear_matriz(B)])

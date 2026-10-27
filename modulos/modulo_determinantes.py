@@ -1,10 +1,20 @@
-"""Ventana independiente para calcular determinantes de matrices cuadradas."""
+"""
+Pantalla del módulo de determinantes por eliminación triangular.
+
+Unidad II, Determinantes [P5].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 import customtkinter as ctk
+from fractions import Fraction
 
 from backend.matriz import formatear_valor
-from backend.matrices import determinante_cofactores_con_pasos, determinante_triangular
-from backend.operaciones_matriciales import suma_matrices
+from backend.matrices import (
+    determinante_cofactores_con_pasos,
+    determinante_triangular,
+    sarrus_3x3,
+)
+from backend.operaciones_matriciales import LIMITE_COFACTORES, suma_matrices
 from modulos._comun import (
     boton_primario,
     boton_secundario,
@@ -22,6 +32,163 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _texto_pasos_cofactores(pasos):
+    """Presenta en orden los menores, cofactores y términos registrados."""
+    lineas = []
+    for indice, (descripcion, estado) in enumerate(pasos, 1):
+        lineas.append(f"Paso {indice}: {descripcion}")
+        if estado is not None:
+            lineas.append(formatear_matriz(estado))
+    return lineas
+
+
+def _texto_traza_triangular(pasos):
+    """Explica cada estado de la triangularización sin inventar operaciones."""
+    if not pasos:
+        return []
+
+    descripcion_inicial, estado_anterior = pasos[0]
+    lineas = [
+        "Reducimos A a forma triangular para obtener el determinante desde su diagonal.",
+        "Restar a una fila un múltiplo de otra conserva el determinante; "
+        "cada intercambio de filas cambia su signo.",
+        f"Estado inicial: {descripcion_inicial}",
+        formatear_matriz(estado_anterior),
+    ]
+    signo = 1
+
+    for descripcion, estado in pasos[1:]:
+        if descripcion.startswith("Intercambiar F"):
+            intercambio = descripcion.removeprefix("Intercambiar F").split(";", 1)[0]
+            partes = intercambio.split(" y F")
+            fila_1, fila_2 = int(partes[0]) - 1, int(partes[1]) - 1
+            signo *= -1
+            lineas.extend([
+                f"Operación: {descripcion}",
+                "Antes del intercambio:",
+                formatear_matriz(estado_anterior),
+                f"F{fila_1 + 1} y F{fila_2 + 1} intercambian todas sus entradas. "
+                f"Este intercambio invierte el signo; signo acumulado = {signo:+d}.",
+                "Después del intercambio:",
+                formatear_matriz(estado),
+            ])
+        elif descripcion.startswith("Pivote "):
+            columna = int(descripcion.split()[1].rstrip(":")) - 1
+            pivote = estado[columna][columna]
+            lineas.extend([
+                f"{descripcion} Se usa para anular las entradas inferiores de "
+                "esta columna; no altera la matriz ni el determinante.",
+                formatear_matriz(estado),
+            ])
+        elif " <- " in descripcion:
+            destino, lado_derecho = descripcion.split(" <- ", 1)
+            fila_destino = int(destino.removeprefix("F")) - 1
+            fila_pivote = int(lado_derecho.rsplit("F", 1)[1].rstrip(".")) - 1
+            columna_pivote = fila_pivote
+            pivote = estado_anterior[fila_pivote][columna_pivote]
+            factor = estado_anterior[fila_destino][columna_pivote] / pivote
+            lineas.extend([
+                f"Operación: {descripcion}",
+                f"El pivote es {formatear_valor(pivote)} en F{fila_pivote + 1}; "
+                f"el multiplicador es {formatear_valor(factor)}. "
+                "Se busca hacer cero la entrada bajo el pivote.",
+                "Antes de la operación:",
+                formatear_matriz(estado_anterior),
+            ])
+            for columna in range(columna_pivote, len(estado[fila_destino])):
+                antes = estado_anterior[fila_destino][columna]
+                base = estado_anterior[fila_pivote][columna]
+                despues = estado[fila_destino][columna]
+                if antes != despues:
+                    calculado = antes - factor * base
+                    lineas.append(
+                        f"  Entrada ({fila_destino + 1},{columna + 1}): "
+                        f"{formatear_valor(antes)} - "
+                        f"({formatear_valor(factor)})({formatear_valor(base)}) "
+                        f"= {formatear_valor(calculado)}"
+                    )
+                    if calculado != despues:
+                        lineas.append(
+                            "  Aviso: este cálculo no coincide con el estado "
+                            f"registrado ({formatear_valor(despues)})."
+                        )
+            lineas.extend([
+                "Después de la operación:",
+                formatear_matriz(estado),
+                "Esta operación conserva el determinante.",
+            ])
+        elif descripcion.startswith("No hay pivote"):
+            lineas.extend([
+                descripcion,
+                "La matriz queda con una columna sin pivote y es singular; "
+                "por ello det(A) = 0.",
+                formatear_matriz(estado),
+            ])
+        elif descripcion.startswith("Diagonal final"):
+            diagonal = [estado[i][i] for i in range(len(estado))]
+            producto = Fraction(1)
+            for valor in diagonal:
+                producto *= valor
+            lineas.extend([
+                descripcion,
+                formatear_matriz(estado),
+                "En una matriz triangular, el determinante es el producto de "
+                f"la diagonal: {formatear_valor(producto)}; se aplica el signo "
+                f"acumulado ({signo:+d}) de los intercambios.",
+            ])
+        else:
+            lineas.extend([descripcion, formatear_matriz(estado)])
+        estado_anterior = estado
+
+    return lineas
+
+
+def _texto_sarrus(A):
+    """Desarrolla los seis productos y las dos sumas de Sarrus para una 3×3."""
+    if len(A) != 3 or any(len(fila) != 3 for fila in A):
+        raise ValueError("La regla de Sarrus solo se aplica a matrices 3×3.")
+
+    a, b, c = A[0]
+    d, e, f = A[1]
+    g, h, i = A[2]
+    descendentes = [a * e * i, b * f * g, c * d * h]
+    ascendentes = [c * e * g, b * d * i, a * f * h]
+    suma_descendente = sum(descendentes, Fraction(0))
+    suma_ascendente = sum(ascendentes, Fraction(0))
+    resultado = suma_descendente - suma_ascendente
+    descendentes_texto = [
+        f"a₁₁a₂₂a₃₃ = ({formatear_valor(a)})({formatear_valor(e)})"
+        f"({formatear_valor(i)}) = {formatear_valor(descendentes[0])}",
+        f"a₁₂a₂₃a₃₁ = ({formatear_valor(b)})({formatear_valor(f)})"
+        f"({formatear_valor(g)}) = {formatear_valor(descendentes[1])}",
+        f"a₁₃a₂₁a₃₂ = ({formatear_valor(c)})({formatear_valor(d)})"
+        f"({formatear_valor(h)}) = {formatear_valor(descendentes[2])}",
+    ]
+    ascendentes_texto = [
+        f"a₁₃a₂₂a₃₁ = ({formatear_valor(c)})({formatear_valor(e)})"
+        f"({formatear_valor(g)}) = {formatear_valor(ascendentes[0])}",
+        f"a₁₂a₂₁a₃₃ = ({formatear_valor(b)})({formatear_valor(d)})"
+        f"({formatear_valor(i)}) = {formatear_valor(ascendentes[1])}",
+        f"a₁₁a₂₃a₃₂ = ({formatear_valor(a)})({formatear_valor(f)})"
+        f"({formatear_valor(h)}) = {formatear_valor(ascendentes[2])}",
+    ]
+    return [
+        "Regla de Sarrus (solo para matrices de orden 3):",
+        "Diagonales descendentes:",
+        *descendentes_texto,
+        "Suma descendente = "
+        + " + ".join(formatear_valor(valor) for valor in descendentes)
+        + f" = {formatear_valor(suma_descendente)}",
+        "Diagonales ascendentes:",
+        *ascendentes_texto,
+        "Suma ascendente = "
+        + " + ".join(formatear_valor(valor) for valor in ascendentes)
+        + f" = {formatear_valor(suma_ascendente)}",
+        f"det(A) por Sarrus = {formatear_valor(suma_descendente)} - "
+        f"{formatear_valor(suma_ascendente)} = {formatear_valor(resultado)}",
+    ], resultado
 
 
 def determinante_con_pasos(A):
@@ -178,9 +345,12 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 ]
                 for i, fila in enumerate(self.entradas)
             ]
-            determinante_cofactores, pasos_cofactores = (
-                determinante_cofactores_con_pasos(matriz)
-            )
+            determinante_cofactores = None
+            pasos_cofactores = []
+            if len(matriz) <= LIMITE_COFACTORES:
+                determinante_cofactores, pasos_cofactores = (
+                    determinante_cofactores_con_pasos(matriz)
+                )
             determinante, pasos = determinante_con_pasos(matriz)
             self.ultima_matriz_resultado = pasos[-1][1]
             lineas = [
@@ -189,29 +359,43 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 "Matriz A:",
                 formatear_matriz(matriz),
                 "",
-                "Expansión recursiva por cofactores:",
             ]
-            for indice, (descripcion, estado) in enumerate(pasos_cofactores, 1):
-                lineas.append(f"Paso {indice}: {descripcion}")
-                if estado is not None:
-                    lineas.append(formatear_matriz(estado))
+            if determinante_cofactores is None:
+                lineas.extend([
+                    f"Expansión por cofactores omitida: el límite de presentación "
+                    f"es n = {LIMITE_COFACTORES} por su costo recursivo.",
+                ])
+            else:
+                lineas.append("Expansión recursiva por cofactores:")
+                lineas.extend(_texto_pasos_cofactores(pasos_cofactores))
+                lineas.append(
+                    "Determinante por cofactores: "
+                    f"{formatear_valor(determinante_cofactores)}"
+                )
             lineas.extend([
-                f"Determinante por cofactores: {formatear_valor(determinante_cofactores)}",
                 "",
                 "Eliminación hacia forma triangular:",
+                *_texto_traza_triangular(pasos),
             ])
-            for indice, (descripcion, estado) in enumerate(pasos, 1):
-                lineas.extend([
-                    f"Paso {indice}: {descripcion}",
-                    formatear_matriz(estado),
-                ])
+            sarrus = None
+            if len(matriz) == 3:
+                texto_sarrus, sarrus = _texto_sarrus(matriz)
+                lineas.extend(["", *texto_sarrus])
             lineas.extend([
                 "",
                 f"Determinante por triangulación: {formatear_valor(determinante)}",
-                "Comparación de métodos: " + (
+            ])
+            if determinante_cofactores is not None:
+                lineas.append("Triangularización y cofactores: " + (
                     "coinciden" if determinante_cofactores == determinante
                     else "NO coinciden"
-                ),
+                ))
+            if sarrus is not None:
+                lineas.append("Triangularización y Sarrus: " + (
+                    "coinciden" if sarrus == determinante
+                    else "NO coinciden"
+                ))
+            lineas.extend([
                 "A es invertible." if determinante != 0 else "A es singular; no tiene inversa.",
             ])
             resumen = f"det(A) = {formatear_valor(determinante)}   ·   " + (

@@ -1,10 +1,15 @@
-"""Panel del Módulo 3: independencia lineal de vectores."""
+"""
+Pantalla del módulo de independencia lineal (L.I. / L.D.).
+
+Unidad I, Vectores e independencia lineal [P4].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from fractions import Fraction
 import customtkinter as ctk
 
-from backend.eliminacion import eliminacion_con_pasos
-from backend.matriz import subindice
+from backend.eliminacion import eliminacion_con_pasos, solucion_general
+from backend.matriz import formatear_valor, subindice
 from modulos._comun import (
     boton_primario,
     boton_secundario,
@@ -13,6 +18,7 @@ from modulos._comun import (
     entrada_numero,
     etiqueta,
     formatear_matriz,
+    formatear_vector,
     leer_entero,
     leer_fraccion,
     mensaje_error,
@@ -20,6 +26,117 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _texto_pasos_independencia(pasos, cantidad_variables):
+    """Presenta cada operación registrada de Gauss-Jordan y sus estados."""
+    if not pasos:
+        return []
+    anterior = pasos[0]["matriz"]
+    lineas = ["Estado inicial de [A|0]:", formatear_matriz(anterior)]
+    for indice, paso in enumerate(pasos[1:], 1):
+        estado = paso["matriz"]
+        descripcion = paso["descripcion"]
+        lineas.extend([f"Paso {indice}: {descripcion}", "Antes:", formatear_matriz(anterior)])
+        if descripcion.startswith("Intercambio F"):
+            filas = descripcion.removeprefix("Intercambio F").split(" ↔ F")
+            lineas.append(
+                f"Se intercambian las filas completas de [A|0] para colocar un pivote no nulo "
+                f"(F{filas[0]} ↔ F{filas[1]}). La operación es reversible y conserva las soluciones."
+            )
+        elif descripcion.startswith("Normalizar F"):
+            fila = int(descripcion.split("F", 1)[1].split()[0]) - 1
+            columna = next(j for j in range(cantidad_variables) if anterior[fila][j] != 0)
+            pivote = anterior[fila][columna]
+            calculos = "; ".join(
+                f"{formatear_valor(anterior[fila][j])}/{formatear_valor(pivote)}="
+                f"{formatear_valor(estado[fila][j])}"
+                for j in range(len(estado[fila]))
+            )
+            lineas.extend([
+                f"Pivote a{fila + 1},{columna + 1} = {formatear_valor(pivote)}. "
+                "Se divide toda la fila por este valor no nulo para convertirlo en 1; "
+                "las soluciones no cambian.",
+                "Cálculo de la fila completa: " + calculos + ".",
+            ])
+        elif " ← " in descripcion:
+            izquierda, operacion = descripcion.split(" ← ")
+            fila_objetivo = int(izquierda[1:]) - 1
+            fila_pivote = int(operacion.split("·F")[1]) - 1
+            columna = next(j for j in range(cantidad_variables) if anterior[fila_pivote][j] != 0)
+            pivote = anterior[fila_pivote][columna]
+            factor = anterior[fila_objetivo][columna] / pivote
+            calculos = "; ".join(
+                f"{formatear_valor(anterior[fila_objetivo][j])} - "
+                f"({formatear_valor(factor)})({formatear_valor(anterior[fila_pivote][j])})="
+                f"{formatear_valor(estado[fila_objetivo][j])}"
+                for j in range(len(estado[fila_objetivo]))
+            )
+            lineas.extend([
+                f"Pivote a{fila_pivote + 1},{columna + 1} = {formatear_valor(pivote)}; "
+                f"se elimina la entrada de F{fila_objetivo + 1}.",
+                "Restar un múltiplo de una fila a otra es reversible y conserva el sistema homogéneo.",
+                "Cálculo de la fila completa: " + calculos + ".",
+            ])
+        lineas.extend(["Después:", formatear_matriz(estado)])
+        anterior = estado
+    return lineas
+
+
+def _solucion_no_trivial(datos, cantidad_vectores):
+    """Elige una solución del homogéneo fijando una variable libre en 1."""
+    libres = datos["variables_libres"]
+    if not libres:
+        return [Fraction(0) for _ in range(cantidad_vectores)]
+    parametros = {columna: Fraction(0) for columna in libres}
+    parametros[libres[0]] = Fraction(1)
+    coeficientes = []
+    for columna in range(cantidad_vectores):
+        constante, terminos = datos["soluciones_generales"][columna]
+        valor = constante + sum(
+            (coeficiente * parametros.get(libre, Fraction(0))
+             for libre, coeficiente in terminos.items()),
+            Fraction(0),
+        )
+        coeficientes.append(valor)
+    return coeficientes
+
+
+def _texto_relacion_dependencia(vectores, coeficientes):
+    """Muestra una relación no trivial y comprueba cada componente de su suma."""
+    lineas = ["Una solución no trivial de A·c=0 produce esta relación:"]
+    lineas.append(
+        " + ".join(
+            f"({formatear_valor(c)})·v{subindice(i + 1)}"
+            for i, c in enumerate(coeficientes) if c != 0
+        ) + " = 0"
+    )
+    escalados = []
+    for i, (coeficiente, vector) in enumerate(zip(coeficientes, vectores), 1):
+        escalado = [coeficiente * componente for componente in vector]
+        escalados.append(escalado)
+        lineas.append(
+            f"({formatear_valor(coeficiente)})·v{subindice(i)} = "
+            + formatear_vector(escalado)
+        )
+    suma = [
+        sum((vector[i] for vector in escalados), Fraction(0))
+        for i in range(len(vectores[0]))
+    ]
+    lineas.extend(
+        f"Componente {i + 1}: "
+        + " + ".join(formatear_valor(vector[i]) for vector in escalados)
+        + f" = {formatear_valor(suma[i])}."
+        for i in range(len(suma))
+    )
+    coincide_con_cero = all(componente == 0 for componente in suma)
+    lineas.append(
+        f"La suma es {formatear_vector(suma)}; "
+        + ("coincide con el vector cero, por eso los vectores son dependientes."
+           if coincide_con_cero else
+           "no coincide con el vector cero; revisa la relación antes de concluir dependencia.")
+    )
+    return lineas
 
 
 class ModuloVectores(ctk.CTkFrame):
@@ -161,33 +278,57 @@ class ModuloVectores(ctk.CTkFrame):
             reducida, rango, pasos = self.eliminar_gauss_jordan(aumentada)
             pivotes = self.contar_pivotes(reducida, k)
             independiente = self.determinar_veredicto(n, k, pivotes)
-            libres = k - len(pivotes)
+            soluciones_generales, variables_libres, _ = solucion_general(reducida, rango)
+            libres = len(variables_libres)
 
             lineas = [
                 "VEREDICTO: LOS VECTORES SON "
                 + ("L.I." if independiente else "L.D."),
                 f"En R^{n}: k={k}, pivotes={len(pivotes)}, variables libres={libres}.",
                 "",
+                "Vectores analizados:",
+                *[
+                    f"v{subindice(j + 1)} = {formatear_vector(vector)} (dimensión {n})."
+                    for j, vector in enumerate(vectores)
+                ],
+                "",
                 "Matriz de columnas A:",
                 formatear_matriz(matriz),
-                "Sistema homogéneo: A*c=0.",
-                "Forma reducida [R|0]:",
-                formatear_matriz(reducida),
+                "Para probar independencia se plantea c₁·v₁ + … + cₖ·vₖ = 0, "
+                "equivalentemente el sistema homogéneo A·c=0. Las columnas de A son los vectores y la última "
+                "columna de [A|0] contiene el término homogéneo cero.",
                 "",
-                "Pasos principales de Gauss-Jordan:",
+                "Reducción de [A|0] por Gauss-Jordan:",
             ]
-            operaciones = pasos[1:]
-            if operaciones:
-                for indice, paso in enumerate(operaciones, 1):
-                    lineas.append(f"  {indice}) {paso['descripcion']}")
-            else:
-                lineas.append("  No se requieren operaciones de fila.")
+            lineas.extend(_texto_pasos_independencia(pasos, k))
+            lineas.extend([
+                "Forma reducida final [R|0]:",
+                formatear_matriz(reducida),
+                f"Rango(A) = {rango}; hay {libres} variable(s) libre(s) entre los coeficientes.",
+            ])
             if k > n:
-                lineas.append(f"Como k={k} > n={n}, el conjunto es dependiente.")
+                lineas.append(
+                    f"Como hay k={k} vectores en R^{n} y k>n, el conjunto necesariamente es dependiente."
+                )
             if independiente:
-                lineas.append("A*c=0 solo tiene la solución trivial c=0.")
+                lineas.append(
+                    "La reducción muestra pivote en cada columna de coeficientes: "
+                    "A·c=0 solo admite c₁=…=cₖ=0. Por definición, son linealmente independientes."
+                )
             else:
-                lineas.append("Hay una variable libre y existe una solución no trivial.")
+                coeficientes_no_triviales = _solucion_no_trivial({
+                    "variables_libres": variables_libres,
+                    "soluciones_generales": soluciones_generales,
+                }, k)
+                lineas.extend([
+                    "Al menos una columna de coeficientes no tiene pivote y queda libre; "
+                    "asignarle un valor no nulo produce una solución no trivial.",
+                    "Coeficientes elegidos: " + ", ".join(
+                        f"c{subindice(j + 1)}={formatear_valor(valor)}"
+                        for j, valor in enumerate(coeficientes_no_triviales)
+                    ) + ".",
+                    *_texto_relacion_dependencia(vectores, coeficientes_no_triviales),
+                ])
             resumen = (
                 "Linealmente independientes (L.I.)" if independiente
                 else "Linealmente dependientes (L.D.)"

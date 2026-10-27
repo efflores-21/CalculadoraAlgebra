@@ -23,76 +23,78 @@ ventana y ofrece un botón para regresar al menú.
 
 ## Funcionalidades
 
-Los módulos están numerados en el mismo orden en el menú principal:
+Los módulos están numerados en el mismo orden en el menú principal. La marca
+gris de cada tarjeta (P1, P2…) indica a qué parte del curso corresponde; el
+mapa de la sección siguiente dice dónde está cada parte en el código.
 
-### Módulo 1: Sistemas de ecuaciones
+| Módulo | Qué hace | Marca |
+|---|---|---|
+| 1. Sistemas de ecuaciones | Gauss y Gauss-Jordan paso a paso, clasificación, columnas pivote, variables básicas/libres y verificación por sustitución. También regla de Cramer y x = A⁻¹b. | P1 · P2 |
+| 2. Vectores y combinación lineal | Suma, resta y escalar de vectores; decide si b es combinación lineal. | P3 |
+| 3. Independencia lineal | Reduce Ac = 0, cuenta pivotes y da el veredicto L.I. / L.D. | P4 |
+| 4. Operaciones con matrices | Opciones 1–4: suma, resta, escalar, producto. Opciones 5–8: transpuesta, determinante, inversa por Gauss-Jordan y por adjunta. Opción 9: verificador de propiedades. Copiar y pegar matrices (compatible con Excel). | P3 · P5 · P6 |
+| 5. Determinantes | Determinante por eliminación triangular y por cofactores paso a paso; contraejemplo det(A + B) ≠ det(A) + det(B). | P5 |
+| 6. Factorización LU y solución Ax = b | A = LU con solo reemplazos de fila, verificación L·U = A, etapas Ly = b y Ux = y. Opción de pivoteo parcial (PA = LU) y sistemas rectangulares. | P6 |
+| 7. Propiedades de matrices | A(u + v) = Au + Av y A(cu) = c(Au); no conmutatividad, cancelación y producto nulo; transposición, inversa, determinantes y criterios de invertibilidad. | P3 · P5 |
 
-Resuelve sistemas de la forma `Ax = b` con eliminación de Gauss o
-Gauss-Jordan. Muestra las operaciones elementales, clasifica el sistema como
-de solución única, infinitas soluciones o inconsistente y permite verificar
-la solución.
+Cada módulo tiene su logotipo ASCII, una guía «Cómo usar» y la opción
+«0. Ver Teoremas Clave del Módulo».
 
-### Módulo 2: Vectores y combinación lineal
+## Mapa del código
 
-Permite sumar y restar vectores, multiplicarlos por escalares y verificar si
-un vector es combinación lineal de un conjunto. Para esta última operación
-plantea y resuelve el sistema de coeficientes correspondiente.
+Cada archivo indica su marca en el encabezado (por ejemplo `[P4]`).
 
-### Módulo 3: Independencia lineal
+**P1 · Eliminación por filas y clasificación del sistema**
+- En la app: Módulo 1, método «Gauss».
+- `backend/eliminacion.py` → `eliminacion_con_pasos`, `sustitucion_hacia_atras`, `solucion_general`, `resolver_sistema`
+- `backend/clasificador.py` → `clasificar_sistema`
+- `modulos/modulo_sistemas.py` → `resolver`, `_verificar_solucion`
 
-Permite ingresar varios vectores de `R^n`, organizarlos como columnas de una
-matriz y analizar su independencia resolviendo el sistema homogéneo `A*c = 0`.
-Presenta la forma reducida, los pivotes, las variables libres y el veredicto:
-linealmente independientes (L.I.) o dependientes (L.D.).
+**P2 · Gauss-Jordan, columnas pivote y variables básicas/libres**
+- En la app: Módulo 1, método «Gauss-Jordan».
+- `backend/eliminacion.py` → `eliminacion_con_pasos` (con `metodo="gauss-jordan"`)
+- `backend/clasificador.py` → `columnas_pivote`
+- `modulos/_comun.py` → `formatear_expresion` (solución general con parámetros t)
 
-### Módulo 4: Operaciones con matrices
+**P3 · Vectores, combinación lineal y operaciones con matrices**
+- En la app: Módulo 2, Módulo 4 (opciones 1–4) y Módulo 7.
+- `backend/vectores.py` → `suma_vectores`, `resta_vectores`, `multiplicar_escalar_vector`, `es_combinacion_lineal`
+- `backend/operaciones_matriciales.py` → `suma_matrices`, `resta_matrices`, `multiplicar_escalar_matriz`, `multiplicar_matrices`, `multiplicar_matriz_vector`
+- `backend/propiedades.py` → `verificar_propiedades` (A(u + v) y A(cu))
+- `modulos/modulo_operaciones_vectores.py`, `modulos/modulo_propiedades.py`
 
-Incluye suma, resta, multiplicación por escalar, producto de matrices,
-traspuesta e inversa. Las operaciones verifican las dimensiones necesarias y
-presentan el resultado; los productos y la inversa muestran sus pasos de
-cálculo.
+**P4 · Independencia lineal y estructura modular**
+- En la app: Módulo 3.
+- `modulos/modulo_vectores.py` → `construir_matriz_columnas`, `construir_sistema_homogeneo`, `contar_pivotes`, `determinar_veredicto`, `analizar`
+- Estructura: `main.py`, carpeta `modulos/`, `modulos/teoremas/resumen_teoremas.py` y `crear_estructura` en `modulos/_comun.py` (logotipo y opción 0)
 
-### Módulo 5: Determinantes
+**P5 · Determinantes e inversa**
+- En la app: Módulo 4 (opciones 5–8 y 0), Módulo 5, Módulo 7 y los métodos «Cramer» y «Matriz inversa» del Módulo 1.
+- `backend/matrices.py` → `determinante_cofactores_con_pasos`, `resolver_cramer`
+- `modulos/modulo_determinantes.py` → `comparar_determinante_suma`
+- `modulos/modulo_propiedades.py` → `calcular_teorema_producto`, `calcular_teorema_transposicion`, `calcular_teorema_inversa_determinante`, `analizar_criterios_invertibilidad`
+- `backend/matrices.py` → `determinante_triangular`, `sarrus_3x3`, `invertir_gauss_jordan`, `invertir_adjunta`, `verificar_inversa`
+- `backend/operaciones_matriciales.py` → `transponer_matriz`, `determinante_por_cofactores`, `matriz_menores`, `matriz_cofactores`, `matriz_adjunta`, `inversa_por_adjunta`
+- `modulos/modulo_matrices.py` → `diagnostico_invertibilidad`, `_determinante`, `_inversa`
 
-Calcula el determinante de matrices cuadradas mediante eliminación por filas.
-Muestra los pivotes y los intercambios de filas, y señala si la matriz es
-singular.
-
-### Módulo 6: Factorización LU
-
-Factoriza `A = LU`, con `L` triangular inferior y diagonal unitaria, y `U`
-triangular superior. Resuelve `Ax = b` mediante sustitución hacia adelante
-(`Ly = b`) y hacia atrás (`Ux = y`).
-
-### Módulo 7: Producto matriz-vector / Propiedades
-
-Verifica las propiedades de linealidad:
-
-```text
-A(u + v) = Au + Av
-A(cu) = c(Au)
-```
-
-La aplicación presenta los resultados intermedios y compara ambos lados de
-cada igualdad.
-
-El menú ofrece por separado las **operaciones con vectores**, la
-**independencia lineal** y las **propiedades del producto matriz-vector**.
-
-## Teoremas y ayuda
-
-Los módulos incluyen acceso a resúmenes de teoremas y propiedades
-relacionados con sus operaciones.
+**P6 · Factorización LU y verificador completo de propiedades**
+- En la app: Módulo 6 y Módulo 4 (opción 9).
+- `backend/factorizacion_lu.py` → `factorizar_lu`, `resolver_por_reduccion`, `resolver_lu` (A = LU, lo que pide el programa) y `factorizar_lu_pivoteo`, `resolver_sistema_lu` (PA = LU y sistemas rectangulares)
+- `backend/verificador.py` → `propiedades_transposicion`, `propiedades_inversa`, `propiedades_determinante`, `propiedades_operaciones_fila`, `propiedad_triangular`, `verificar_propiedades_matrices`
+- `backend/operaciones_matriciales.py` → `son_iguales`, `identidad`
+- `modulos/modulo_lu.py` → pantalla del Módulo 6
+- `modulos/modulo_matrices.py` → `_verificador`
 
 ## Organización del proyecto
 
 ```text
 CalculadoraAlgebra/
-├── main.py
-├── modulos/       # Interfaz y lógica de los módulos
-│   └── teoremas/  # Resúmenes teóricos
-├── backend/       # Operaciones algebraicas y algoritmos
-└── frontend/      # Interfaz gráfica original
+├── main.py         # Menú principal
+├── backend/        # Algoritmos de cálculo (sin interfaz)
+├── modulos/        # Una pantalla por módulo
+│   └── teoremas/   # Teoremas clave de cada módulo
+├── presentaciones/ # Diapositivas de clase (sesiones 9 a 12)
+└── frontend/       # Interfaz anterior (ya no se usa)
 ```
 
 ## Implementación

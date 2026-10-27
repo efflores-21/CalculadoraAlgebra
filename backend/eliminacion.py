@@ -1,4 +1,9 @@
-"""Módulo de eliminación Gaussiana y Gauss-Jordan con paso a paso."""
+"""
+Eliminación de Gauss y Gauss-Jordan con registro de cada operación de fila.
+
+Unidad I, Sistemas de ecuaciones lineales [P1 · P2].
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+"""
 
 from fractions import Fraction
 
@@ -32,8 +37,11 @@ def _buscar_pivote(matriz, fila_inicio, col):
     return pivote_fila, max_abs
 
 
-def eliminacion_con_pasos(matriz_aum, metodo='gauss', verbose=True):
-    """Aplica eliminación (Gauss o Gauss-Jordan) y devuelve (matriz_final, rango, pasos)."""
+def eliminacion_con_pasos(matriz_aum, metodo='gauss', verbose=True, pivoteo_parcial=True):
+    """Aplica eliminación (Gauss o Gauss-Jordan) y devuelve (matriz_final, rango, pasos).
+
+    Con pivoteo_parcial=False se usa el primer pivote no nulo, sin reordenar filas.
+    """
     if isinstance(matriz_aum, MatrizAumentada):
         matriz = matriz_aum.copiar().datos
     else:
@@ -50,7 +58,13 @@ def eliminacion_con_pasos(matriz_aum, metodo='gauss', verbose=True):
         if rango >= m:
             break
 
-        pivote_fila, max_abs = _buscar_pivote(matriz, rango, col)
+        if pivoteo_parcial:
+            pivote_fila, max_abs = _buscar_pivote(matriz, rango, col)
+        else:
+            # En sistemas triangulares (L o U) el pivote ya está en su lugar:
+            # reordenar filas solo ensuciaría la sustitución.
+            pivote_fila = next((i for i in range(rango, m) if matriz[i][col] != 0), -1)
+            max_abs = abs(matriz[pivote_fila][col]) if pivote_fila != -1 else 0
         if max_abs == 0:
             continue
 
@@ -183,14 +197,16 @@ def solucion_general(matriz, rango):
     return expresiones, libres, pasos
 
 
-def resolver_sistema(matriz_aumentada, metodo='gauss'):
-    """Resuelve el sistema usando el método elegido."""
+def resolver_sistema(matriz_aumentada, metodo='gauss', pivoteo_parcial=True):
+    """Resuelve el sistema usando el método elegido y devuelve matriz final, solución y pasos."""
     if isinstance(matriz_aumentada, MatrizAumentada):
         datos = matriz_aumentada.copiar().datos
     else:
         datos = [fila[:] for fila in matriz_aumentada]
 
-    matriz_final, rango, pasos = eliminacion_con_pasos(datos, metodo=metodo, verbose=True)
+    matriz_final, rango, pasos = eliminacion_con_pasos(
+        datos, metodo=metodo, verbose=True, pivoteo_parcial=pivoteo_parcial
+    )
 
     soluciones_generales, variables_libres, pasos_solucion = solucion_general(
         matriz_final, rango
