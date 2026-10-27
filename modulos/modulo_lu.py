@@ -6,11 +6,15 @@ la verificación L·U = A y las etapas Ly = b y Ux = y; con pivoteo parcial usa 
 Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
+# Importación de la librería para la interfaz gráfica (CustomTkinter)
 import customtkinter as ctk
 
+# Importación de funciones matemáticas del backend para calcular la factorización LU y resolver sistemas
 from backend.factorizacion_lu import resolver_lu, resolver_sistema_lu
 from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import multiplicar_matrices
+
+# Importación de componentes de interfaz reutilizables (botones, tablas, utilidades de entrada y portapapeles)
 from modulos._comun import (
     Selector, boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
@@ -18,6 +22,7 @@ from modulos._comun import (
     formatear_paso_explicado, mensaje_error, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
 )
 
+# Arte gráfico y nombres de las opciones del menú desplegable del método
 LOGO = (
     "[ 1 0 0 ][ * * * ]  MÓDULO: FACTORIZACIÓN LU\n"
     "[ * 1 0 ][ 0 * * ]  A = LU   ·   Ly = b   ·   Ux = y\n"
@@ -26,20 +31,22 @@ LOGO = (
 SIN_PIVOTEO, CON_PIVOTEO = "Sin pivoteo (A = LU)", "Pivoteo parcial (PA = LU)"
 
 
+# Clase principal del panel GUI para la Factorización LU
 class ModuloLU(ctk.CTkFrame):
     """Panel que factoriza A = LU (o PA = LU) y resuelve Ax = b por doble sustitución."""
 
     def __init__(self, master, on_back):
         """Construye la pantalla y una tabla inicial de 3 × 3."""
         super().__init__(master)
-        self.on_back = on_back
-        self.entradas_A, self.entradas_b = [], []
-        self.ultima_L = self.ultima_U = None
-        self._construir_interfaz()
-        self.actualizar_entradas()
+        self.on_back = on_back  # Función para regresar al menú principal
+        self.entradas_A, self.entradas_b = [], []  # Listas con los widgets de celdas de entrada
+        self.ultima_L = self.ultima_U = None  # Memoria para almacenar la última L y U calculadas
+        self._construir_interfaz()  # Construye los componentes visuales de la pantalla
+        self.actualizar_entradas()  # Inicializa la tabla de celdas de entrada
 
     def _construir_interfaz(self):
         """Crea la guía, los campos m y n, el método, la tabla [A | b] y los botones."""
+        # Se crea la estructura de la ventana con encabezados y guía de instrucciones
         zonas = crear_estructura(
             self, self.on_back, numero=6, titulo="Factorización LU",
             descripcion="Factoriza A = LU (o PA = LU) y resuelve Ax = b en dos etapas: Ly = b y Ux = y.",
@@ -55,6 +62,8 @@ class ModuloLU(ctk.CTkFrame):
                        "la verificación L·U = A, las etapas Ly = b y Ux = y, y la comprobación A·x = b.",
         )
         self.resultado = zonas.resultado
+        
+        # Controles de entrada para definir el número de filas (m) y columnas (n)
         controles, entradas = crear_controles(
             zonas.contenido,
             [("m", "Filas m", "3", 80), ("n", "Columnas n", "3", 90)],
@@ -62,17 +71,25 @@ class ModuloLU(ctk.CTkFrame):
         )
         controles.pack(anchor="w", padx=10, pady=(10, 0))
         self.entry_m, self.entry_n = entradas["m"], entradas["n"]
+        
+        # Selector desplegable para elegir entre "Sin pivoteo" o "Pivoteo parcial"
         etiqueta(zonas.contenido, "Método").pack(anchor="w", padx=10, pady=(12, 2))
         self.selector_pivoteo = Selector(zonas.contenido, [SIN_PIVOTEO, CON_PIVOTEO])
         self.selector_pivoteo.pack(anchor="w", padx=10)
+        
+        # Contenedor para dibujar la cuadrícula de la matriz A y el vector b
         subtitulo(zonas.contenido, "Matriz A y vector b").pack(anchor="w", padx=10, pady=(14, 6))
         self.tabla = ctk.CTkFrame(zonas.contenido, fg_color="transparent")
         self.tabla.pack(anchor="w", padx=6)
+        
+        # Botones secundarios de copiar y pegar matrices
         portapapeles = ctk.CTkFrame(zonas.contenido, fg_color="transparent")
         portapapeles.pack(anchor="w", padx=10, pady=(8, 0))
         for texto, accion, ancho in (("Copiar A", self.copiar_A, 90), ("Pegar en A", self.pegar_A, 100),
                                      ("Copiar L", self.copiar_L, 90), ("Copiar U", self.copiar_U, 90)):
             boton_secundario(portapapeles, texto, accion, width=ancho).pack(side="left", padx=(0, 5))
+            
+        # Botón principal para procesar los datos y botón para limpiar la pantalla
         boton_primario(zonas.acciones, "Factorizar y resolver", self.calcular).pack(
             side="left", fill="x", expand=True, padx=(0, 8)
         )
@@ -80,19 +97,27 @@ class ModuloLU(ctk.CTkFrame):
 
     def actualizar_entradas(self):
         """Valida m y n y construye las celdas de A (m×n) y de b (m componentes)."""
+        # Lee y valida que m y n sean enteros válidos
         try:
             m = leer_entero(self.entry_m, "El número de filas m")
             n = leer_entero(self.entry_n, "El número de columnas n")
         except ValueError as error:
             mensaje_error(error)
             return
+            
+        # Limpia celdas anteriores
         for widget in self.tabla.winfo_children():
             widget.destroy()
+            
+        # Agrega encabezados de columna
         for j in range(n):
             etiqueta(self.tabla, f"a{subindice(j + 1)}").grid(row=0, column=j, pady=(0, 2))
         etiqueta(self.tabla, "b", color="texto", negrita=True).grid(row=0, column=n, padx=(18, 0))
+        
         self.entradas_A, self.entradas_b = [], []
         self.ultima_L = self.ultima_U = None
+        
+        # Construye dinámicamente las entradas numéricas para A (m x n) y b (m x 1)
         for i in range(m):
             fila = [entrada_numero(self.tabla) for _ in range(n)]
             for j, celda in enumerate(fila):
@@ -101,15 +126,19 @@ class ModuloLU(ctk.CTkFrame):
             celda_b.grid(row=i + 1, column=n, padx=(18, 3), pady=3)
             self.entradas_A.append(fila)
             self.entradas_b.append(celda_b)
+            
         reemplazar_texto(self.resultado, "")
 
     def calcular(self):
         """Lee A y b y muestra la factorización y la solución con el método elegido."""
         self.ultima_L = self.ultima_U = None
         try:
+            # Lee los valores ingresados convirtiéndolos en números exactos (fracciones)
             A = [[leer_fraccion(celda, f"La entrada ({i + 1},{j + 1}) de A") for j, celda in enumerate(fila)]
                  for i, fila in enumerate(self.entradas_A)]
             b = [leer_fraccion(celda, f"La componente {i + 1} de b") for i, celda in enumerate(self.entradas_b)]
+            
+            # Ejecuta la factorización según la opción del selector
             if self.selector_pivoteo.get() == CON_PIVOTEO:
                 lineas, resumen = self._con_pivoteo(A, b)
             else:
@@ -117,15 +146,22 @@ class ModuloLU(ctk.CTkFrame):
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
             return
+            
+        # Imprime la solución final en la caja de resultados
         reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
 
     def _sin_pivoteo(self, A, b):
         """A = LU solo con reemplazos de fila (lo que pide el programa) y solución de Ax = b."""
+        # Llama al motor matemático de eliminación sin pivoteo
         datos = resolver_lu(A, b)
         self.ultima_L, self.ultima_U = datos["L"], datos["U"]
         lineas = _texto_factorizacion(A, datos)
+        
+        # Si A es cuadrada, muestra la solución directa en dos etapas
         if datos["cuadrada"]:
             return lineas + _texto_solucion(datos), _resumen(datos)
+            
+        # Si A es rectangular, analiza la compatibilidad del sistema
         sistema = resolver_sistema_lu(A, b)
         return (lineas + ["", "3. Solución de Ax = b (A rectangular)"] + _texto_clasificacion(A, b, sistema),
                 f"L·U = A ✓   ·   {_resumen_sistema(sistema)}")
@@ -133,9 +169,12 @@ class ModuloLU(ctk.CTkFrame):
     def _con_pivoteo(self, A, b):
         """P·A = L·U con pivoteo parcial; muestra cada paso registrado y clasifica Ax = b."""
         pasos = []
+        # Llama al backend registrando los pasos de intercambio de filas
         sistema = resolver_sistema_lu(A, b, registrar_paso=pasos.append, pivoteo_parcial=True)
         P, L, U = sistema["P"], sistema["L"], sistema["U"]
         self.ultima_L, self.ultima_U = L, U
+        
+        # Prepara la traza explicativa de P, L, U y las verificaciones del producto PA = LU
         lineas = ["FACTORIZACIÓN P·A = L·U CON PIVOTEO PARCIAL", "A =", formatear_matriz(A), "",
                   "Pasos (intercambios, multiplicadores y eliminación):"]
         lineas.extend(_texto_pasos_registrados(pasos, estado_final={"P": P, "L": L, "U": U}))
@@ -172,8 +211,13 @@ class ModuloLU(ctk.CTkFrame):
         reemplazar_texto(self.resultado, "")
 
 
+# =============================================================================
+# FUNCIONES AUXILIARES PARA FORMATEAR EL TEXTO DE RESULTADOS EN PANTALLA
+# =============================================================================
+
 def _texto_factorizacion(A, datos):
     """Devuelve las líneas de la reducción a U, las matrices L y U y la verificación L·U = A."""
+    # Arma el texto de la traza de eliminación y las matrices L, U y L*U
     m, n = len(A), len(A[0])
     lineas = [f"FACTORIZACIÓN LU DE A ({m} × {n})", "A =", formatear_matriz(A), "",
               "1. Reducción a la forma escalonada U (solo reemplazos Fᵢ ← Fᵢ − l·Fⱼ):"]
@@ -202,6 +246,7 @@ def _texto_factorizacion(A, datos):
 
 def _texto_pasos(titulo, etapa):
     """Presenta la traza técnica sin volver a imprimir estados idénticos."""
+    # Recorre y formatea los pasos intermedios de las sustituciones
     lineas = ["", titulo, "Traza técnica:"]
     matriz_anterior = None
     total = len(etapa["pasos"])
@@ -217,6 +262,7 @@ def _texto_pasos(titulo, etapa):
 
 def _texto_solucion(datos):
     """Devuelve las líneas de las etapas Ly = b y Ux = y y de la comprobación A·x = b."""
+    # Formatea los pasos de la sustitución hacia adelante (Ly=b) y hacia atrás (Ux=y)
     lineas = _texto_pasos("3. Etapa 1: Ly = b (sustitución hacia adelante sobre [L | b])", datos["etapa_y"])
     lineas.append("Explicación pedagógica: como L es triangular inferior con diagonal unitaria, se despeja y en orden ascendente.")
     lineas.extend(_ecuaciones_triangulares(datos["L"], datos["b"], datos["y"], "y", True))
@@ -237,6 +283,7 @@ def _texto_solucion(datos):
 
 def _texto_pasos_registrados(pasos, estado_final=None):
     """Convierte los pasos registrados por la factorización con traza en líneas de texto."""
+    # Formatea el historial de operaciones de pivoteo y eliminación
     pasos_visibles = [
         paso for paso in pasos
         if not paso["objetivo"].startswith(("Cerrar la eliminación", "Comprobar que la solución particular",
@@ -279,9 +326,9 @@ def _texto_pasos_registrados(pasos, estado_final=None):
     return lineas
 
 
-
 def _formatear_paso_lu(paso, fundamento_pivote_mostrado=False):
-    """Renderiza el detalle sin repetir el criterio de selecci?n de pivote."""
+    """Renderiza el detalle sin repetir el criterio de selección de pivote."""
+    # Formatea los detalles de cada paso evitando explicaciones repetidas
     lineas = formatear_paso_explicado(paso, incluir_estado=False)
     if fundamento_pivote_mostrado and "Pivote de la etapa" in paso["descripcion"]:
         lineas = [linea for linea in lineas if not linea.startswith("Fundamento:")]
@@ -290,6 +337,7 @@ def _formatear_paso_lu(paso, fundamento_pivote_mostrado=False):
 
 def _ecuaciones_triangulares(matriz, rhs, solucion, variable, adelante):
     """Muestra la ecuación de cada fila y su sustitución numérica exacta."""
+    # Genera las líneas de texto representando los despejes algebraicos de cada fila
     filas = range(len(matriz)) if adelante else range(len(matriz) - 1, -1, -1)
     lineas = ["Ecuación de fila y sustitución:"]
     for i in filas:
@@ -313,6 +361,7 @@ def _ecuaciones_triangulares(matriz, rhs, solucion, variable, adelante):
 
 def _texto_clasificacion(A, b, sistema):
     """Líneas con y, la clasificación de Ax = b y su solución (particular más núcleo)."""
+    # Muestra el resultado final (compatible determinado, indeterminado o incompatible)
     if sistema["estado"] == "incompatible":
         fila = next(i for i, valores in enumerate(sistema["U"])
                     if all(valor == 0 for valor in valores) and sistema["y"][i] != 0)
@@ -343,6 +392,7 @@ def _texto_clasificacion(A, b, sistema):
 
 def _resumen(datos):
     """Texto del recuadro negro con la respuesta final (método sin pivoteo, A cuadrada)."""
+    # Retorna la frase corta del resumen de estado
     if "x" not in datos:
         return "Ax = b no tiene solución única (A es singular)"
     return "Ax = b tiene solución única"
@@ -350,6 +400,7 @@ def _resumen(datos):
 
 def _resumen_sistema(sistema):
     """Texto corto con la clasificación de Ax = b obtenida por la factorización con traza."""
+    # Retorna el diagnóstico breve del sistema
     if sistema["estado"] == "incompatible":
         return "Ax = b no tiene solución"
     if sistema["estado"] == "unica":
