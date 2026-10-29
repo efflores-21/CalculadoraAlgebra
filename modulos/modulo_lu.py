@@ -13,6 +13,7 @@ from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import multiplicar_matrices
 
 from modulos._comun import (
+    llenar,
     Selector, boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
     etiqueta, formatear_matriz, formatear_vector, leer_entero, leer_fraccion,
@@ -51,7 +52,7 @@ class ModuloLU(ctk.CTkFrame):
                 "Elige el método y pulsa «Factorizar y resolver». «Sin pivoteo» sigue A = LU solo con "
                 "reemplazos; «Pivoteo parcial» permite intercambiar filas (PA = LU).",
             ],
-            clave_teoremas="lu",
+            clave_teoremas="lu", ejemplo=self.cargar_ejemplo,
             indicacion="Verás cada reemplazo de fila con su multiplicador, las matrices L y U, "
                        "la verificación L·U = A, las etapas Ly = b y Ux = y, y la comprobación A·x = b.",
         )
@@ -182,6 +183,16 @@ class ModuloLU(ctk.CTkFrame):
     def copiar_U(self):
         """Copia la última U calculada."""
         copiar_matriz_al_portapapeles(self, self.ultima_U)
+
+    def cargar_ejemplo(self):
+        """Carga un sistema de 3 × 3 y lo resuelve con A = LU."""
+        llenar([self.entry_m, self.entry_n], [3, 3])
+        self.actualizar_entradas()
+        for fila, valores in zip(self.entradas_A, [[2, 1, 1], [4, -6, 0], [-2, 7, 2]]):
+            llenar(fila, valores)
+        llenar(self.entradas_b, [5, -2, 9])
+        self.selector_pivoteo.set(SIN_PIVOTEO)
+        self.calcular()
 
     def limpiar(self):
         """Pone en cero A y b y vuelve a mostrar la guía."""
@@ -362,7 +373,7 @@ def _resumen(datos):
     """Texto del recuadro negro con la respuesta final (método sin pivoteo, A cuadrada)."""
     if "x" not in datos:
         return "Ax = b no tiene solución única (A es singular)"
-    return "Ax = b tiene solución única"
+    return f"Solución única: x = {formatear_vector(datos['x'])}   ·   L·U = A ✓   ·   A·x = b ✓"
 
 
 def _resumen_sistema(sistema):
@@ -370,5 +381,5 @@ def _resumen_sistema(sistema):
     if sistema["estado"] == "incompatible":
         return "Ax = b no tiene solución"
     if sistema["estado"] == "unica":
-        return "Solución única"
+        return f"Solución única: x = {formatear_vector(sistema['solucion_particular'])}"
     return "Ax = b tiene infinitas soluciones"

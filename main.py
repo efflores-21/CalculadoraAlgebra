@@ -61,7 +61,7 @@ from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
 from modulos.modulo_vectores import ModuloVectores
 
-ctk.set_appearance_mode("Light")
+ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulos", "tema_minimalista.json")
 )
@@ -157,8 +157,8 @@ class MenuPrincipal(ctk.CTk):
             width=44,
             height=44,
             corner_radius=12,
-            fg_color=COLOR["negro"],
-            text_color="#FFFFFF",
+            fg_color=COLOR["acento"],
+            text_color=COLOR["texto_acento"],
             font=fuente(15, negrita=True),
         ).grid(row=0, column=0, rowspan=2, sticky="nw", padx=(22, 16), pady=18)
         ctk.CTkLabel(
@@ -182,7 +182,7 @@ class MenuPrincipal(ctk.CTk):
 
         def resaltar(activo):
             """Marca el borde en negro mientras el mouse está sobre la tarjeta."""
-            caja.configure(border_color=COLOR["negro"] if activo else COLOR["borde"])
+            caja.configure(border_color=COLOR["acento"] if activo else COLOR["borde"])
 
         for widget in [caja] + caja.winfo_children():
             widget.bind("<Button-1>", abrir)

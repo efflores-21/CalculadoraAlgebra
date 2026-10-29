@@ -11,6 +11,7 @@ import customtkinter as ctk
 from backend.eliminacion import eliminacion_con_pasos, solucion_general
 from backend.matriz import formatear_valor, subindice
 from modulos._comun import (
+    llenar,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -170,7 +171,7 @@ class ModuloVectores(ctk.CTkFrame):
                 "Pulsa «Analizar» para saber si son independientes (L.I.) "
                 "o dependientes (L.D.).",
             ],
-            clave_teoremas="vectores",
+            clave_teoremas="vectores", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás el veredicto L.I. o L.D., la matriz reducida, "
                        "los pivotes y las variables libres.",
         )
@@ -336,6 +337,14 @@ class ModuloVectores(ctk.CTkFrame):
             reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def cargar_ejemplo(self):
+        """Carga tres vectores de R³ (v₃ = v₁ + v₂) y analiza su independencia."""
+        llenar([self.entry_k, self.entry_n], [3, 3])
+        self.actualizar_entradas()
+        for columna, valores in zip(self.entradas_vectores, [[1, 0, 1], [0, 1, 1], [1, 1, 2]]):
+            llenar(columna, valores)
+        self.analizar()
 
     def limpiar(self):
         """Reinicia todas las componentes ingresadas a cero y limpia el resultado."""

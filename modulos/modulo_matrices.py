@@ -29,6 +29,7 @@ from backend.operaciones_matriciales import (
 )
 from backend.verificador import verificar_propiedades_matrices
 from modulos._comun import (
+    llenar,
     boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
     formatear_matriz, leer_entero, leer_fraccion, matriz_en_linea, mensaje_error,
@@ -100,7 +101,7 @@ class ModuloMatrices(ctk.CTkFrame):
                 "Pulsa la operación. A + B y A − B piden el mismo tamaño; A · B pide que las "
                 "columnas de A sean iguales a las filas de B.",
             ],
-            clave_teoremas="matrices",
+            clave_teoremas="matrices", ejemplo=self.cargar_ejemplo,
             indicacion="Verás la operación entrada por entrada, el diagnóstico de invertibilidad, "
                        "los pasos de cada método y la comprobación A · A⁻¹ = I.",
         )
@@ -227,18 +228,22 @@ class ModuloMatrices(ctk.CTkFrame):
         B = self._leer_matriz(self.entradas_B, "B")
         C = suma_matrices(A, B)
         self.ultima_matriz_resultado = C
-        return (["A + B, entrada a entrada:"] + _detalle_entradas(A, B, C, "+")
-                + ["", f"A + B ({len(C)} × {len(C[0])}) =", formatear_matriz(C)],
-                f"A + B = {matriz_en_linea(C)}")
+        return (_encabezado("SUMA DE MATRICES: A + B", A, B,
+                            "Se suman las entradas que ocupan la misma posición: cᵢⱼ = aᵢⱼ + bᵢⱼ.",
+                            f"A y B deben tener el mismo tamaño: A es {_tam(A)} y B es {_tam(B)} ✓")
+                + ["Paso a paso:"] + _detalle_entradas(A, B, C, "+")
+                + _resultado(f"A + B ({_tam(C)})", C), f"A + B = {matriz_en_linea(C)}")
 
     def _resta(self, A):
         """Opción 2: A − B entrada a entrada."""
         B = self._leer_matriz(self.entradas_B, "B")
         C = resta_matrices(A, B)
         self.ultima_matriz_resultado = C
-        return (["A − B, entrada a entrada:"] + _detalle_entradas(A, B, C, "−")
-                + ["", f"A − B ({len(C)} × {len(C[0])}) =", formatear_matriz(C)],
-                f"A − B = {matriz_en_linea(C)}")
+        return (_encabezado("RESTA DE MATRICES: A − B", A, B,
+                            "Se restan las entradas que ocupan la misma posición: cᵢⱼ = aᵢⱼ − bᵢⱼ.",
+                            f"A y B deben tener el mismo tamaño: A es {_tam(A)} y B es {_tam(B)} ✓")
+                + ["Paso a paso:"] + _detalle_entradas(A, B, C, "−")
+                + _resultado(f"A − B ({_tam(C)})", C), f"A − B = {matriz_en_linea(C)}")
 
     def _escalar(self, A):
         """Opción 3: k · A, multiplicando cada entrada por k."""
@@ -247,30 +252,42 @@ class ModuloMatrices(ctk.CTkFrame):
         self.ultima_matriz_resultado = C
         detalle = [f"c{subindice(i + 1)},{subindice(j + 1)} = {formatear_valor(k)} · {formatear_valor(A[i][j])} "
                    f"= {formatear_valor(C[i][j])}" for i in range(len(A)) for j in range(len(A[0]))]
-        return ([f"k = {formatear_valor(k)}; cada entrada de A se multiplica por k:"] + detalle
-                + ["", f"k · A ({len(C)} × {len(C[0])}) =", formatear_matriz(C)],
-                f"k · A = {matriz_en_linea(C)}")
+        return (_encabezado(f"MULTIPLICACIÓN POR ESCALAR: k · A   (k = {formatear_valor(k)})", A, None,
+                            "Cada entrada de A se multiplica por el número k: cᵢⱼ = k · aᵢⱼ.",
+                            "Se puede hacer con una matriz de cualquier tamaño; el resultado tiene el mismo tamaño que A.")
+                + ["Paso a paso:"] + detalle + _resultado(f"k · A ({_tam(C)})", C), f"k · A = {matriz_en_linea(C)}")
 
     def _producto(self, A):
         """Opción 4: A · B, cada entrada es el producto punto de una fila de A por una columna de B."""
         B = self._leer_matriz(self.entradas_B, "B")
         C = multiplicar_matrices(A, B)
         self.ultima_matriz_resultado = C
-        lineas = ["A · B: cada entrada es el producto punto de una fila de A por una columna de B."]
+        lineas = _encabezado(
+            "PRODUCTO DE MATRICES: A · B", A, B,
+            "Cada entrada cᵢⱼ se obtiene multiplicando la fila i de A por la columna j de B "
+            "término a término y sumando los productos.",
+            f"Las columnas de A ({len(A[0])}) deben ser iguales a las filas de B ({len(B)}) ✓; "
+            f"el resultado tiene las filas de A y las columnas de B: {_tam(C)}.",
+        ) + ["Paso a paso:"]
         for i in range(len(A)):
             for j in range(len(B[0])):
                 productos = " + ".join(f"({formatear_valor(A[i][t])})({formatear_valor(B[t][j])})"
                                        for t in range(len(A[0])))
-                lineas.append(f"c{subindice(i + 1)},{subindice(j + 1)} = {productos} = {formatear_valor(C[i][j])}")
-        lineas.extend(["", f"A · B ({len(C)} × {len(C[0])}) =", formatear_matriz(C)])
+                lineas.append(f"c{subindice(i + 1)},{subindice(j + 1)} = fila {i + 1} de A · columna {j + 1} de B "
+                              f"= {productos} = {formatear_valor(C[i][j])}")
+        lineas += _resultado(f"A · B ({_tam(C)})", C)
+        lineas.append("Ojo: en general A · B ≠ B · A; el orden de los factores importa.")
         return lineas, f"A · B = {matriz_en_linea(C)}"
 
     def _transpuesta(self, A):
         """Opción 5: Aᵀ, las filas de A pasan a ser columnas."""
         C = transponer_matriz(A)
         self.ultima_matriz_resultado = C
-        return (["Transpuesta: las filas de A pasan a ser columnas.", "A =", formatear_matriz(A), "",
-                 f"Aᵀ ({len(C)} × {len(C[0])}) =", formatear_matriz(C)], f"Aᵀ = {matriz_en_linea(C)}")
+        detalle = [f"Fila {i + 1} de A {_vector_en_linea(A[i])}  →  columna {i + 1} de Aᵀ" for i in range(len(A))]
+        return (_encabezado("TRANSPUESTA: Aᵀ", A, None,
+                            "Las filas de A se escriben como columnas: (Aᵀ)ᵢⱼ = aⱼᵢ.",
+                            f"Se puede hacer con cualquier matriz; si A es {_tam(A)}, Aᵀ es {_tam(C)}.")
+                + ["Paso a paso:"] + detalle + _resultado(f"Aᵀ ({_tam(C)})", C), f"Aᵀ = {matriz_en_linea(C)}")
 
     def _determinante(self, A):
         """Opción 6: det(A) por triangularización, cofactores y (en 3 × 3) Sarrus."""
@@ -322,13 +339,30 @@ class ModuloMatrices(ctk.CTkFrame):
             return ["MATRIZ INVERSA", "", diagnostico, "La inversa no se calcula."], "A es singular: no tiene inversa"
         if metodo == "adjunta":
             inversa, pasos = invertir_adjunta(A)
-            titulo, otro = "Inversa por matriz adjunta: A⁻¹ = (1/det(A)) · adj(A)", "Gauss-Jordan"
+            titulo, otro = "INVERSA POR MATRIZ ADJUNTA: A⁻¹ = (1/det(A)) · adj(A)", "Gauss-Jordan"
+            lineas = [titulo, "",
+                      "Qué se hace: se calculan los menores, se les pone signo (cofactores), se transpone "
+                      "esa matriz (adjunta) y se divide entre det(A).",
+                      f"Condición: A debe ser cuadrada y det(A) ≠ 0. Aquí A es {_tam(A)} y "
+                      f"det(A) = {formatear_valor(det_A)} ✓", ""]
+            lineas.extend(_texto_menores(A))
+            lineas.append("")
+            for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
+                lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(matriz_paso)])
         else:
             inversa, pasos = invertir_gauss_jordan(A)
-            titulo, otro = "Inversa por Gauss-Jordan: [A | I] → [I | A⁻¹]", "adjunta"
-        lineas = [titulo]
-        for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
-            lineas.extend([f"Paso {indice}: {descripcion}", formatear_matriz(matriz_paso)])
+            titulo, otro = "INVERSA POR GAUSS-JORDAN: [A | I] → [I | A⁻¹]", "adjunta"
+            lineas = [titulo, "",
+                      "Qué se hace: se reduce [A | I] con operaciones de fila hasta que a la izquierda "
+                      "quede la identidad; lo que queda a la derecha es A⁻¹.",
+                      f"Condición: A debe ser cuadrada y tener {len(A)} pivotes (det(A) ≠ 0). "
+                      f"Aquí det(A) = {formatear_valor(det_A)} ✓", ""]
+            for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
+                lineas.append(f"Paso {indice}: {descripcion}")
+                por_que = _por_que_paso(descripcion)
+                if por_que:
+                    lineas.append(f"   Por qué: {por_que}")
+                lineas.append(formatear_matriz(matriz_paso))
         self.ultima_matriz_resultado = inversa
         producto, identidad, cumple = verificar_inversa(A, inversa, multiplicar_matrices)
         lineas.extend(["", "A⁻¹ =", formatear_matriz(inversa), "", "Comprobación: A · A⁻¹ =",
@@ -354,6 +388,11 @@ class ModuloMatrices(ctk.CTkFrame):
         fila_j = leer_entero(self.entry_fila_j, "La fila j", 1, len(A)) - 1
         categorias, extra = verificar_propiedades_matrices(A, B, C, k, fila_i, fila_j)
         lineas = [f"VERIFICADOR DE PROPIEDADES   (k = {formatear_valor(k)}, i = {fila_i + 1}, j = {fila_j + 1})",
+                  "",
+                  "Qué se hace: para cada propiedad se calculan por separado sus dos lados con las "
+                  "funciones de la calculadora y se comparan entrada por entrada.",
+                  "Condición: A, B y C deben ser cuadradas y del mismo tamaño; las propiedades de la "
+                  "inversa solo aplican si A (y B) tienen det ≠ 0.",
                   f"det(A) = {formatear_valor(extra['det_A'])}"]
         cumplen = evaluadas = 0
         for categoria, propiedades in categorias:
@@ -367,11 +406,113 @@ class ModuloMatrices(ctk.CTkFrame):
         resumen = f"Se cumplen {cumplen} de {evaluadas} propiedades evaluadas"
         return lineas, resumen + (f"   ·   {no_aplican} no aplican" if no_aplican else "")
 
+    def cargar_ejemplo(self):
+        """Carga A, B y C de 2 × 2 y calcula A · B; las demás opciones usan los mismos datos."""
+        llenar([self.entries_dim[c] for c in ("am", "an", "bm", "bn")], [2, 2, 2, 2])
+        self.actualizar_entradas()
+        for matriz, valores in ((self.entradas_A, [[1, 2], [3, 4]]), (self.entradas_B, [[0, 1], [1, 1]]),
+                                (self.entradas_C, [[2, 0], [1, 3]])):
+            for fila, fila_valores in zip(matriz, valores):
+                llenar(fila, fila_valores)
+        llenar([self.entry_escalar, self.entry_fila_i, self.entry_fila_j], [3, 1, 2])
+        self.calcular("producto")
+
     def limpiar(self):
         """Pone en cero A, B, C y el escalar, y vuelve a mostrar la guía."""
         reiniciar_celdas(self.entradas_A, self.entradas_B, self.entradas_C, [self.entry_escalar])
         self.ultima_matriz_resultado = None
         reemplazar_texto(self.resultado, "")
+
+
+def _tam(M):
+    """Tamaño de una matriz como texto: «2 × 3»."""
+    return f"{len(M)} × {len(M[0])}"
+
+
+def _vector_en_linea(fila):
+    """Escribe una fila como (a, b, c)."""
+    return "(" + ", ".join(formatear_valor(v) for v in fila) + ")"
+
+
+def _encabezado(titulo, A, B, que_se_hace, condicion):
+    """Primeras líneas de cada operación: datos, qué se hace y la condición que debe cumplirse."""
+    lineas = [titulo, "", "A =", formatear_matriz(A)]
+    if B is not None:
+        lineas += ["B =", formatear_matriz(B)]
+    return lineas + ["", f"Qué se hace: {que_se_hace}", f"Condición: {condicion}", ""]
+
+
+def _resultado(nombre, C):
+    """Últimas líneas de cada operación: la matriz resultante."""
+    return ["", f"Resultado: {nombre} =", formatear_matriz(C)]
+
+
+# Para qué sirve cada tipo de paso de la inversa por Gauss-Jordan.
+_POR_QUE_GAUSS_JORDAN = (
+    ("Matriz aumentada", "Se escribe la identidad a la derecha de A: las mismas operaciones que "
+                         "convierten A en I convierten I en A⁻¹."),
+    ("Intercambiar", "Se cambia de fila para tener un pivote distinto de cero en la diagonal."),
+    ("Dividir", "Se divide la fila entre su pivote para que la diagonal quede en 1."),
+    ("<-", "Se resta un múltiplo de la fila del pivote para hacer cero esa entrada de la columna."),
+    ("Forma reducida", "A la izquierda quedó la identidad: lo que está a la derecha es A⁻¹."),
+)
+
+# Qué significa cada propiedad del verificador, en una frase.
+_SIGNIFICADO_PROPIEDAD = (
+    ("(Aᵀ)ᵀ", "Transponer dos veces devuelve la matriz original."),
+    ("(A + B)ᵀ", "Transponer una suma da lo mismo que sumar las transpuestas."),
+    ("(kA)ᵀ", "Un número que multiplica a la matriz sale de la transpuesta."),
+    ("(AB)ᵀ", "La transpuesta de un producto invierte el orden de los factores."),
+    ("A(B + C)", "El producto se distribuye sobre la suma."),
+    ("(AB)C", "El producto de matrices es asociativo: se puede agrupar de cualquier forma."),
+    ("(A⁻¹)⁻¹", "La inversa de la inversa es la matriz original."),
+    ("(AB)⁻¹", "La inversa de un producto invierte el orden de los factores."),
+    ("(Aᵀ)⁻¹", "Transponer e invertir se pueden hacer en cualquier orden."),
+    ("A · A⁻¹", "Multiplicar una matriz por su inversa da la identidad."),
+    ("det(Aᵀ)", "Transponer no cambia el determinante."),
+    ("det(AB)", "El determinante de un producto es el producto de los determinantes."),
+    ("det(A⁻¹)", "El determinante de la inversa es el recíproco del determinante."),
+    ("det(kA)", "Multiplicar las n filas por k multiplica el determinante por kⁿ."),
+    ("↔", "Intercambiar dos filas cambia el signo del determinante."),
+    ("+ k·", "Sumarle a una fila un múltiplo de otra no cambia el determinante."),
+    ("← k·", "Multiplicar una fila por k multiplica el determinante por k."),
+    ("det(T)", "En una matriz triangular, el determinante es el producto de la diagonal."),
+)
+
+
+def _por_que_paso(descripcion):
+    """Explicación breve del tipo de paso de la inversa por Gauss-Jordan."""
+    if "entre 1" in descripcion and descripcion.startswith("Dividir"):
+        return "El pivote ya es 1: la fila no cambia."
+    return next((texto for clave, texto in _POR_QUE_GAUSS_JORDAN if clave in descripcion), "")
+
+
+def _significado(nombre):
+    """Frase que explica qué afirma una propiedad del verificador."""
+    return next((texto for clave, texto in _SIGNIFICADO_PROPIEDAD if clave in nombre), "")
+
+
+def _texto_menores(A):
+    """Cómo sale cada menor Mᵢⱼ: se tacha la fila i y la columna j y se calcula el determinante que queda."""
+    n = len(A)
+    if n > 3:
+        return ["Cada menor Mᵢⱼ es el determinante de la submatriz que queda al tachar la fila i y la columna j."]
+    lineas = ["Cómo sale cada menor (se tacha la fila i y la columna j de A):"]
+    for i in range(n):
+        for j in range(n):
+            sub = [[A[f][c] for c in range(n) if c != j] for f in range(n) if f != i]
+            nombre = f"M{subindice(i + 1)}{subindice(j + 1)}"
+            if len(sub) == 1:
+                lineas.append(f"  {nombre} = {formatear_valor(sub[0][0])}")
+            else:
+                (a, b), (c, d) = sub
+                valor = a * d - b * c
+                lineas.append(f"  {nombre} = |{formatear_valor(a)} {formatear_valor(b)}; {formatear_valor(c)} "
+                              f"{formatear_valor(d)}| = ({formatear_valor(a)})({formatear_valor(d)}) − "
+                              f"({formatear_valor(b)})({formatear_valor(c)}) = {formatear_valor(valor)}")
+    lineas.append("Cofactor: Cᵢⱼ = (−1)^(i+j) · Mᵢⱼ, es decir, se cambia el signo en las posiciones "
+                  "donde i + j es impar (tablero + − +).")
+    return lineas
 
 
 def _texto_valor(valor):
@@ -383,9 +524,12 @@ def _texto_valor(valor):
 
 def _texto_propiedad(propiedad):
     """Líneas de una propiedad: sus dos miembros y «Se cumple» / «No se cumple» / «No aplica»."""
+    significado = _significado(propiedad["nombre"])
+    explicacion = [f"      Significa: {significado}"] if significado else []
     if propiedad["cumple"] is None:
-        return [f"  • {propiedad['nombre']}:  No aplica. {propiedad['motivo']}"]
+        return [f"  • {propiedad['nombre']}:  No aplica. {propiedad['motivo']}", *explicacion]
     izquierda, derecha = _texto_valor(propiedad["izquierda"]), _texto_valor(propiedad["derecha"])
     veredicto = "Se cumple" if propiedad["cumple"] else "No se cumple"
-    return ([f"  • {propiedad['nombre']}", "      Lado izquierdo:" + izquierda[0], *izquierda[1:],
+    return ([f"  • {propiedad['nombre']}", *explicacion,
+             "      Lado izquierdo:" + izquierda[0], *izquierda[1:],
              "      Lado derecho: " + derecha[0], *derecha[1:], f"      → {veredicto}"])

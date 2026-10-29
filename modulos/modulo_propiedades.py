@@ -22,6 +22,7 @@ from backend.operaciones_matriciales import (
     transponer_matriz,
 )
 from modulos._comun import (
+    llenar,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -690,7 +691,7 @@ class ModuloPropiedades(ctk.CTkFrame):
                 "Llena la matriz A, los vectores u y v, y el escalar c.",
                 "Pulsa «Verificar propiedades».",
             ],
-            clave_teoremas="propiedades",
+            clave_teoremas="propiedades", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás cada lado de las dos igualdades calculado paso "
                        "a paso y si se cumplen.",
         )
@@ -1302,7 +1303,7 @@ class ModuloPropiedades(ctk.CTkFrame):
             cu = datos["b_c_por_u"]
             c_au = datos["b_c_por_Au"]
             texto = (
-                "MÓDULO 6: PROPIEDADES DEL PRODUCTO MATRIZ-VECTOR\n"
+                "MÓDULO 7: PROPIEDADES DEL PRODUCTO MATRIZ-VECTOR\n"
                 f"A es de dimensión {len(A)}×{len(A[0])}; u y v tienen "
                 f"dimensión {len(u)} y sus imágenes tienen dimensión {len(A)}.\n"
                 f"A =\n{formatear_matriz(A)}\n"
@@ -1467,6 +1468,16 @@ class ModuloPropiedades(ctk.CTkFrame):
             )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def cargar_ejemplo(self):
+        """Carga A, u, v y c y verifica A(u + v) = Au + Av y A(cu) = c(Au)."""
+        llenar([self.entry_m, self.entry_n, self.entry_c], [2, 2, 3])
+        self.actualizar_entradas()
+        for fila, valores in zip(self.entradas_A, [[1, 2], [3, 4]]):
+            llenar(fila, valores)
+        llenar(self.entradas_u, [1, 0])
+        llenar(self.entradas_v, [0, 1])
+        self.verificar()
 
     def limpiar(self):
         """Reinicia a cero la matriz, los vectores, el escalar y el resultado."""

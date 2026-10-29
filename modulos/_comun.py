@@ -18,19 +18,20 @@ from modulos.teoremas.resumen_teoremas import obtener_resumen
 
 DIMENSION_MAXIMA = 12
 
-# Paleta en blanco y negro: fondo gris muy claro, tarjetas blancas y acentos negros.
+# Paleta oscura: sin superficies blancas, para usar la calculadora con poca luz.
 COLOR = {
-    "fondo": "#F4F4F4",
-    "tarjeta": "#FFFFFF",
-    "suave": "#F7F7F7",
-    "borde": "#E4E4E4",
-    "borde_fuerte": "#D4D4D4",
-    "texto": "#111111",
-    "gris": "#737373",
-    "negro": "#111111",
-    "hover": "#2E2E2E",
-    "hover_claro": "#EFEFEF",
-    "marca": "#B5B5B5",
+    "fondo": "#121214",
+    "tarjeta": "#1C1C1F",
+    "suave": "#232327",
+    "borde": "#2C2C31",
+    "borde_fuerte": "#3B3B41",
+    "texto": "#E4E4E7",
+    "gris": "#9A9AA2",
+    "acento": "#3A3A41",
+    "texto_acento": "#F0F0F2",
+    "hover": "#4A4A52",
+    "hover_claro": "#2A2A2F",
+    "marca": "#5E5E66",
 }
 
 # Marca discreta de cada módulo, en el orden de entrega de los programas del curso.
@@ -275,9 +276,9 @@ def boton_primario(parent, texto, comando, **opciones):
         text=texto,
         command=comando,
         corner_radius=10,
-        fg_color=COLOR["negro"],
+        fg_color=COLOR["acento"],
         hover_color=COLOR["hover"],
-        text_color="#FFFFFF",
+        text_color=COLOR["texto_acento"],
         font=fuente(14, negrita=True),
         **opciones,
     )
@@ -327,6 +328,7 @@ class Selector(ctk.CTkFrame):
             boton = ctk.CTkButton(
                 self,
                 text=valor,
+                width=40,
                 height=32,
                 corner_radius=9,
                 font=fuente(13),
@@ -342,9 +344,9 @@ class Selector(ctk.CTkFrame):
         for nombre, boton in self._botones.items():
             activo = nombre == valor
             boton.configure(
-                fg_color=COLOR["negro"] if activo else "transparent",
+                fg_color=COLOR["acento"] if activo else "transparent",
                 hover_color=COLOR["hover"] if activo else COLOR["borde"],
-                text_color="#FFFFFF" if activo else COLOR["texto"],
+                text_color=COLOR["texto_acento"] if activo else COLOR["texto"],
             )
 
     def get(self):
@@ -531,6 +533,13 @@ def crear_controles(parent, especificacion, al_aplicar, texto_boton="Crear tabla
     return marco, entradas
 
 
+def llenar(celdas, valores):
+    """Escribe cada valor en su celda (se usa para cargar los ejemplos)."""
+    for celda, valor in zip(celdas, valores):
+        celda.delete(0, "end")
+        celda.insert(0, str(valor))
+
+
 def reiniciar_celdas(*grupos):
     """Pone en 0 cada celda de las listas (o listas de listas) recibidas."""
     for grupo in grupos:
@@ -620,8 +629,8 @@ def _crear_guia(parent, pasos, nota, indicacion):
             width=26,
             height=26,
             corner_radius=13,
-            fg_color=COLOR["negro"],
-            text_color="#FFFFFF",
+            fg_color=COLOR["acento"],
+            text_color=COLOR["texto_acento"],
             font=fuente(12, negrita=True),
         ).grid(row=fila, column=0, sticky="nw", padx=(22, 12), pady=7)
         texto = ctk.CTkLabel(
@@ -678,6 +687,7 @@ def crear_estructura(
     clave_teoremas,
     indicacion,
     nota="Puedes escribir enteros, decimales o fracciones: 3, -2.5, 1/3.",
+    ejemplo=None,
 ):
     """
     Arma la pantalla estándar de un módulo y devuelve sus zonas.
@@ -755,8 +765,8 @@ def crear_estructura(
     respuesta = ctk.CTkLabel(
         derecha,
         text="",
-        fg_color=COLOR["negro"],
-        text_color="#FFFFFF",
+        fg_color=COLOR["acento"],
+        text_color=COLOR["texto_acento"],
         corner_radius=12,
         font=fuente(15, negrita=True),
         anchor="w",
@@ -773,7 +783,7 @@ def crear_estructura(
     resultado = ctk.CTkTextbox(
         derecha,
         font=fuente_mono(13),
-        wrap="none",
+        wrap="word",
         corner_radius=12,
         fg_color=COLOR["suave"],
         text_color=COLOR["texto"],
@@ -790,6 +800,10 @@ def crear_estructura(
     boton_texto(
         barra, "?  Cómo usar", lambda: reemplazar_texto(resultado, ""), width=110
     ).pack(side="right", padx=(0, 8))
+    if ejemplo is not None:
+        boton_secundario(barra, "Probar con un ejemplo", ejemplo, width=170).pack(
+            side="right", padx=(0, 8)
+        )
 
     return SimpleNamespace(contenido=contenido, acciones=acciones, resultado=resultado)
 

@@ -12,6 +12,7 @@ from backend.matriz import formatear_valor
 from backend.matrices import determinante_cofactores_con_pasos, determinante_triangular
 from backend.operaciones_matriciales import LIMITE_COFACTORES, suma_matrices
 from modulos._comun import (
+    llenar,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -243,7 +244,7 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 "Llena la matriz A fila por fila.",
                 "Pulsa «Calcular determinante».",
             ],
-            clave_teoremas="determinantes",
+            clave_teoremas="determinantes", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás la eliminación hasta la forma triangular, "
                        "los pivotes, el valor de det(A) y si A es invertible.",
         )
@@ -474,6 +475,14 @@ class ModuloDeterminantes(ctk.CTkFrame):
             )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def cargar_ejemplo(self):
+        """Carga una matriz de 3 × 3 y calcula su determinante."""
+        llenar([self.entry_n], [3])
+        self.actualizar_entradas()
+        for fila, valores in zip(self.entradas, [[2, -3, 1], [2, 0, -1], [1, 4, 5]]):
+            llenar(fila, valores)
+        self.calcular()
 
     def limpiar(self):
         """Reinicia a cero todas las entradas de la matriz."""

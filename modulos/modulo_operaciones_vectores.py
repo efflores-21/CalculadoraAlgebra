@@ -18,6 +18,7 @@ from backend.vectores import (
 from backend.eliminacion import resolver_sistema
 from backend.clasificador import clasificar_sistema
 from modulos._comun import (
+    llenar,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -162,7 +163,7 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                 "Para saber si b es combinación lineal de los vectores, llena "
                 "también la columna b y pulsa «¿b es combinación lineal?».",
             ],
-            clave_teoremas="operaciones_vectores",
+            clave_teoremas="operaciones_vectores", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás cada operación componente por componente, o el "
                        "sistema que decide si b es combinación lineal.",
         )
@@ -397,6 +398,15 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def cargar_ejemplo(self):
+        """Carga dos vectores de R³ y un b, y decide si b es combinación lineal."""
+        llenar([self.entry_n, self.entry_k, self.entry_c], [3, 2, 2])
+        self.actualizar_entradas()
+        llenar(self.vectores_entries[0], [1, 0, 1])
+        llenar(self.vectores_entries[1], [0, 1, 1])
+        llenar(self.b_entries, [2, 3, 5])
+        self.combinacion_lineal()
 
     def limpiar(self):
         """Reinicia los vectores, b, el escalar y el área de resultados."""

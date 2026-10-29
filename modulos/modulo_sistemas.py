@@ -13,6 +13,7 @@ from backend.matriz import formatear_valor, subindice
 from backend.matrices import invertir_gauss_jordan, resolver_cramer
 from backend.operaciones_matriciales import multiplicar_matriz_vector
 from modulos._comun import (
+    llenar,
     Selector,
     boton_primario,
     boton_secundario,
@@ -326,7 +327,7 @@ class ModuloSistemas(ctk.CTkFrame):
             ],
             nota="Ejemplo: 2x₁ + x₂ = 5 se escribe 2 | 1 | 5.  "
                  "Acepta enteros, decimales y fracciones (1/3).",
-            clave_teoremas="sistemas",
+            clave_teoremas="sistemas", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás la matriz aumentada, cada operación entre filas, "
                        "las columnas pivote, la solución y su verificación.",
         )
@@ -833,6 +834,16 @@ class ModuloSistemas(ctk.CTkFrame):
             else "  Resultado: la solución NO satisface todas las ecuaciones."
         )
         return lineas
+
+    def cargar_ejemplo(self):
+        """Carga un sistema de 3 × 3 con solución única y lo resuelve."""
+        llenar([self.entry_m, self.entry_n], [3, 3])
+        self.actualizar_entradas()
+        for fila, valores in zip(self.entradas_A, [[2, 1, -1], [-3, -1, 2], [-2, 1, 2]]):
+            llenar(fila, valores)
+        llenar(self.entradas_b, [8, -11, -3])
+        self.metodo.set("Gauss-Jordan")
+        self.resolver()
 
     def limpiar(self):
         """Reinicia a cero los coeficientes y términos independientes."""
