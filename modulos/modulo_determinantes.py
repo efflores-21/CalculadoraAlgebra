@@ -9,11 +9,7 @@ import customtkinter as ctk
 from fractions import Fraction
 
 from backend.matriz import formatear_valor
-from backend.matrices import (
-    determinante_cofactores_con_pasos,
-    determinante_triangular,
-    sarrus_3x3,
-)
+from backend.matrices import determinante_cofactores_con_pasos, determinante_triangular
 from backend.operaciones_matriciales import LIMITE_COFACTORES, suma_matrices
 from modulos._comun import (
     boton_primario,

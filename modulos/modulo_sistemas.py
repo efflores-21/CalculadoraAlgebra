@@ -121,7 +121,7 @@ def _texto_pasos_gauss(pasos, matriz_final, n_variables):
             lineas.extend([
                 f"Paso {indice_paso}: selección e intercambio de pivote.",
                 f"Objetivo: colocar en la fila activa el candidato de mayor valor absoluto en la columna {columna + 1}.",
-                f"Fundamento: el pivoteo parcial reduce el tamaño de los multiplicadores y evita dividir por cero.",
+                "Fundamento: el pivoteo parcial reduce el tamaño de los multiplicadores y evita dividir por cero.",
                 "Candidatos en la columna: " + ", ".join(formatear_valor(estado_anterior[i][columna])
                     for i in range(fila_activa, len(estado))) + ".",
                 f"Operación: F{fila_activa + 1} ↔ F{fila_candidata + 1}; se intercambian las filas completas de [A|b].",

@@ -12,7 +12,9 @@ from fractions import Fraction
 from backend.matrices import determinante_triangular, invertir_gauss_jordan
 from backend.matriz import _a_fraction
 from backend.operaciones_matriciales import (
+    LIMITE_COFACTORES,
     _matriz_a_fraction,
+    determinante_por_cofactores,
     identidad,
     multiplicar_escalar_matriz,
     multiplicar_matrices,
@@ -20,6 +22,7 @@ from backend.operaciones_matriciales import (
     suma_matrices,
     transponer_matriz,
 )
+
 
 def _propiedad(nombre, izquierda, derecha):
     """Devuelve el registro de una igualdad con sus dos miembros y si se cumple."""
@@ -134,16 +137,19 @@ def propiedades_operaciones_fila(A, det_A, fila_i, fila_j, k):
 
 
 def propiedad_triangular(A):
-    """Compara el determinante de la triangularización con su diagonal.
-    Devuelve (registro, T, intercambios); corrige el signo de cada intercambio."""
+    """Compara det(T) por cofactores con el producto de la diagonal de T (T triangular).
+    Devuelve (registro, T, intercambios)."""
     matriz_T, intercambios = triangular_superior(A)
     producto_diagonal = Fraction(1)
     for i in range(len(matriz_T)):
         producto_diagonal *= matriz_T[i][i]
     nombre = "det(T) = producto de la diagonal (T triangular)"
-    determinante_original = determinante(A)
-    determinante_T = (-1) ** intercambios * determinante_original
-    registro = _propiedad(nombre, determinante_T, producto_diagonal)
+    if len(A) > LIMITE_COFACTORES:
+        return (_no_aplica(nombre, f"La expansión por cofactores se omite para n > {LIMITE_COFACTORES}."),
+                matriz_T, intercambios)
+    # det(T) se calcula por cofactores, un método independiente de la triangulación:
+    # si se usara la misma eliminación, la igualdad se cumpliría por construcción.
+    registro = _propiedad(nombre, determinante_por_cofactores(matriz_T), producto_diagonal)
     return registro, matriz_T, intercambios
 
 
