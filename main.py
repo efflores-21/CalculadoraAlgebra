@@ -59,6 +59,7 @@ from modulos.modulo_lu import ModuloLU
 from modulos.modulo_operaciones_vectores import ModuloOperacionesVectores
 from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
+from modulos.modulo_transformaciones import ModuloTransformaciones
 from modulos.modulo_vectores import ModuloVectores
 
 ctk.set_appearance_mode("Dark")
@@ -82,6 +83,8 @@ MODULOS = (
      "Factoriza A = LU y resuelve Ly = b y Ux = y."),
     ("propiedades", "Propiedades de matrices",
      "Producto, transposición, inversa y determinantes, con ejemplos."),
+    ("transformaciones", "Transformaciones lineales",
+     "Núcleo, imagen, rango, nulidad y teorema de la dimensión."),
 )
 
 
@@ -201,6 +204,7 @@ class MenuPrincipal(ctk.CTk):
             "lu": ModuloLU,
             "determinantes": ModuloDeterminantes,
             "propiedades": ModuloPropiedades,
+            "transformaciones": ModuloTransformaciones,
         }
         if nombre not in clases:
             raise ValueError(f"Módulo desconocido: {nombre}")

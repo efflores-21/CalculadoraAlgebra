@@ -43,6 +43,7 @@ MARCAS = {
     "determinantes": "P5",
     "lu": "P6",
     "propiedades": "P3 · P5",
+    "transformaciones": "P7",
 }
 
 if sys.platform.startswith("win"):

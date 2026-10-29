@@ -117,6 +117,21 @@ TEOREMAS = {
         "Las dimensiones deben ser compatibles: A tiene n columnas y u,v tienen "
         "n componentes.\n"
     ),
+    "transformaciones": (
+        "TRANSFORMACIÓN LINEAL\n\n"
+        "T: ℝⁿ → ℝᵐ es lineal si para todo u, v y todo escalar c:\n"
+        "T(u + v) = T(u) + T(v)   y   T(c·u) = c·T(u).\n"
+        "Toda T(x) = A·x es lineal; A tiene m filas y n columnas.\n\n"
+        "NÚCLEO E IMAGEN\n"
+        "Nu(T) = {x : A·x = 0}. Su dimensión es la nulidad (variables libres).\n"
+        "Im(T) = {A·x} = combinaciones lineales de las columnas de A. Su dimensión "
+        "es el rango (columnas pivote).\n\n"
+        "TEOREMA DE LA DIMENSIÓN\n"
+        "rango(T) + nulidad(T) = n.\n\n"
+        "INYECTIVA Y SOBREYECTIVA\n"
+        "T es inyectiva si Nu(T) = {0} (nulidad 0).\n"
+        "T es sobreyectiva si rango(T) = m.\n"
+    ),
 }
 
 
