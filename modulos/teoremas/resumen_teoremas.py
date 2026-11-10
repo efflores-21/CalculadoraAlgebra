@@ -132,6 +132,17 @@ TEOREMAS = {
         "T es inyectiva si Nu(T) = {0} (nulidad 0).\n"
         "T es sobreyectiva si rango(T) = m.\n"
     ),
+    "metodos_numericos": (
+        "MÉTODO DE BISECCIÓN\n\n"
+        "Si f es continua en [a,b] y f(a)·f(b)<0, el teorema de Bolzano garantiza una raíz.\n"
+        "El punto medio es xr=(a+b)/2 y la cota de error es (b-a)/2.\n"
+        "Se conserva la mitad del intervalo cuyos extremos tienen signos opuestos.\n\n"
+        "PUNTO FLOTANTE Y ERRORES\n"
+        "Los números binarios de precisión finita aproximan algunos valores decimales.\n"
+        "El error absoluto es |xv−xa|; el relativo divide por |xv| y no se define si xv=0.\n"
+        "Para f(x)=sin(x)+x², f'(x)=cos(x)+2x y Δy≈f'(x)Δx para perturbaciones pequeñas.\n"
+        "Las conversiones posicionales suman cada dígito multiplicado por su potencia de base.\n"
+    ),
 }
 
 
