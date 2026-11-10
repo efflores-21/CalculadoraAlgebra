@@ -36,6 +36,8 @@ mapa de la sección siguiente dice dónde está cada parte en el código.
 | 5. Determinantes | Determinante por eliminación triangular y por cofactores paso a paso; contraejemplo det(A + B) ≠ det(A) + det(B). | P5 |
 | 6. Factorización LU y solución Ax = b | A = LU con solo reemplazos de fila, verificación L·U = A, etapas Ly = b y Ux = y. Opción de pivoteo parcial (PA = LU) y sistemas rectangulares. | P6 |
 | 7. Propiedades de matrices | A(u + v) = Au + Av y A(cu) = c(Au); no conmutatividad, cancelación y producto nulo; transposición, inversa, determinantes y criterios de invertibilidad. | P3 · P5 |
+| 8. Transformaciones lineales | Núcleo, imagen, rango, nulidad y teorema de la dimensión. | P7 |
+| 9. Métodos numéricos | Bisección con tabla, graficador, notación posicional decimal/binaria y análisis de errores numéricos. | P7 |
 
 Cada módulo tiene su logotipo ASCII, una guía «Cómo usar» y la opción
 «0. Ver Teoremas Clave del Módulo».
@@ -84,6 +86,14 @@ Cada archivo indica su marca en el encabezado (por ejemplo `[P4]`).
 - `backend/operaciones_matriciales.py` → `son_iguales`, `identidad`
 - `modulos/modulo_lu.py` → pantalla del Módulo 6
 - `modulos/modulo_matrices.py` → `_verificador`
+
+**P7 · Métodos numéricos**
+
+- backend/funciones.py: evaluador seguro de expresiones matemáticas mediante AST.
+- backend/biseccion.py, backend/graficador.py, backend/notacion_posicional.py y backend/errores_numericos.py: cálculos separados de la interfaz.
+- modulos/modulo_metodos_numericos.py: pestañas de Bisección, Graficador, Notación posicional y Errores numéricos.
+
+El evaluador no utiliza eval(). Las gráficas se dibujan con Canvas de Tkinter y el épsilon se obtiene con sys.float_info.epsilon. No se utiliza NumPy ni SciPy; por ello no se realiza el contraste externo de bisección solicitado en la guía.
 
 ## Organización del proyecto
 
