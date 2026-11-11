@@ -56,6 +56,7 @@ from modulos._comun import COLOR, MARCAS, boton_texto, etiqueta, fuente, tarjeta
 from modulos.modulo_determinantes import ModuloDeterminantes
 from modulos.modulo_matrices import ModuloMatrices
 from modulos.modulo_lu import ModuloLU
+from modulos.modulo_metodos_numericos import ModuloMetodosNumericos
 from modulos.modulo_operaciones_vectores import ModuloOperacionesVectores
 from modulos.modulo_propiedades import ModuloPropiedades
 from modulos.modulo_sistemas import ModuloSistemas
@@ -85,6 +86,8 @@ MODULOS = (
      "Producto, transposición, inversa y determinantes, con ejemplos."),
     ("transformaciones", "Transformaciones lineales",
      "Núcleo, imagen, rango, nulidad y teorema de la dimensión."),
+    ("metodos_numericos", "Métodos numéricos",
+     "Bisección, gráficas, notación posicional y errores numéricos."),
 )
 
 
@@ -205,6 +208,7 @@ class MenuPrincipal(ctk.CTk):
             "determinantes": ModuloDeterminantes,
             "propiedades": ModuloPropiedades,
             "transformaciones": ModuloTransformaciones,
+            "metodos_numericos": ModuloMetodosNumericos,
         }
         if nombre not in clases:
             raise ValueError(f"Módulo desconocido: {nombre}")

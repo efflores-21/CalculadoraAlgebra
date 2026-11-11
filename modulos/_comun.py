@@ -49,6 +49,7 @@ MARCAS = {
     "lu": "P6",
     "propiedades": "P3 · P5",
     "transformaciones": "P7",
+    "metodos_numericos": "P7",
 }
 
 if sys.platform.startswith("win"):
