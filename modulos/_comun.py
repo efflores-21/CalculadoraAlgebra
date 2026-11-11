@@ -32,6 +32,11 @@ COLOR = {
     "hover": "#4A4A52",
     "hover_claro": "#2A2A2F",
     "marca": "#5E5E66",
+    # Colores suaves del resultado: ayudan a leerlo por partes sin deslumbrar.
+    "titulo_fondo": "#2A2A30",
+    "paso": "#9DB8F5",
+    "ok": "#86CFA0",
+    "mal": "#EE9A94",
 }
 
 # Marca discreta de cada módulo, en el orden de entrega de los programas del curso.
@@ -97,8 +102,8 @@ def formatear_vector(vector):
     return "(" + ", ".join(formatear_valor(valor) for valor in vector) + ")"
 
 
-def formatear_matriz(matriz):
-    """Presenta una matriz alineada, equivalente a mostrar sus filas y columnas."""
+def formatear_matriz(matriz, separar=None, sangria=""):
+    """Presenta una matriz alineada; `separar` dibuja │ antes de esa columna (para [A | I])."""
     if not matriz:
         return "[ ]"
     textos = [[formatear_valor(valor) for valor in fila] for fila in matriz]
@@ -106,10 +111,13 @@ def formatear_matriz(matriz):
         max(len(fila[j]) for fila in textos)
         for j in range(len(textos[0]))
     ]
+
+    def celda(fila, j):
+        texto = fila[j].rjust(anchos[j])
+        return ("│  " + texto) if j == separar else texto
+
     return "\n".join(
-        "[ " + "  ".join(
-            fila[j].rjust(anchos[j]) for j in range(len(fila))
-        ) + " ]"
+        sangria + "[ " + "  ".join(celda(fila, j) for j in range(len(fila))) + " ]"
         for fila in textos
     )
 
@@ -551,6 +559,39 @@ def reiniciar_celdas(*grupos):
                 celda.insert(0, "0")
 
 
+_NOTA = re.compile(r"^\s*(Por qué|Qué se hace|Condición|Idea clave|Significa)\b")
+
+
+def _estilo_linea(linea):
+    """Decide el estilo de una línea del resultado (o None si va normal)."""
+    if re.match(r"^Paso \d+", linea):
+        return "paso"
+    letras = re.findall(r"[^\W\d_]", linea)
+    if len(letras) >= 5 and not any(c.islower() for c in letras) or re.match(r"^\d+\) [A-ZÁÉÍÓÚÑ¿]", linea):
+        return "titulo"
+    if _NOTA.match(linea):
+        return "nota"
+    if "✗" in linea or re.search(r"NO se cumple|No se cumple|NO coinciden", linea):
+        return "mal"
+    if "✓" in linea or re.search(r"Se cumple|se cumple|coinciden", linea):
+        return "ok"
+    return None
+
+
+def _dar_formato(caja, texto):
+    """Resalta títulos, pasos, notas y comprobaciones para leer el resultado por partes."""
+    caja.tag_config("titulo", background=COLOR["titulo_fondo"], foreground=COLOR["texto_acento"],
+                    spacing1=16, spacing3=6, lmargin1=6)
+    caja.tag_config("paso", foreground=COLOR["paso"], spacing1=14)
+    caja.tag_config("nota", foreground=COLOR["gris"], lmargin2=28)
+    caja.tag_config("ok", foreground=COLOR["ok"])
+    caja.tag_config("mal", foreground=COLOR["mal"])
+    for numero, linea in enumerate(texto.split("\n"), 1):
+        estilo = _estilo_linea(linea)
+        if estilo:
+            caja.tag_add(estilo, f"{numero}.0", f"{numero}.0 lineend +1c")
+
+
 def reemplazar_texto(caja, texto, resumen=None):
     """
     Sustituye todo el texto visible sin acumular resultados anteriores.
@@ -562,6 +603,7 @@ def reemplazar_texto(caja, texto, resumen=None):
     caja.configure(state="normal")
     caja.delete("1.0", "end")
     caja.insert("1.0", texto)
+    _dar_formato(caja, texto)
     caja.see("1.0")
     # Solo lectura: se puede seleccionar y copiar, pero no editar el resultado.
     caja.configure(state="disabled")
@@ -773,14 +815,21 @@ def crear_estructura(
         anchor="w",
         justify="left",
         height=48,
+        wraplength=400,
     )
     respuesta.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12), ipadx=14)
-    respuesta.bind(
-        "<Configure>",
-        lambda evento: respuesta.configure(
-            wraplength=evento.width / ctk.ScalingTracker.get_widget_scaling(respuesta) - 40
-        ),
-    )
+    corte = {"actual": 400}
+
+    def ajustar_respuesta(evento):
+        """Corta el texto de la respuesta según el ancho de la tarjeta."""
+        # Se mide la tarjeta y no la etiqueta: si la etiqueta se midiera a sí misma,
+        # un texto largo la agranda, cambia el corte y se repite sin fin (la app se congela).
+        ancho = max(int(evento.width / ctk.ScalingTracker.get_widget_scaling(derecha)) - 110, 200)
+        if abs(ancho - corte["actual"]) > 4:
+            corte["actual"] = ancho
+            respuesta.configure(wraplength=ancho)
+
+    derecha.bind("<Configure>", ajustar_respuesta, add="+")
     resultado = ctk.CTkTextbox(
         derecha,
         font=fuente_mono(13),

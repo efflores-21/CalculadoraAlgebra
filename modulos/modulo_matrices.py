@@ -356,20 +356,25 @@ class ModuloMatrices(ctk.CTkFrame):
                       "Qué se hace: se reduce [A | I] con operaciones de fila hasta que a la izquierda "
                       "quede la identidad; lo que queda a la derecha es A⁻¹.",
                       f"Condición: A debe ser cuadrada y tener {len(A)} pivotes (det(A) ≠ 0). "
-                      f"Aquí det(A) = {formatear_valor(det_A)} ✓", ""]
+                      f"Aquí det(A) = {formatear_valor(det_A)} ✓",
+                      "PROCEDIMIENTO", "La línea │ separa A (izquierda) de I (derecha)."]
             for indice, (descripcion, matriz_paso) in enumerate(pasos, 1):
-                lineas.append(f"Paso {indice}: {descripcion}")
+                lineas.append(f"Paso {indice}:  {descripcion.replace('<-', '←')}")
                 por_que = _por_que_paso(descripcion)
                 if por_que:
                     lineas.append(f"   Por qué: {por_que}")
-                lineas.append(formatear_matriz(matriz_paso))
+                lineas.append(formatear_matriz(matriz_paso, separar=len(A), sangria="   "))
         self.ultima_matriz_resultado = inversa
         producto, identidad, cumple = verificar_inversa(A, inversa, multiplicar_matrices)
-        lineas.extend(["", "A⁻¹ =", formatear_matriz(inversa), "", "Comprobación: A · A⁻¹ =",
-                       formatear_matriz(producto), "A · A⁻¹ = I: " + ("Se cumple" if cumple else "No se cumple")])
+        lineas.extend(["RESULTADO", "A⁻¹ =", formatear_matriz(inversa, sangria="   "),
+                       "COMPROBACIÓN", "A · A⁻¹ =", formatear_matriz(producto, sangria="   "),
+                       "A · A⁻¹ = I: " + ("Se cumple ✓" if cumple else "No se cumple ✗")])
         lineas.extend(self._comparar_metodos_inversa(A, inversa, otro))
-        lineas.extend(["", diagnostico_invertibilidad(A, det_A)])
-        return lineas, f"A⁻¹ = {matriz_en_linea(inversa)}"
+        lineas.extend(["CONCLUSIÓN", diagnostico_invertibilidad(A, det_A)])
+        if len(A) <= 3:
+            return lineas, f"A⁻¹ = {matriz_en_linea(inversa)}"
+        return lineas, (f"A⁻¹ calculada (está abajo, en RESULTADO)   ·   det(A) = {formatear_valor(det_A)}"
+                        f"   ·   A · A⁻¹ = I {'✓' if cumple else '✗'}")
 
     def _comparar_metodos_inversa(self, A, inversa, otro):
         """Compara la inversa con la del otro método (adjunta solo hasta el límite de cofactores)."""
