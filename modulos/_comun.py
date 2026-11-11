@@ -579,18 +579,43 @@ def _estilo_linea(linea):
     return None
 
 
+def _es_fila_de_matriz(linea):
+    """Las filas de una matriz empiezan con «[» (con o sin sangría)."""
+    return linea.lstrip().startswith("[")
+
+
 def _dar_formato(caja, texto):
-    """Resalta títulos, pasos, notas y comprobaciones para leer el resultado por partes."""
+    """Resalta títulos, pasos, notas y comprobaciones y deja aire entre las partes."""
+    # Aire general: cada línea separada y el texto despegado de los bordes.
+    caja.configure(spacing1=3, spacing2=4, spacing3=3, padx=10, pady=8)
+    # El espacio de arriba del título se pone en la línea anterior: si fuera parte
+    # del título, la barra gris se estiraría hacia arriba.
     caja.tag_config("titulo", background=COLOR["titulo_fondo"], foreground=COLOR["texto_acento"],
-                    spacing1=16, spacing3=6, lmargin1=6)
-    caja.tag_config("paso", foreground=COLOR["paso"], spacing1=14)
+                    spacing1=8, spacing3=8, lmargin1=6)
+    caja.tag_config("antes_de_titulo", spacing3=22)
+    caja.tag_config("paso", foreground=COLOR["paso"], spacing1=24, spacing3=4)
     caja.tag_config("nota", foreground=COLOR["gris"], lmargin2=28)
     caja.tag_config("ok", foreground=COLOR["ok"])
     caja.tag_config("mal", foreground=COLOR["mal"])
-    for numero, linea in enumerate(texto.split("\n"), 1):
+    # Las filas de una matriz van juntas (para que se vea como matriz) y el bloque
+    # completo queda separado del texto de arriba y de abajo.
+    caja.tag_config("matriz", spacing1=0, spacing3=0)
+    caja.tag_config("matriz_inicio", spacing1=10)
+    caja.tag_config("matriz_fin", spacing3=12)
+    lineas = texto.split("\n")
+    for numero, linea in enumerate(lineas, 1):
+        rango = (f"{numero}.0", f"{numero}.0 lineend +1c")
         estilo = _estilo_linea(linea)
         if estilo:
-            caja.tag_add(estilo, f"{numero}.0", f"{numero}.0 lineend +1c")
+            caja.tag_add(estilo, *rango)
+        if estilo == "titulo" and numero > 1:
+            caja.tag_add("antes_de_titulo", f"{numero - 1}.0", f"{numero - 1}.0 lineend +1c")
+        if _es_fila_de_matriz(linea):
+            caja.tag_add("matriz", *rango)
+            if numero == 1 or not _es_fila_de_matriz(lineas[numero - 2]):
+                caja.tag_add("matriz_inicio", *rango)
+            if numero == len(lineas) or not _es_fila_de_matriz(lineas[numero]):
+                caja.tag_add("matriz_fin", *rango)
 
 
 def reemplazar_texto(caja, texto, resumen=None):

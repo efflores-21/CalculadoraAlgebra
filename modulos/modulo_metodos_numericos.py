@@ -1,5 +1,6 @@
 """Pantalla integrada de bisección, gráficas, notación posicional y errores numéricos."""
 
+import re
 import tkinter as tk
 
 import customtkinter as ctk
@@ -22,6 +23,30 @@ from modulos._comun import (
     reemplazar_texto,
     mostrar_teoremas,
 )
+
+
+def _leer_entero(texto, nombre):
+    """Convierte un campo a entero con un mensaje en español (int() da uno técnico en inglés)."""
+    texto = texto.strip()
+    if not re.fullmatch(r"[+-]?\d+", texto):
+        raise ValueError(f"{nombre} debe ser un número entero, sin decimales ni letras.")
+    if len(texto.lstrip("+-")) > 30:
+        raise ValueError(f"{nombre} puede tener como máximo 30 cifras.")
+    return int(texto)
+
+
+def _leer_real(texto, nombre):
+    """Convierte un campo a número real con un mensaje en español."""
+    try:
+        return float(texto)
+    except ValueError as error:
+        raise ValueError(f"{nombre} debe ser un número real.") from error
+
+
+def _fila_tabla(valores):
+    """Alinea una fila de la tabla de bisección en columnas de ancho fijo."""
+    k, *resto = valores
+    return f"{str(k):>3} " + "".join(f"{str(valor):>13}" for valor in resto)
 
 
 class ModuloMetodosNumericos(ctk.CTkFrame):
@@ -91,12 +116,12 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         acciones.pack(anchor="w", padx=12, pady=5)
         boton_primario(acciones, "Resolver por bisección", self.calcular_biseccion, width=205).pack(side="left", padx=(0, 8))
         boton_secundario(acciones, "Graficar este intervalo", self.graficar_intervalo_biseccion, width=195).pack(side="left")
-        self.b_resultado = self._caja_texto(marco, 18)
+        self.b_resultado = self._caja_texto(marco, 28)
 
     def calcular_biseccion(self):
         """Calcula la raíz y explica resumen, cota y trazabilidad de cada intervalo."""
         try:
-            maximo = int(self.b_max.get().strip())
+            maximo = _leer_entero(self.b_max.get(), "El máximo de iteraciones")
             datos = resolver_biseccion(self.b_expr.get(), self.b_a.get(), self.b_b.get(), self.b_tol.get(), maximo)
         except (ValueError, OverflowError) as error:
             self._mostrar_error(error)
@@ -105,28 +130,37 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             "expresion": self.b_expr.get().strip(),
             "a": float(self.b_a.get()), "b": float(self.b_b.get()), **datos,
         }
+        relativo = datos["tabla"][-1].get("error_relativo_aprox") if datos["tabla"] else None
         lineas = [
             "BISECCIÓN — MÉTODO ITERATIVO",
-            "En cada fila, a y b son los extremos usados para calcular xr; Eb=(b-a)/2 se registra antes de actualizar.",
-            datos["advertencia"], "",
-            f"Raíz aproximada: {datos['raiz']:.12g}", f"f(raíz): {datos['f_raiz']:.6g}",
-            f"Iteraciones: {datos['iteraciones']} (teóricas: {datos['iteraciones_teoricas']})",
+            f"f(x) = {self.b_expr.get().strip()}   en   [{self.b_a.get().strip()}, {self.b_b.get().strip()}]",
+            f"Idea clave: {datos['advertencia']}",
+            "RESULTADO",
+            f"Raíz aproximada:   xr = {datos['raiz']:.12g}",
+            f"f(xr) = {datos['f_raiz']:.6g}",
+            f"Iteraciones: {datos['iteraciones']}   (teóricas: {datos['iteraciones_teoricas']})",
             f"Intervalo final: [{datos['intervalo_final'][0]:.12g}, {datos['intervalo_final'][1]:.12g}]",
-            f"Cota registrada: {datos['cota_error']:.6g}",
-            f"Diferencia entre las dos últimas aproximaciones: {self._formato(datos['error_absoluto_aprox'])}",
-            f"Error relativo aproximado entre iteraciones: {self._formato(datos['tabla'][-1].get('error_relativo_aprox') if datos['tabla'] else None)}",
-            "Este error entre aproximaciones no es el error relativo respecto de la raíz verdadera.",
+            f"Cota del error Eb = {datos['cota_error']:.6g}",
+            f"Diferencia entre las dos últimas aproximaciones Ea = {self._formato(datos['error_absoluto_aprox'])}",
+            f"Error relativo aproximado εa = {self._formato(relativo)}",
+            "Significa: εa compara dos aproximaciones seguidas, no la raíz verdadera.",
             f"Terminación: {datos['motivo']}",
-            "Contraste externo SciPy: omitido por la restricción del proyecto; la tabla, el signo y la cota permiten comprobar el cálculo.",
-            "", "k | a | b | f(a) | f(b) | xr | f(xr) | Eb | Ea | εa | decisión y nuevo intervalo",
+            "TABLA DE ITERACIONES",
+            "Significa: Eb = (b − a)/2 es la cota del error;  Ea = |xr − xr anterior|;  εa = Ea/|xr|.",
+            "",
+            _fila_tabla(("k", "a", "b", "f(a)", "f(b)", "xr", "f(xr)", "Eb", "Ea", "εa")),
+            "─" * (4 + 13 * 9),
         ]
         for paso in datos["tabla"]:
-            lineas.append(
-                f"{paso['k']} | {paso['a']:.8g} | {paso['b']:.8g} | {paso['fa']:.5g} | {paso['fb']:.5g} | "
-                f"{paso['xr']:.10g} | {paso['fr']:.5g} | {paso['cota_error']:.4g} | "
-                f"{self._formato(paso['error_absoluto_aprox'])} | {self._formato(paso['error_relativo_aprox'])} | "
-                f"{paso['decision']} {paso['intervalo_siguiente']}"
-            )
+            lineas.append(_fila_tabla((
+                paso["k"], f"{paso['a']:.8g}", f"{paso['b']:.8g}", f"{paso['fa']:.5g}", f"{paso['fb']:.5g}",
+                f"{paso['xr']:.10g}", f"{paso['fr']:.5g}", f"{paso['cota_error']:.4g}",
+                self._formato(paso["error_absoluto_aprox"]), self._formato(paso["error_relativo_aprox"]),
+            )))
+            nuevo_a, nuevo_b = paso["intervalo_siguiente"]
+            lineas.extend([f"     → {paso['decision']}  Nuevo intervalo: [{nuevo_a:.8g}, {nuevo_b:.8g}]", ""])
+        lineas.extend(["", "Nota: la comparación con SciPy se omite por las reglas del proyecto; "
+                           "la tabla, los signos y la cota permiten comprobar el cálculo."])
         self._poner(self.b_resultado, "\n".join(lineas))
 
     def graficar_intervalo_biseccion(self):
@@ -142,6 +176,9 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         ventana = ctk.CTkToplevel(self)
         ventana.title("Cómo usar · Métodos numéricos")
         ventana.geometry("720x560")
+        # En Windows la ventana nueva a veces queda detrás de la principal.
+        ventana.after(150, ventana.lift)
+        ventana.after(150, ventana.focus_force)
         caja = ctk.CTkTextbox(ventana, wrap="word", font=ctk.CTkFont(size=14))
         caja.pack(fill="both", expand=True, padx=18, pady=18)
         texto = (
@@ -188,7 +225,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             ymin_txt, ymax_txt = self.g_ymin.get().strip(), self.g_ymax.get().strip()
             if bool(ymin_txt) != bool(ymax_txt):
                 raise ValueError("Ingrese ambos límites verticales o deje los dos vacíos.")
-            limites = (float(ymin_txt), float(ymax_txt)) if ymin_txt else None
+            limites = (_leer_real(ymin_txt, "y mínimo"), _leer_real(ymax_txt, "y máximo")) if ymin_txt else None
             self.ultima_muestra = muestrear_funcion(
                 self.g_expr.get(), self.g_xmin.get(), self.g_xmax.get(), limites_y=limites
             )
@@ -271,7 +308,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         """Muestra forma posicional en base 10 y su conversión exacta a base 2."""
         try:
             texto = self.n_decimal.get().strip()
-            valor = int(texto)
+            valor = _leer_entero(texto, "El valor decimal")
             if texto not in (str(valor), f"+{valor}"):
                 raise ValueError("El valor decimal debe ser un entero, sin separadores ni parte decimal.")
             decimal, binario = descomponer_decimal(valor), decimal_a_binario(valor)
