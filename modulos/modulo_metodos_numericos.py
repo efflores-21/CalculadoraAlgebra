@@ -91,7 +91,8 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         acciones.pack(anchor="w", padx=12, pady=5)
         boton_primario(acciones, "Resolver por bisección", self.calcular_biseccion, width=205).pack(side="left", padx=(0, 8))
         boton_secundario(acciones, "Graficar este intervalo", self.graficar_intervalo_biseccion, width=195).pack(side="left")
-        self.b_resultado = self._caja_texto(marco, 18)
+        self.b_resultado = ctk.CTkFrame(marco, fg_color="transparent")
+        self.b_resultado.pack(fill="x", expand=True, padx=6, pady=(8, 12))
 
     def calcular_biseccion(self):
         """Calcula la raíz y explica resumen, cota y trazabilidad de cada intervalo."""
@@ -105,29 +106,101 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             "expresion": self.b_expr.get().strip(),
             "a": float(self.b_a.get()), "b": float(self.b_b.get()), **datos,
         }
-        lineas = [
-            "BISECCIÓN — MÉTODO ITERATIVO",
-            "En cada fila, a y b son los extremos usados para calcular xr; Eb=(b-a)/2 se registra antes de actualizar.",
-            datos["advertencia"], "",
-            f"Raíz aproximada: {datos['raiz']:.12g}", f"f(raíz): {datos['f_raiz']:.6g}",
-            f"Iteraciones: {datos['iteraciones']} (teóricas: {datos['iteraciones_teoricas']})",
-            f"Intervalo final: [{datos['intervalo_final'][0]:.12g}, {datos['intervalo_final'][1]:.12g}]",
-            f"Cota registrada: {datos['cota_error']:.6g}",
-            f"Diferencia entre las dos últimas aproximaciones: {self._formato(datos['error_absoluto_aprox'])}",
-            f"Error relativo aproximado entre iteraciones: {self._formato(datos['tabla'][-1].get('error_relativo_aprox') if datos['tabla'] else None)}",
-            "Este error entre aproximaciones no es el error relativo respecto de la raíz verdadera.",
-            f"Terminación: {datos['motivo']}",
-            "Contraste externo SciPy: omitido por la restricción del proyecto; la tabla, el signo y la cota permiten comprobar el cálculo.",
-            "", "k | a | b | f(a) | f(b) | xr | f(xr) | Eb | Ea | εa | decisión y nuevo intervalo",
-        ]
-        for paso in datos["tabla"]:
-            lineas.append(
-                f"{paso['k']} | {paso['a']:.8g} | {paso['b']:.8g} | {paso['fa']:.5g} | {paso['fb']:.5g} | "
-                f"{paso['xr']:.10g} | {paso['fr']:.5g} | {paso['cota_error']:.4g} | "
-                f"{self._formato(paso['error_absoluto_aprox'])} | {self._formato(paso['error_relativo_aprox'])} | "
-                f"{paso['decision']} {paso['intervalo_siguiente']}"
-            )
-        self._poner(self.b_resultado, "\n".join(lineas))
+        for widget in self.b_resultado.winfo_children():
+            widget.destroy()
+
+        def numero(valor):
+            return "—" if valor is None else f"{valor:.8g}"
+
+        resumen = ctk.CTkFrame(self.b_resultado, fg_color="transparent")
+        resumen.pack(fill="x", padx=6, pady=(0, 8))
+        valores = (
+            ("Raíz aproximada", numero(datos["raiz"])),
+            ("Iteraciones realizadas", str(datos["iteraciones"])),
+            ("Iteraciones teóricas", str(datos["iteraciones_teoricas"])),
+            ("Intervalo final", f"[{numero(datos['intervalo_final'][0])}, {numero(datos['intervalo_final'][1])}]"),
+            ("Cota de error final", numero(datos["cota_error"])),
+            ("Tolerancia solicitada", numero(float(self.b_tol.get()))),
+        )
+        for columna in range(3):
+            resumen.grid_columnconfigure(columna, weight=1, uniform="resumen_biseccion")
+        for indice, (titulo, valor) in enumerate(valores):
+            tarjeta = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
+                                   border_width=1, border_color=COLOR["borde"])
+            tarjeta.grid(row=indice // 3, column=indice % 3, sticky="ew", padx=4, pady=4)
+            etiqueta(tarjeta, titulo, tamano=11, color="gris").pack(anchor="w", padx=12, pady=(8, 1))
+            etiqueta(tarjeta, valor, tamano=14, negrita=True, color="texto").pack(anchor="w", padx=12, pady=(0, 8))
+
+        estado = "Tolerancia alcanzada" if datos["alcanzada_tolerancia"] else "Máximo de iteraciones alcanzado"
+        color_estado = "#66C2A5" if datos["alcanzada_tolerancia"] else "#F4A261"
+        tarjeta_estado = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
+                                      border_width=1, border_color=COLOR["borde"])
+        tarjeta_estado.grid(row=2, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+        etiqueta(tarjeta_estado, "Estado de terminación", tamano=11, color="gris").pack(
+            anchor="w", padx=12, pady=(8, 1)
+        )
+        ctk.CTkLabel(tarjeta_estado, text=estado, text_color=color_estado,
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(0, 8))
+        explicacion = (
+            "Se alcanzó la tolerancia solicitada porque la cota del semiancho del intervalo final "
+            "es menor o igual que la tolerancia establecida."
+            if datos["alcanzada_tolerancia"] else
+            "Se llegó al máximo de iteraciones antes de cumplir la tolerancia; la aproximación mostrada "
+            "no garantiza que el error sea menor o igual que el valor solicitado."
+        )
+        etiqueta(self.b_resultado, datos["advertencia"], tamano=11, color="gris").pack(
+            anchor="w", padx=10, pady=(4, 6)
+        )
+
+        contenedor = ctk.CTkFrame(self.b_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
+        contenedor.pack(fill="x", expand=True, padx=6, pady=(0, 6))
+        canvas = tk.Canvas(contenedor, height=330, background=COLOR["tarjeta"],
+                           highlightthickness=0, borderwidth=0)
+        barra_y = ctk.CTkScrollbar(contenedor, orientation="vertical", command=canvas.yview)
+        barra_x = ctk.CTkScrollbar(contenedor, orientation="horizontal", command=canvas.xview)
+        canvas.configure(yscrollcommand=barra_y.set, xscrollcommand=barra_x.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        barra_y.grid(row=0, column=1, sticky="ns")
+        barra_x.grid(row=1, column=0, sticky="ew")
+        contenedor.grid_rowconfigure(0, weight=1)
+        contenedor.grid_columnconfigure(0, weight=1)
+        tabla = ctk.CTkFrame(canvas, fg_color=COLOR["tarjeta"], width=1390)
+        canvas.create_window((0, 0), window=tabla, anchor="nw")
+        tabla.bind("<Configure>", lambda _evento: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        titulos = ("Iteración", "a", "b", "Punto medio (xr)", "f(xr)", "Cota de error",
+                   "Error aproximado", "Intervalo conservado")
+        anchos = (76, 145, 145, 165, 145, 145, 165, 260)
+        for columna, (titulo, ancho) in enumerate(zip(titulos, anchos)):
+            ctk.CTkLabel(tabla, text=titulo, width=ancho, height=42, anchor="center",
+                         fg_color=COLOR["acento"], text_color=COLOR["texto"],
+                         font=ctk.CTkFont(size=12, weight="bold")).grid(
+                             row=0, column=columna, sticky="nsew", padx=1, pady=1)
+        if not datos["tabla"]:
+            etiqueta(tabla, "La raíz exacta está en un extremo; no se requieren iteraciones.",
+                     tamano=12, color="gris").grid(row=1, column=0, columnspan=8, sticky="w", padx=12, pady=12)
+        for fila, paso in enumerate(datos["tabla"], 1):
+            intervalo = paso["intervalo_siguiente"]
+            if paso["fr"] == 0:
+                conservado = f"Raíz exacta: xr = {numero(paso['xr'])}"
+            elif intervalo[1] == paso["xr"]:
+                conservado = f"[a, xr] = [{numero(intervalo[0])}, {numero(intervalo[1])}]"
+            else:
+                conservado = f"[xr, b] = [{numero(intervalo[0])}, {numero(intervalo[1])}]"
+            celdas = (str(paso["k"]), numero(paso["a"]), numero(paso["b"]), numero(paso["xr"]),
+                      numero(paso["fr"]), numero(paso["cota_error"]),
+                      numero(paso["error_absoluto_aprox"]), conservado)
+            fondo = COLOR["suave"] if fila % 2 == 0 else COLOR["tarjeta"]
+            for columna, (valor, ancho) in enumerate(zip(celdas, anchos)):
+                ctk.CTkLabel(tabla, text=valor, width=ancho, height=34, anchor="center",
+                             fg_color=fondo, text_color=COLOR["texto"],
+                             font=ctk.CTkFont(size=12)).grid(
+                                 row=fila, column=columna, sticky="nsew", padx=1, pady=1)
+        cabecera = ctk.CTkFrame(self.b_resultado, fg_color=COLOR["suave"], corner_radius=8)
+        cabecera.pack(fill="x", padx=6, pady=(4, 0))
+        ctk.CTkLabel(cabecera, text=estado, text_color=color_estado,
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(9, 2))
+        etiqueta(cabecera, explicacion, tamano=12, color="texto").pack(anchor="w", padx=12, pady=(0, 9))
 
     def graficar_intervalo_biseccion(self):
         """Copia expresión e intervalo de búsqueda a la pestaña del graficador."""
