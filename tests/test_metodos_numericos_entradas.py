@@ -4,7 +4,7 @@ import unittest
 
 from backend.biseccion import resolver_biseccion
 from backend.notacion_posicional import binario_a_decimal, decimal_a_binario
-from modulos.modulo_metodos_numericos import _fila_tabla, _leer_entero, _leer_real
+from modulos.modulo_metodos_numericos import _filas_a_mostrar, _leer_entero, _leer_real
 
 
 class EntradasMetodosNumericos(unittest.TestCase):
@@ -29,12 +29,15 @@ class EntradasMetodosNumericos(unittest.TestCase):
             decimal_a_binario(10 ** 40)
         self.assertEqual(binario_a_decimal("1" * 100)["decimal"], 2 ** 100 - 1)
 
-    def test_tabla_de_biseccion_alineada(self):
-        datos = resolver_biseccion("x**3 - 2*x - 5", 2, 3, 0.0001, 100)
-        self.assertAlmostEqual(datos["raiz"], 2.0945, places=3)
-        encabezado = _fila_tabla(("k", "a", "b", "f(a)", "f(b)", "xr", "f(xr)", "Eb", "Ea", "εa"))
-        fila = _fila_tabla((1, "2", "3", "-1", "16", "2.5", "5.625", "0.5", "—", "—"))
-        self.assertEqual(len(encabezado), len(fila))
+    def test_tabla_de_biseccion_limita_filas(self):
+        corta = resolver_biseccion("x**3 - 2*x - 5", 2, 3, 0.0001, 100)["tabla"]
+        self.assertEqual(_filas_a_mostrar(corta), corta)
+        larga = resolver_biseccion("x**3 - 2*x - 5", 2, 3, 1e-300, 10000)["tabla"]
+        filas = _filas_a_mostrar(larga)
+        self.assertGreater(len(larga), 1000)
+        self.assertEqual(len(filas), 51)
+        self.assertIsNone(filas[25])
+        self.assertIs(filas[-1], larga[-1])
 
 
 if __name__ == "__main__":
