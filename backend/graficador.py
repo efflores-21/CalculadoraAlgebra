@@ -17,7 +17,10 @@ def muestrear_funcion(expresion, x_min, x_max, cantidad=1200, limites_y=None):
     if isinstance(cantidad, bool) or not isinstance(cantidad, int) or not 1000 <= cantidad <= 10000:
         raise ValueError("La cantidad de puntos debe ser un entero entre 1000 y 10000.")
     if limites_y is not None:
-        y_min, y_max = map(float, limites_y)
+        try:
+            y_min, y_max = map(float, limites_y)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Los límites verticales deben ser números reales.") from error
         if not math.isfinite(y_min) or not math.isfinite(y_max) or y_min >= y_max:
             raise ValueError("Los límites verticales deben ser finitos y el mínimo menor que el máximo.")
     else:

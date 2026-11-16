@@ -28,7 +28,7 @@ from modulos._comun import (
 def _leer_entero(texto, nombre):
     """Convierte un campo a entero con un mensaje en español (int() da uno técnico en inglés)."""
     texto = texto.strip()
-    if not re.fullmatch(r"[+-]?\d+", texto):
+    if not re.fullmatch(r"[+-]?[0-9]+", texto):
         raise ValueError(f"{nombre} debe ser un número entero, sin decimales ni letras.")
     if len(texto.lstrip("+-")) > 30:
         raise ValueError(f"{nombre} puede tener como máximo 30 cifras.")
@@ -163,8 +163,18 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             etiqueta(tarjeta, titulo, tamano=11, color="gris").pack(anchor="w", padx=12, pady=(8, 1))
             etiqueta(tarjeta, valor, tamano=14, negrita=True, color="texto").pack(anchor="w", padx=12, pady=(0, 8))
 
-        estado = "Tolerancia alcanzada" if datos["alcanzada_tolerancia"] else "Máximo de iteraciones alcanzado"
-        color_estado = "#66C2A5" if datos["alcanzada_tolerancia"] else "#F4A261"
+        if datos["aviso_discontinuidad"]:
+            estado = "Sin raíz confiable: posible asíntota"
+        elif datos["alcanzada_tolerancia"]:
+            estado = "Tolerancia alcanzada"
+        elif "precisión" in datos["motivo"]:
+            estado = "Límite de precisión de la computadora"
+        else:
+            estado = "Máximo de iteraciones alcanzado"
+        if datos["aviso_discontinuidad"]:
+            color_estado = COLOR["mal"]
+        else:
+            color_estado = "#66C2A5" if datos["alcanzada_tolerancia"] else "#F4A261"
         tarjeta_estado = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
                                       border_width=1, border_color=COLOR["borde"])
         tarjeta_estado.grid(row=2, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
@@ -177,9 +187,14 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             "Se alcanzó la tolerancia solicitada porque la cota del semiancho del intervalo final "
             "es menor o igual que la tolerancia establecida."
             if datos["alcanzada_tolerancia"] else
+            datos["motivo"] if "precisión" in datos["motivo"] else
             "Se llegó al máximo de iteraciones antes de cumplir la tolerancia; la aproximación mostrada "
             "no garantiza que el error sea menor o igual que el valor solicitado."
         )
+        if datos["aviso_discontinuidad"]:
+            ctk.CTkLabel(self.b_resultado, text="⚠  " + datos["aviso_discontinuidad"], text_color=COLOR["mal"],
+                         font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left",
+                         wraplength=900).pack(anchor="w", padx=10, pady=(6, 2))
         etiqueta(self.b_resultado, datos["advertencia"], tamano=11, color="gris").pack(
             anchor="w", padx=10, pady=(4, 6)
         )
@@ -361,12 +376,15 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         resultado = self.ultimo_resultado
         if resultado and resultado["expresion"] == self.g_expr.get().strip():
             xr, fr = resultado["raiz"], resultado["f_raiz"]
+            a0, b0 = resultado["a"], resultado["b"]
+            if xmin <= a0 <= xmax and xmin <= b0 <= xmax and ymin <= 0 <= ymax:
+                # La guía pide identificar qué intervalo se dibuja: es el inicial [a, b].
+                canvas.create_line(px(a0), py(0), px(b0), py(0), fill="#F4A261", width=4)
+                canvas.create_text((px(a0) + px(b0)) / 2, py(0) + 16, fill="#F4A261",
+                                   text=f"intervalo inicial de bisección [{a0:g}, {b0:g}]")
             if xmin <= xr <= xmax and ymin <= fr <= ymax:
                 canvas.create_oval(px(xr)-5, py(fr)-5, px(xr)+5, py(fr)+5, fill="#F4A261", outline="white")
                 canvas.create_text(px(xr)+9, py(fr)-10, text=f"raíz ≈ {xr:.6g}", fill="#F4A261", anchor="w")
-                a0, b0 = resultado["a"], resultado["b"]
-                if xmin <= a0 <= xmax and xmin <= b0 <= xmax and ymin <= 0 <= ymax:
-                    canvas.create_line(px(a0), py(0), px(b0), py(0), fill="#F4A261", width=4)
 
     def _crear_notacion(self, parent):
         marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
@@ -387,8 +405,6 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         try:
             texto = self.n_decimal.get().strip()
             valor = _leer_entero(texto, "El valor decimal")
-            if texto not in (str(valor), f"+{valor}"):
-                raise ValueError("El valor decimal debe ser un entero, sin separadores ni parte decimal.")
             decimal, binario = descomponer_decimal(valor), decimal_a_binario(valor)
         except ValueError as error:
             self._mostrar_error(error)
@@ -405,7 +421,11 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             return
         signo = "El signo se conserva y la expansión se realiza sobre el valor absoluto.\n" if datos["decimal"] < 0 else ""
         suma = " + ".join(str(valor) for valor in datos["parciales"])
-        self._poner(self.n_resultado, f"Base de origen: 2\n{signo}({datos['binario']})₂ = {datos['descomposicion']}\n= {suma} = ({datos['decimal']})₁₀\nComprobación: decimal a binario devuelve {datos['binario']}.")
+        if datos["decimal"] < 0:
+            suma = f"-({suma})"
+        # Sin ceros a la izquierda: es lo que devuelve de verdad la conversión inversa.
+        inverso = ("-" if datos["decimal"] < 0 else "") + format(abs(datos["decimal"]), "b")
+        self._poner(self.n_resultado, f"Base de origen: 2\n{signo}({datos['binario']})₂ = {datos['descomposicion']}\n= {suma} = ({datos['decimal']})₁₀\nComprobación: decimal a binario devuelve {inverso}.")
 
     def _crear_errores(self, parent):
         marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")

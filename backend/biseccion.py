@@ -6,6 +6,7 @@ from backend.funciones import compilar_funcion
 
 
 def _finito(valor, nombre):
+    """Convierte un dato a float y exige que sea un número real finito."""
     try:
         convertido = float(valor)
     except (TypeError, ValueError, OverflowError) as error:
@@ -52,6 +53,7 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
             "error_absoluto_aprox": None, "error_relativo": None,
             "iteraciones_teoricas": teoricas, "motivo": "Raíz exacta en un extremo.",
             "alcanzada_tolerancia": True, "tabla": [], "advertencia": advertencia,
+            "aviso_discontinuidad": "",
         }
     if (fa < 0) == (fb < 0):
         raise ValueError(
@@ -59,6 +61,7 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
             "Esto no permite concluir que no haya raíces en otros intervalos."
         )
 
+    fa_inicial, fb_inicial = fa, fb
     tabla, anterior = [], None
     for k in range(1, max_iteraciones + 1):
         a_usado, b_usado, fa_usado, fb_usado = a, b, fa, fb
@@ -76,6 +79,7 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
         error_relativo_aprox = (
             None if anterior is None or xr == 0 else abs((xr - anterior) / xr)
         )
+        detener = True
         if fr == 0:
             siguiente = (a_usado, b_usado)
             motivo = "Raíz exacta en aritmética de punto flotante."
@@ -84,11 +88,20 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
             siguiente = (a_usado, b_usado)
             motivo = "Se alcanzó la tolerancia mediante la cota del semiancho."
             alcanzada = True
+        elif xr in (a_usado, b_usado):
+            # a y b ya son floats vecinos: el punto medio repite un extremo y seguir
+            # iterando no cambia nada (antes llegaba al máximo, hasta 10000 vueltas).
+            siguiente = (a_usado, b_usado)
+            motivo = ("Se llegó al límite de precisión de float: el intervalo ya no se puede dividir más, "
+                      "así que la tolerancia pedida no se puede alcanzar.")
+            alcanzada = False
         elif (fa_usado < 0) != (fr < 0):
+            detener = False
             siguiente = (a_usado, xr)
             motivo = "Se conserva [a, xr] porque sus extremos tienen signos opuestos."
             alcanzada = False
         else:
+            detener = False
             siguiente = (xr, b_usado)
             motivo = "Se conserva [xr, b] porque sus extremos tienen signos opuestos."
             alcanzada = False
@@ -100,7 +113,7 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
             "intervalo_siguiente": siguiente,
             "decision": motivo,
         })
-        if fr == 0 or cota <= tolerancia:
+        if detener:
             intervalo_final = (a_usado, b_usado)
             break
         anterior = xr
@@ -120,4 +133,19 @@ def resolver_biseccion(expresion, a, b, tolerancia, max_iteraciones):
         "error_relativo": None, "iteraciones_teoricas": teoricas,
         "motivo": motivo, "alcanzada_tolerancia": alcanzada,
         "tabla": tabla, "advertencia": advertencia,
+        "aviso_discontinuidad": _aviso_discontinuidad(tabla, fa_inicial, fb_inicial),
     }
+
+
+def _aviso_discontinuidad(tabla, fa_inicial, fb_inicial):
+    """Avisa si |f(xr)| crece al final: cerca de una raíz baja, cerca de una asíntota sube."""
+    if len(tabla) < 4:
+        return ""
+    valores = [abs(paso["fr"]) for paso in tabla]
+    final = valores[-1]
+    # Junto a una asíntota |f(xr)| sube en zigzag; se compara con los extremos y
+    # con la primera mitad de las iteraciones en lugar de exigir que suba siempre.
+    if final <= 10 * max(abs(fa_inicial), abs(fb_inicial)) or final <= max(valores[:len(valores) // 2]):
+        return ""
+    return ("Posible discontinuidad: |f(xr)| crece en lugar de acercarse a 0. El cambio de signo "
+            "parece venir de una asíntota, no de una raíz.")

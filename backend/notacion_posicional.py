@@ -13,6 +13,7 @@ def _validar_largo(cifras, maximo, nombre):
 
 
 def _digitos_y_suma(valor, base):
+    """Cada dígito por su potencia de la base; los negativos van como −(…)."""
     magnitud = abs(valor)
     digitos = str(magnitud) if base == 10 else format(magnitud, "b")
     terminos, parciales = [], []
@@ -22,8 +23,11 @@ def _digitos_y_suma(valor, base):
         terminos.append(f"{cifra} × {base}^{potencia}")
         parciales.append(cifra * (base ** potencia))
     signo = "-" if valor < 0 else ""
+    suma_escrita = " + ".join(terminos)
+    # Con el signo solo delante del primer término, −13 se leía −1·10 + 3 = −7.
+    descomposicion = f"-({suma_escrita})" if valor < 0 else suma_escrita
     return {
-        "valor": valor, "base": base, "digitos": digitos, "descomposicion": signo + " + ".join(terminos),
+        "valor": valor, "base": base, "digitos": digitos, "descomposicion": descomposicion,
         "parciales": parciales, "suma": sum(parciales), "signo": signo,
     }
 
