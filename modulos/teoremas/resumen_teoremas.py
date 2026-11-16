@@ -132,6 +132,19 @@ TEOREMAS = {
         "T es inyectiva si Nu(T) = {0} (nulidad 0).\n"
         "T es sobreyectiva si rango(T) = m.\n"
     ),
+    "iterativos": (
+        "MÉTODOS DE JACOBI Y GAUSS-SEIDEL\n\n"
+        "Se despeja la incógnita i de la ecuación i: xᵢ = (bᵢ − Σⱼ≠ᵢ aᵢⱼ xⱼ) / aᵢᵢ (requiere aᵢᵢ ≠ 0).\n"
+        "Jacobi usa solo los valores de la iteración anterior (actualización simultánea).\n"
+        "Gauss-Seidel usa de inmediato los valores recién calculados (actualización inmediata).\n\n"
+        "CRITERIO DE PARADA\n"
+        "Se detiene cuando ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞ ≤ ε o al llegar al máximo de iteraciones.\n"
+        "El residuo ‖Ax − b‖∞ comprueba qué tan bien la aproximación cumple el sistema.\n\n"
+        "DIAGONAL ESTRICTAMENTE DOMINANTE\n"
+        "Si |aᵢᵢ| > Σⱼ≠ᵢ |aᵢⱼ| en cada fila, ambos métodos convergen para cualquier x⁽⁰⁾.\n"
+        "Es una condición SUFICIENTE, no necesaria: si no se cumple, el método puede converger o no.\n"
+        "Reordenar las ecuaciones puede dejar la matriz dominante o quitar ceros de la diagonal.\n"
+    ),
     "metodos_numericos": (
         "MÉTODO DE BISECCIÓN\n\n"
         "Si f es continua en [a,b] y f(a)·f(b)<0, el teorema de Bolzano garantiza una raíz.\n"

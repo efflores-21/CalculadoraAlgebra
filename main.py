@@ -54,6 +54,7 @@ import customtkinter as ctk  # noqa: E402
 
 from modulos._comun import COLOR, MARCAS, boton_texto, etiqueta, fuente, tarjeta
 from modulos.modulo_determinantes import ModuloDeterminantes
+from modulos.modulo_iterativos import ModuloIterativos
 from modulos.modulo_matrices import ModuloMatrices
 from modulos.modulo_lu import ModuloLU
 from modulos.modulo_metodos_numericos import ModuloMetodosNumericos
@@ -88,6 +89,8 @@ MODULOS = (
      "Núcleo, imagen, rango, nulidad y teorema de la dimensión."),
     ("metodos_numericos", "Métodos numéricos",
      "Bisección, gráficas, notación posicional y errores numéricos."),
+    ("iterativos", "Jacobi y Gauss-Seidel",
+     "Métodos iterativos para Ax = b: tabla, error y comparación."),
 )
 
 
@@ -209,6 +212,7 @@ class MenuPrincipal(ctk.CTk):
             "propiedades": ModuloPropiedades,
             "transformaciones": ModuloTransformaciones,
             "metodos_numericos": ModuloMetodosNumericos,
+            "iterativos": ModuloIterativos,
         }
         if nombre not in clases:
             raise ValueError(f"Módulo desconocido: {nombre}")

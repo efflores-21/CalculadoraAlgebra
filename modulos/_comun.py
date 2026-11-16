@@ -50,6 +50,7 @@ MARCAS = {
     "propiedades": "P3 · P5",
     "transformaciones": "P7",
     "metodos_numericos": "P7",
+    "iterativos": "P8",
 }
 
 if sys.platform.startswith("win"):
@@ -88,7 +89,8 @@ def leer_fraccion(entry, etiqueta):
     """Convierte un campo numérico a Fraction, equivalente a leer un escalar exacto."""
     texto = entry.get().strip()
     if not texto:
-        raise ValueError(f"{etiqueta} no puede quedar vacío.")
+        # «Falta escribir …» sirve para «la entrada» y «el escalar» sin errores de género.
+        raise ValueError(f"Falta escribir {etiqueta[:1].lower() + etiqueta[1:]}.")
     try:
         return _a_fraction(texto)
     except (ValueError, ZeroDivisionError) as error:
