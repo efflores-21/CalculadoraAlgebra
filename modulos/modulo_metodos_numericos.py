@@ -1,5 +1,6 @@
 """Pantalla integrada de bisección, gráficas, notación posicional y errores numéricos."""
 
+import math
 import re
 import tkinter as tk
 
@@ -13,6 +14,7 @@ from backend.errores_numericos import (
     resumen_tipos_error,
 )
 from backend.graficador import muestrear_funcion
+from backend.newton_raphson import resolver_newton_raphson
 from backend.notacion_posicional import binario_a_decimal, decimal_a_binario, descomponer_decimal
 from modulos._comun import (
     COLOR,
@@ -56,8 +58,22 @@ def _filas_a_mostrar(tabla, maximo=MAX_FILAS_TABLA):
     return tabla[:mitad] + [None] + tabla[-mitad:]
 
 
+def _formatear_numero(valor):
+    """Formatea números para la GUI sin perder valores pequeños ni precisión interna."""
+    if valor is None:
+        return "—"
+    if not math.isfinite(valor):
+        return "No finito"
+    if valor == 0:
+        return "0"
+    magnitud = abs(valor)
+    if 1e-4 <= magnitud < 1e7:
+        return f"{valor:.8g}"
+    return f"{valor:.6e}"
+
+
 class ModuloMetodosNumericos(ctk.CTkFrame):
-    """Agrupa las cuatro actividades de la Tarea 7 en pestañas de una misma pantalla."""
+    """Agrupa las actividades de métodos numéricos en pestañas de una misma pantalla."""
 
     def __init__(self, master, on_back):
         """Construye las pestañas e inicializa el estado compartido de bisección/gráfica."""
@@ -79,16 +95,17 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             lambda: mostrar_teoremas(self, "metodos_numericos", "Métodos numéricos"),
         ).pack(side="right")
         boton_texto(barra, "? Cómo usar", self.mostrar_guia, width=110).pack(side="right", padx=8)
-        etiqueta(self, "Bisección · Graficador · Notación posicional · Errores numéricos", tamano=14).pack(
+        etiqueta(self, "Bisección · Graficador · Notación posicional · Errores numéricos · Newton-Raphson", tamano=14).pack(
             anchor="w", padx=34, pady=(0, 8))
         self.pestanas = ctk.CTkTabview(self, fg_color=COLOR["tarjeta"])
         self.pestanas.pack(fill="both", expand=True, padx=24, pady=(4, 20))
-        for nombre in ("Bisección", "Graficador", "Notación posicional", "Errores numéricos"):
+        for nombre in ("Bisección", "Graficador", "Notación posicional", "Errores numéricos", "Newton-Raphson"):
             self.pestanas.add(nombre)
         self._crear_biseccion(self.pestanas.tab("Bisección"))
         self._crear_graficador(self.pestanas.tab("Graficador"))
         self._crear_notacion(self.pestanas.tab("Notación posicional"))
         self._crear_errores(self.pestanas.tab("Errores numéricos"))
+        self._crear_newton_raphson(self.pestanas.tab("Newton-Raphson"))
 
     @staticmethod
     def _entrada(parent, titulo, inicial, ancho=150):
@@ -255,6 +272,414 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         ctk.CTkLabel(cabecera, text=estado, text_color=color_estado,
                      font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(9, 2))
         etiqueta(cabecera, explicacion, tamano=12, color="texto").pack(anchor="w", padx=12, pady=(0, 9))
+
+    def _crear_newton_raphson(self, parent):
+        """Construye el formulario, el resumen numérico y la tabla de Newton-Raphson."""
+        marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        marco.pack(fill="both", expand=True)
+        etiqueta(
+            marco,
+            "Usa la misma sintaxis segura que las otras herramientas: ** para potencias y funciones como sin(x), cos(x), exp(x). "
+            "La tolerancia se introduce en porcentaje.",
+            tamano=13,
+        ).pack(anchor="w", padx=12, pady=(10, 5))
+
+        fila_funcion = ctk.CTkFrame(marco, fg_color="transparent")
+        fila_funcion.pack(anchor="w", padx=12)
+        self.nr_expr = self._entrada(fila_funcion, "Función f(x)", "x**3 - 2*x - 5", 360)
+        self.nr_x0 = self._entrada(fila_funcion, "Valor inicial x₀", "2", 130)
+
+        fila_parametros = ctk.CTkFrame(marco, fg_color="transparent")
+        fila_parametros.pack(anchor="w", padx=12)
+        self.nr_tol = self._entrada(fila_parametros, "Tolerancia (%)", "0.0001", 150)
+        self.nr_max = self._entrada(fila_parametros, "Máximo de iteraciones", "100", 180)
+
+        acciones = ctk.CTkFrame(marco, fg_color="transparent")
+        acciones.pack(anchor="w", padx=12, pady=5)
+        boton_primario(acciones, "Calcular", self.calcular_newton_raphson, width=130).pack(side="left", padx=(0, 8))
+        boton_secundario(acciones, "Ejemplo", self.ejemplo_newton_raphson, width=110).pack(side="left", padx=(0, 8))
+        boton_secundario(acciones, "Limpiar", self.limpiar_newton_raphson, width=110).pack(side="left")
+
+        self.nr_estado = ctk.CTkLabel(
+            marco, text="Ingresa una función y sus parámetros para comenzar.",
+            text_color=COLOR["gris"], anchor="w", justify="left",
+            font=ctk.CTkFont(size=13),
+        )
+        self.nr_estado.pack(fill="x", padx=16, pady=(4, 6))
+        self.nr_resultado = ctk.CTkFrame(marco, fg_color="transparent")
+        self.nr_resultado.pack(fill="both", expand=True, padx=6, pady=(4, 12))
+        self.nr_grafica = None
+        self.nr_datos = None
+        self.nr_paso_seleccionado = 0
+
+    def _vaciar_resultado_newton(self):
+        """Elimina el resumen y las filas anteriores antes de una nueva ejecución."""
+        for widget in self.nr_resultado.winfo_children():
+            widget.destroy()
+
+    def ejemplo_newton_raphson(self):
+        """Carga un ejemplo didáctico válido para el evaluador actual."""
+        for campo, valor in (
+            (self.nr_expr, "x**3 - 2*x - 5"),
+            (self.nr_x0, "2"),
+            (self.nr_tol, "0.0001"),
+            (self.nr_max, "100"),
+        ):
+            campo.delete(0, "end")
+            campo.insert(0, valor)
+        self._vaciar_resultado_newton()
+        self.nr_estado.configure(text="Ejemplo cargado. Pulsa Calcular para ver las iteraciones.",
+                                 text_color=COLOR["gris"])
+
+    def limpiar_newton_raphson(self):
+        """Restablece campos, estado, resumen y tabla de iteraciones."""
+        self.nr_expr.delete(0, "end")
+        for campo, valor in ((self.nr_x0, "1"), (self.nr_tol, "0.0001"), (self.nr_max, "100")):
+            campo.delete(0, "end")
+            campo.insert(0, valor)
+        self._vaciar_resultado_newton()
+        self.nr_estado.configure(text="Formulario limpiado. Escribe una función para comenzar.",
+                                 text_color=COLOR["gris"])
+
+    def calcular_newton_raphson(self):
+        """Valida las entradas, invoca el backend y presenta su resultado sin recalcularlo."""
+        self._vaciar_resultado_newton()
+        try:
+            expresion = self.nr_expr.get().strip()
+            if not expresion:
+                raise ValueError("Escribe una función matemática en f(x).")
+            x0 = _leer_real(self.nr_x0.get(), "El valor inicial x₀")
+            tolerancia = _leer_real(self.nr_tol.get(), "La tolerancia")
+            maximo = _leer_entero(self.nr_max.get(), "El máximo de iteraciones")
+            datos = resolver_newton_raphson(expresion, x0, tolerancia, maximo)
+        except (ValueError, OverflowError) as error:
+            self.nr_estado.configure(text="No se pudo calcular. Revisa los datos ingresados.",
+                                     text_color=COLOR["mal"])
+            self._mostrar_error(error)
+            return
+        except Exception:
+            self.nr_estado.configure(text="Ocurrió un error inesperado durante el cálculo.",
+                                     text_color=COLOR["mal"])
+            self._mostrar_error(ValueError(
+                "No se pudo completar el cálculo. Revisa la función y vuelve a intentarlo."
+            ))
+            return
+
+        self._mostrar_resultado_newton(datos)
+
+    def _mostrar_resultado_newton(self, datos):
+        """Muestra las métricas devueltas por el backend y la traza de iteraciones."""
+        if datos["convergio"]:
+            estado = "Convergió"
+            color_estado = COLOR["ok"]
+            self.nr_estado.configure(text="Newton-Raphson convergió con los criterios solicitados.",
+                                     text_color=color_estado)
+        elif datos["estado"] == "maximo":
+            estado = "No convergió dentro del máximo de iteraciones"
+            color_estado = "#F4A261"
+            self.nr_estado.configure(text=estado + ". La última aproximación no se confirma como raíz.",
+                                     text_color=color_estado)
+        else:
+            estado = "Detenido por una condición matemática o numérica"
+            color_estado = COLOR["mal"]
+            self.nr_estado.configure(text=estado + ". Revisa el motivo indicado en los resultados.",
+                                     text_color=color_estado)
+
+        if datos["error_final"] is not None:
+            error_final = _formatear_numero(datos["error_final"]) + "%"
+        elif datos["iteraciones"] and datos["tabla"][-1].get("xi_siguiente") == 0:
+            error_final = "No definido (xₙ₊₁ = 0)"
+        elif datos["iteraciones"] == 0 and datos["convergio"]:
+            error_final = "No aplica (raíz inicial exacta)"
+        else:
+            error_final = "No disponible"
+
+        etiqueta_aproximacion = (
+            "Aproximación de la raíz" if datos["convergio"]
+            else "Última aproximación (no confirmada como raíz)"
+        )
+        valores = (
+            ("Función original", datos["expresion"]),
+            ("Derivada simbólica", datos["derivada"]),
+            (etiqueta_aproximacion, _formatear_numero(datos["aproximacion"])),
+            ("Estado", estado),
+            ("Iteraciones realizadas", str(datos["iteraciones"])),
+            ("Error aproximado final", error_final),
+            ("Residuo final |f(x)|", _formatear_numero(datos["residuo_final"])),
+            ("Residuo relativo al inicial", (
+                "—" if datos.get("residuo_relativo_porcentual_final") is None else
+                _formatear_numero(datos["residuo_relativo_porcentual_final"]) + "%"
+            )),
+            ("Motivo de finalización", datos["motivo"]),
+        )
+        resumen = ctk.CTkFrame(self.nr_resultado, fg_color="transparent")
+        resumen.pack(fill="x", padx=6, pady=(0, 8))
+        for columna in range(3):
+            resumen.grid_columnconfigure(columna, weight=1, uniform="resumen_newton")
+        for indice, (titulo, valor) in enumerate(valores):
+            tarjeta = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
+                                   border_width=1, border_color=COLOR["borde"])
+            tarjeta.grid(row=indice // 3, column=indice % 3, sticky="nsew", padx=4, pady=4)
+            etiqueta(tarjeta, titulo, tamano=11, color="gris").pack(anchor="w", padx=12, pady=(8, 1))
+            ctk.CTkLabel(
+                tarjeta, text=valor, text_color=color_estado if titulo == "Estado" else COLOR["texto"],
+                font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left",
+                wraplength=340,
+            ).pack(anchor="w", fill="x", padx=12, pady=(0, 8))
+
+        self.nr_datos = datos
+        self.nr_paso_seleccionado = max(0, len(datos["tabla"]) - 1)
+        self._crear_grafica_newton()
+
+        etiqueta(self.nr_resultado, "Tabla de iteraciones", tamano=15, negrita=True, color="texto").pack(
+            anchor="w", padx=10, pady=(6, 4)
+        )
+        contenedor = ctk.CTkFrame(self.nr_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
+        contenedor.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        canvas = tk.Canvas(contenedor, height=290, background=COLOR["tarjeta"],
+                           highlightthickness=0, borderwidth=0)
+        barra_y = ctk.CTkScrollbar(contenedor, orientation="vertical", command=canvas.yview)
+        barra_x = ctk.CTkScrollbar(contenedor, orientation="horizontal", command=canvas.xview)
+        canvas.configure(yscrollcommand=barra_y.set, xscrollcommand=barra_x.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        barra_y.grid(row=0, column=1, sticky="ns")
+        barra_x.grid(row=1, column=0, sticky="ew")
+        contenedor.grid_rowconfigure(0, weight=1)
+        contenedor.grid_columnconfigure(0, weight=1)
+
+        titulos = ("Iteración", "Xi", "f(Xi)", "f′(Xi)", "Xi+1", "Error aprox. (%)",
+                   "Residuo |f(Xi+1)|", "Residuo relativo (%)")
+        anchos = (76, 130, 145, 145, 130, 150, 165, 170)
+        tabla = ctk.CTkFrame(canvas, fg_color=COLOR["tarjeta"], width=sum(anchos))
+        canvas.create_window((0, 0), window=tabla, anchor="nw")
+        tabla.bind("<Configure>", lambda _evento: canvas.configure(scrollregion=canvas.bbox("all")))
+        for columna, (titulo, ancho) in enumerate(zip(titulos, anchos)):
+            ctk.CTkLabel(tabla, text=titulo, width=ancho, height=42, anchor="center",
+                         fg_color=COLOR["acento"], text_color=COLOR["texto"],
+                         font=ctk.CTkFont(size=11, weight="bold")).grid(
+                             row=0, column=columna, sticky="nsew", padx=1, pady=1)
+
+        if not datos["tabla"]:
+            mensaje = ("El valor inicial ya era una raíz; no se requirieron iteraciones."
+                       if datos["convergio"] else "No se completó ninguna iteración.")
+            etiqueta(tabla, mensaje, tamano=12, color="gris").grid(
+                row=1, column=0, columnspan=len(titulos), sticky="w", padx=12, pady=12
+            )
+        fuente_celda = ctk.CTkFont(size=11)
+        for fila, paso in enumerate(_filas_a_mostrar(datos["tabla"]), 1):
+            if paso is None:
+                omitidas = len(datos["tabla"]) - MAX_FILAS_TABLA
+                etiqueta(tabla, f"…  {omitidas} iteraciones intermedias omitidas; se registraron {len(datos['tabla'])} en total  …",
+                         tamano=12, color="gris").grid(
+                             row=fila, column=0, columnspan=len(titulos), pady=8
+                         )
+                continue
+            error = paso.get("error_aproximado_porcentual")
+            if error is None and paso.get("xi_siguiente") == 0:
+                error_texto = "No definido"
+            else:
+                error_texto = "—" if error is None else _formatear_numero(error) + "%"
+            celdas = (
+                str(paso["k"]), _formatear_numero(paso["xi"]), _formatear_numero(paso["fxi"]),
+                _formatear_numero(paso.get("derivada")), _formatear_numero(paso.get("xi_siguiente")),
+                error_texto, _formatear_numero(paso.get("residuo")),
+                ("—" if paso.get("residuo_relativo_porcentual") is None else
+                 _formatear_numero(paso["residuo_relativo_porcentual"]) + "%"),
+            )
+            fondo = COLOR["suave"] if fila % 2 == 0 else COLOR["tarjeta"]
+            for columna, (valor, ancho) in enumerate(zip(celdas, anchos)):
+                celda = ctk.CTkLabel(tabla, text=valor, width=ancho, height=34, anchor="center",
+                                     fg_color=fondo, text_color=COLOR["texto"], font=fuente_celda)
+                celda.grid(
+                                 row=fila, column=columna, sticky="nsew", padx=1, pady=1)
+                celda.bind("<Button-1>", lambda _evento, indice=len([p for p in datos["tabla"][:paso["k"]]
+                                                                      if p is not None]) - 1:
+                           self._seleccionar_paso_newton(indice))
+
+    def _crear_grafica_newton(self):
+        """Crea la gráfica y controles; navegar reutiliza la traza ya calculada."""
+        marco = ctk.CTkFrame(self.nr_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
+        marco.pack(fill="x", padx=6, pady=(4, 10))
+        etiqueta(marco, "Gráfica interactiva de Newton-Raphson", tamano=15,
+                 negrita=True, color="texto").pack(anchor="w", padx=12, pady=(9, 2))
+        self.nr_info_paso = ctk.CTkLabel(marco, text="", anchor="w", justify="left",
+                                          text_color=COLOR["texto"])
+        self.nr_info_paso.pack(fill="x", padx=12, pady=(0, 5))
+        controles = ctk.CTkFrame(marco, fg_color="transparent")
+        controles.pack(fill="x", padx=10, pady=(0, 5))
+        self.nr_boton_anterior = boton_secundario(
+            controles, "◀ Anterior", lambda: self._navegar_paso_newton(-1), width=115)
+        self.nr_boton_anterior.pack(side="left", padx=(0, 8))
+        filas = self.nr_datos["tabla"]
+        self.nr_slider = ctk.CTkSlider(
+            controles, from_=0, to=max(1, len(filas) - 1), number_of_steps=max(1, len(filas) - 1),
+            command=self._cambiar_paso_newton)
+        self.nr_slider.set(self.nr_paso_seleccionado)
+        self.nr_slider.pack(side="left", fill="x", expand=True, padx=6)
+        self.nr_boton_siguiente = boton_secundario(
+            controles, "Siguiente ▶", lambda: self._navegar_paso_newton(1), width=115)
+        self.nr_boton_siguiente.pack(side="left", padx=(8, 0))
+        self.nr_canvas = tk.Canvas(marco, height=350, background=COLOR["tarjeta"],
+                                   highlightthickness=0, borderwidth=0)
+        self.nr_canvas.pack(fill="x", expand=True, padx=6, pady=(0, 8))
+        self.nr_canvas.bind("<Configure>", lambda _evento: self._dibujar_grafica_newton())
+        self._dibujar_grafica_newton()
+
+    def _navegar_paso_newton(self, desplazamiento):
+        if not self.nr_datos or not self.nr_datos["tabla"]:
+            return
+        self._seleccionar_paso_newton(self.nr_paso_seleccionado + desplazamiento)
+
+    def _cambiar_paso_newton(self, valor):
+        self._seleccionar_paso_newton(round(float(valor)), desde_slider=True)
+
+    def _seleccionar_paso_newton(self, indice, desde_slider=False):
+        if not self.nr_datos or not self.nr_datos["tabla"]:
+            return
+        indice = max(0, min(len(self.nr_datos["tabla"]) - 1, int(indice)))
+        self.nr_paso_seleccionado = indice
+        if not desde_slider:
+            self.nr_slider.set(indice)
+        self._dibujar_grafica_newton()
+
+    @staticmethod
+    def _rango_robusto(valores, incluir_cero=False):
+        """Calcula límites centrados que reducen el efecto de iteraciones extremas."""
+        finitos = sorted(v for v in valores if math.isfinite(v))
+        if not finitos:
+            return (-1.0, 1.0)
+        mediana = finitos[len(finitos) // 2]
+        desviaciones = sorted(abs(v - mediana) for v in finitos)
+        mad = desviaciones[len(desviaciones) // 2]
+        escala = max(4 * mad, abs(mediana) * 0.05, 0.1)
+        minimo, maximo = mediana - escala, mediana + escala
+        if incluir_cero:
+            minimo, maximo = min(minimo, 0.0), max(maximo, 0.0)
+        return minimo, maximo
+
+    def _dibujar_grafica_newton(self):
+        """Traza f(x), el recorrido y solo la tangente del paso seleccionado."""
+        datos = self.nr_datos
+        canvas = getattr(self, "nr_canvas", None)
+        if not datos or canvas is None or not canvas.winfo_exists():
+            return
+        ancho, alto = max(280, canvas.winfo_width()), max(220, canvas.winfo_height())
+        margen = 55
+        filas = datos["tabla"]
+        indice = min(self.nr_paso_seleccionado, len(filas) - 1) if filas else -1
+        x0 = datos["valor_inicial"]
+        xs = [x0]
+        for paso in filas:
+            xs.append(paso["xi"])
+            if paso.get("xi_siguiente") is not None:
+                xs.append(paso["xi_siguiente"])
+        if datos["convergio"]:
+            xs.append(datos["aproximacion"])
+        xmin, xmax = self._rango_robusto(xs)
+        if xmin == xmax:
+            xmin, xmax = xmin - 1, xmax + 1
+        muestra = muestrear_funcion(datos["expresion"], xmin, xmax, cantidad=1200)
+        ys = [y for segmento in muestra["segmentos"] for _, y in segmento]
+        if not ys:
+            canvas.delete("all")
+            canvas.create_text(ancho / 2, alto / 2, text="No hay valores reales finitos para graficar.",
+                               fill=COLOR["texto"])
+            return
+        ymin, ymax = self._rango_robusto(ys, incluir_cero=True)
+        for paso in filas:
+            if ymin <= paso["fxi"] <= ymax:
+                ys.append(paso["fxi"])
+        ymin, ymax = self._rango_robusto(ys, incluir_cero=True)
+        if ymin == ymax:
+            ymin, ymax = ymin - 1, ymax + 1
+        # Recorta valores atípicos al muestrear y vuelve a usar los segmentos seguros.
+        muestra = muestrear_funcion(datos["expresion"], xmin, xmax, cantidad=1200,
+                                   limites_y=(ymin, ymax))
+        px = lambda x: margen + (x - xmin) * (ancho - 2 * margen) / (xmax - xmin)
+        py = lambda y: alto - margen - (y - ymin) * (alto - 2 * margen) / (ymax - ymin)
+        canvas.delete("all")
+        for marca in range(6):
+            gx = margen + marca * (ancho - 2 * margen) / 5
+            gy = margen + marca * (alto - 2 * margen) / 5
+            canvas.create_line(gx, margen, gx, alto - margen, fill="#303036")
+            canvas.create_line(margen, gy, ancho - margen, gy, fill="#303036")
+            canvas.create_text(gx, alto - margen + 16,
+                               text=f"{xmin + marca * (xmax - xmin) / 5:.3g}", fill="#B8B8C0")
+            canvas.create_text(margen - 27, gy,
+                               text=f"{ymax - marca * (ymax - ymin) / 5:.3g}", fill="#B8B8C0")
+        if xmin <= 0 <= xmax:
+            canvas.create_line(px(0), margen, px(0), alto - margen, fill="#85858D", width=2)
+        if ymin <= 0 <= ymax:
+            canvas.create_line(margen, py(0), ancho - margen, py(0), fill="#85858D", width=2)
+        for segmento in muestra["segmentos"]:
+            coords = [c for x, y in segmento for c in (px(x), py(y))]
+            if len(coords) >= 4:
+                canvas.create_line(*coords, fill="#66C2A5", width=2)
+
+        # La trayectoria usa únicamente los valores xi y xi+1 devueltos por el backend.
+        for paso_indice, paso in enumerate(filas[:indice + 1]):
+            xi, fxi = paso["xi"], paso["fxi"]
+            if xmin <= xi <= xmax and ymin <= fxi <= ymax:
+                color = "#F4A261" if paso_indice == indice else "#8AB4F8"
+                canvas.create_line(px(xi), py(0), px(xi), py(fxi), fill=color, dash=(3, 3))
+                canvas.create_oval(px(xi)-4, py(fxi)-4, px(xi)+4, py(fxi)+4,
+                                   fill=color, outline="white")
+            siguiente = paso.get("xi_siguiente")
+            derivada = paso.get("derivada")
+            if siguiente is not None and derivada not in (None, 0) and xmin <= siguiente <= xmax:
+                tangencia_en_x = min(xmax, max(xmin, siguiente))
+                y_intermedio = fxi + derivada * (tangencia_en_x - xi)
+                if math.isfinite(y_intermedio) and ymin <= y_intermedio <= ymax:
+                    canvas.create_line(px(tangencia_en_x), py(0), px(tangencia_en_x),
+                                       py(y_intermedio), fill="#B39DDB", dash=(2, 3))
+                canvas.create_oval(px(siguiente)-4, py(0)-4, px(siguiente)+4, py(0)+4,
+                                   fill="#B39DDB", outline="white")
+            if paso_indice == indice and derivada is not None:
+                if derivada == 0:
+                    if ymin <= fxi <= ymax:
+                        canvas.create_line(margen, py(fxi), ancho - margen, py(fxi),
+                                           fill="#F4A261", width=2, dash=(6, 3))
+                    canvas.create_text(ancho / 2, alto - 27,
+                                       text="Derivada cero: no existe intercepto de Newton para este paso.",
+                                       fill="#F4A261")
+                else:
+                    # La recta se recorta al área visible y nunca evalúa valores no finitos.
+                    cortes = (xi + (ymin - fxi) / derivada, xi + (ymax - fxi) / derivada)
+                    if all(math.isfinite(corte) for corte in cortes):
+                        xa, xb = max(xmin, min(cortes)), min(xmax, max(cortes))
+                    else:
+                        xa, xb = xmin, xmax
+                    if xa <= xb and math.isfinite(fxi):
+                        ya, yb = fxi + derivada * (xa - xi), fxi + derivada * (xb - xi)
+                        if math.isfinite(ya) and math.isfinite(yb) and ymin <= ya <= ymax and ymin <= yb <= ymax:
+                            canvas.create_line(px(xa), py(ya), px(xb), py(yb),
+                                               fill="#F4A261", width=2, dash=(6, 3))
+
+        if datos["convergio"] and xmin <= datos["aproximacion"] <= xmax:
+            canvas.create_oval(px(datos["aproximacion"])-6, py(0)-6,
+                               px(datos["aproximacion"])+6, py(0)+6,
+                               fill="#66D19E", outline="white", width=2)
+            canvas.create_text(px(datos["aproximacion"])+8, py(0)-14,
+                               text="raíz confirmada", fill="#66D19E", anchor="w")
+        canvas.create_text(ancho / 2, 15, text=f"Newton-Raphson · f(x) = {datos['expresion']}",
+                           fill=COLOR["texto"], font=("Segoe UI", 12, "bold"))
+        canvas.create_text(ancho - 110, 32, text="━ f(x)   ┄ tangente   ● aproximación",
+                           fill=COLOR["texto"])
+        if indice >= 0:
+            paso = filas[indice]
+            detalle = (f"Iteración {paso['k']} / {len(filas)}   ·   xi = {_formatear_numero(paso['xi'])}"
+                       f"   ·   f(xi) = {_formatear_numero(paso['fxi'])}"
+                       f"   ·   xi+1 = {_formatear_numero(paso.get('xi_siguiente'))}")
+            if paso.get("motivo"):
+                detalle += "   ·   " + paso["motivo"]
+        else:
+            detalle = ("Raíz inicial exacta; no se generaron tangentes." if datos["convergio"]
+                       else "No se generaron iteraciones.")
+        self.nr_info_paso.configure(text=detalle)
+        if hasattr(self, "nr_slider"):
+            self.nr_slider.configure(state="normal" if filas else "disabled")
+            self.nr_boton_anterior.configure(state="normal" if indice > 0 else "disabled")
+            self.nr_boton_siguiente.configure(state="normal" if indice < len(filas) - 1 else "disabled")
 
     def graficar_intervalo_biseccion(self):
         """Copia expresión e intervalo de búsqueda a la pestaña del graficador."""

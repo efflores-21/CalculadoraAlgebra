@@ -3,7 +3,7 @@ Menú principal de la Calculadora de Álgebra Lineal.
 
 Proyecto integrador: abre cada módulo en una sola ventana e instala
 CustomTkinter la primera vez si la computadora no lo tiene.
-Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
+Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga).
 """
 
 import importlib
