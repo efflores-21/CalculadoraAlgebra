@@ -6,7 +6,8 @@ from fractions import Fraction
 from backend.factorizacion_lu import factorizar_lu, resolver_lu, resolver_sistema_lu
 from backend.operaciones_matriciales import multiplicar_matrices
 from modulos.modulo_lu import (
-    ModuloLU, _texto_clasificacion, _texto_factorizacion, _texto_pasos_registrados, _texto_solucion,
+    CON_PIVOTEO, SIN_PIVOTEO, ModuloLU, _modelo_vistas_lu, _texto_clasificacion,
+    _texto_factorizacion, _texto_pasos_registrados, _texto_solucion,
 )
 
 
@@ -79,6 +80,7 @@ class ExplicacionesPivoteLU(unittest.TestCase):
         self.assertIn("1·x2 + 0 = 1", texto)
         self.assertIn("2·x1 + (3)·x2 = 5", texto)
 
+
     def test_pivoteo_permutado_resuelve_con_pb_y_verifica_ax_con_b_original(self):
         A, b = [[0, 1], [2, 4]], [5, 1]
         pasos = []
@@ -136,6 +138,58 @@ class ExplicacionesPivoteLU(unittest.TestCase):
     def test_rechaza_cero_que_requiere_permutar_filas(self):
         with self.assertRaisesRegex(ValueError, "pivoteo parcial"):
             factorizar_lu([[0, 1], [2, 3]])
+
+
+class ModeloVistasLU(unittest.TestCase):
+    def test_modelo_sin_pivoteo_incluye_factorizacion_y_sustituciones(self):
+        A, b = [[2, 1], [4, 3]], [1, 2]
+        lu = resolver_lu(A, b)
+        modelo = _modelo_vistas_lu({
+            "A": A, "b": b, "modo": SIN_PIVOTEO, "lu": lu, "sistema": None,
+            "L": lu["L"], "U": lu["U"],
+        })
+
+        self.assertEqual(modelo["dimensiones"], (2, 2))
+        self.assertEqual(dict(modelo["matrices"])["Matriz A"], A)
+        self.assertEqual(dict(modelo["matrices"])["Producto L · U"], A)
+        self.assertEqual(dict(modelo["vectores"])["Vector y"], lu["y"])
+        self.assertEqual(dict(modelo["vectores"])["Solución x"], lu["x"])
+        self.assertTrue(modelo["factorizacion_correcta"])
+
+    def test_modelo_con_pivoteo_muestra_permutacion_productos_y_solucion(self):
+        A, b = [[0, 1], [2, 4]], [5, 1]
+        sistema = resolver_sistema_lu(A, b, pivoteo_parcial=True)
+        PA = multiplicar_matrices(sistema["P"], A)
+        LU = multiplicar_matrices(sistema["L"], sistema["U"])
+        Pb = [sum(sistema["P"][i][j] * b[j] for j in range(len(b))) for i in range(len(b))]
+        modelo = _modelo_vistas_lu({
+            "A": A, "b": b, "modo": CON_PIVOTEO, "sistema": sistema,
+            "L": sistema["L"], "U": sistema["U"], "PA": PA, "LU": LU,
+            "Pb": Pb, "factorizacion_correcta": PA == LU,
+        })
+
+        matrices = dict(modelo["matrices"])
+        vectores = dict(modelo["vectores"])
+        self.assertEqual(matrices["Matriz P"], sistema["P"])
+        self.assertEqual(matrices["P · A"], PA)
+        self.assertEqual(matrices["L · U"], LU)
+        self.assertEqual(vectores["Vector Pb"], Pb)
+        self.assertEqual(vectores["Vector y"], sistema["y"])
+        self.assertEqual(vectores["Solución x"], sistema["solucion_particular"])
+        self.assertTrue(modelo["factorizacion_correcta"])
+
+    def test_modelo_rectangular_indica_clasificacion_y_solucion_particular(self):
+        A, b = [[1, 0, 1], [0, 1, 1]], [1, 2]
+        lu = resolver_lu(A, b)
+        sistema = resolver_sistema_lu(A, b)
+        modelo = _modelo_vistas_lu({
+            "A": A, "b": b, "modo": SIN_PIVOTEO, "lu": lu, "sistema": sistema,
+            "L": lu["L"], "U": lu["U"],
+        })
+
+        self.assertEqual(sistema["estado"], "infinitas")
+        self.assertEqual(modelo["solucion"], "Infinitas soluciones")
+        self.assertEqual(dict(modelo["vectores"])["Solución particular"], sistema["solucion_particular"])
 
 
 if __name__ == "__main__":

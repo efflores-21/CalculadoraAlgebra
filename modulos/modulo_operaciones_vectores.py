@@ -18,6 +18,11 @@ from backend.vectores import (
 from backend.eliminacion import resolver_sistema
 from backend.clasificador import clasificar_sistema
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
+    fuente_mono,
     llenar,
     boton_primario,
     boton_secundario,
@@ -35,6 +40,61 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _crear_vistas_resultado(modulo):
+    padre = modulo.resultado.master
+    modulo.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+    modulo.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+    modulo.vistas_resultado.grid_remove()
+    modulo.vistas_resultado.grid_columnconfigure(0, weight=1)
+    modulo.vistas_resultado.grid_rowconfigure(0, weight=1)
+    modulo.pestanas_resultado = ctk.CTkTabview(modulo.vistas_resultado, fg_color=COLOR["suave"],
+        segmented_button_fg_color=COLOR["tarjeta"], segmented_button_selected_color=COLOR["acento"],
+        segmented_button_selected_hover_color=COLOR["hover"],
+        segmented_button_unselected_color=COLOR["tarjeta"], text_color=COLOR["texto"])
+    modulo.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+    for nombre in ("Resumen", "Datos", "Procedimiento"):
+        modulo.pestanas_resultado.add(nombre)
+    modulo.tab_resumen, modulo.tab_datos, modulo.tab_procedimiento = (
+        modulo.pestanas_resultado.tab(nombre) for nombre in ("Resumen", "Datos", "Procedimiento"))
+    for tab in (modulo.tab_resumen, modulo.tab_datos, modulo.tab_procedimiento):
+        tab.grid_columnconfigure(0, weight=1)
+    modulo.tab_resumen.grid_rowconfigure(1, weight=1)
+    modulo.tab_datos.grid_rowconfigure(0, weight=1)
+    modulo.tab_procedimiento.grid_rowconfigure(0, weight=1)
+    modulo.caja_procedimiento = ctk.CTkTextbox(modulo.tab_procedimiento, font=fuente_mono(12), wrap="word",
+        fg_color=COLOR["tarjeta"], text_color=COLOR["texto"], border_width=1,
+        border_color=COLOR["borde"], corner_radius=10)
+    modulo.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+
+def _mostrar_resultado(modulo, texto, resumen, vectores, titulo):
+    reemplazar_texto(modulo.resultado, texto, resumen)
+    if not hasattr(modulo, "vistas_resultado"):
+        return
+    for tab in (modulo.tab_resumen, modulo.tab_datos):
+        for widget in tab.winfo_children():
+            widget.destroy()
+    TarjetaResultado(modulo.tab_resumen, titulo, resumen, "Los datos y el desarrollo completo están en sus pestañas.").grid(
+        row=0, column=0, sticky="ew", padx=8, pady=8)
+    datos = MarcoDesplazable(modulo.tab_datos, color=COLOR["tarjeta"])
+    datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    panel = Panel(datos.interior, titulo="Vectores y valores utilizados")
+    panel.pack(fill="x", padx=8, pady=6)
+    for nombre, vector in vectores:
+        ctk.CTkLabel(panel.contenido, text=f"{nombre} = ({' , '.join(map(str, vector))})",
+                     font=fuente_mono(12), text_color=COLOR["texto"], anchor="w").pack(anchor="w", padx=8, pady=3)
+    modulo.caja_procedimiento.configure(state="normal")
+    modulo.caja_procedimiento.delete("1.0", "end")
+    modulo.caja_procedimiento.insert("1.0", texto)
+    modulo.caja_procedimiento.configure(state="disabled")
+    modulo.vistas_resultado.grid()
+
+
+def _ocultar_vistas_resultado(modulo):
+    if hasattr(modulo, "vistas_resultado"):
+        modulo.vistas_resultado.grid_remove()
 
 
 def _texto_traza_combinacion(pasos, cantidad_variables):
@@ -168,6 +228,7 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                        "sistema que decide si b es combinación lineal.",
         )
         self.resultado = zonas.resultado
+        _crear_vistas_resultado(self)
         contenido = zonas.contenido
 
         controles, entradas = crear_controles(
@@ -229,6 +290,7 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
             objetivo.grid(row=i + 1, column=k, padx=(18, 3), pady=3)
             self.b_entries.append(objetivo)
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)
 
     def leer_vectores(self):
         """Convierte las entradas a vectores exactos, equivalentes a elementos de R^n."""
@@ -254,15 +316,15 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                 f"{formatear_valor(vectores[1][i])} = {formatear_valor(resultado[i])}"
                 for i in range(len(resultado))
             ]
-            reemplazar_texto(
-                self.resultado,
-                "SUMA DE VECTORES\n"
+            _mostrar_resultado(
+                self, "SUMA DE VECTORES\n"
                 f"v₁ = {formatear_vector(vectores[0])}\n"
                 f"v₂ = {formatear_vector(vectores[1])}\n"
                 "Se suman coordenadas de la misma posición:\n"
                 + "\n".join(pasos)
                 + f"\nResultado: v₁ + v₂ = {formatear_vector(resultado)}\n",
                 f"v₁ + v₂ = {formatear_vector(resultado)}",
+                [("v₁", vectores[0]), ("v₂", vectores[1]), ("v₁ + v₂", resultado)], "Suma de vectores",
             )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
@@ -279,15 +341,15 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                 f"{formatear_valor(vectores[1][i])} = {formatear_valor(resultado[i])}"
                 for i in range(len(resultado))
             ]
-            reemplazar_texto(
-                self.resultado,
-                "RESTA DE VECTORES\n"
+            _mostrar_resultado(
+                self, "RESTA DE VECTORES\n"
                 f"v₁ = {formatear_vector(vectores[0])}\n"
                 f"v₂ = {formatear_vector(vectores[1])}\n"
                 "Se restan coordenadas de la misma posición:\n"
                 + "\n".join(pasos)
                 + f"\nResultado: v₁ − v₂ = {formatear_vector(resultado)}\n",
                 f"v₁ − v₂ = {formatear_vector(resultado)}",
+                [("v₁", vectores[0]), ("v₂", vectores[1]), ("v₁ − v₂", resultado)], "Resta de vectores",
             )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
@@ -303,14 +365,14 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                 f"{formatear_valor(vectores[0][i])} = {formatear_valor(resultado[i])}"
                 for i in range(len(resultado))
             ]
-            reemplazar_texto(
-                self.resultado,
-                "PRODUCTO DE UN VECTOR POR UN ESCALAR\n"
+            _mostrar_resultado(
+                self, "PRODUCTO DE UN VECTOR POR UN ESCALAR\n"
                 f"c = {formatear_valor(escalar)}; v₁ = {formatear_vector(vectores[0])}\n"
                 "Se multiplica c por cada coordenada:\n"
                 + "\n".join(pasos)
                 + f"\nResultado: c·v₁ = {formatear_vector(resultado)}\n",
                 f"{formatear_valor(escalar)} · v₁ = {formatear_vector(resultado)}",
+                [("v₁", vectores[0]), ("c·v₁", resultado)], "Producto por escalar",
             )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
@@ -395,7 +457,9 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
                 )
             else:
                 resumen = "b SÍ es combinación lineal:   " + ",   ".join(coeficientes)
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+            _mostrar_resultado(self, "\n".join(lineas) + "\n", resumen,
+                               [(f"v{subindice(j + 1)}", v) for j, v in enumerate(vectores)] + [("b", objetivo)],
+                               "Combinación lineal")
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
 
@@ -412,3 +476,4 @@ class ModuloOperacionesVectores(ctk.CTkFrame):
         """Reinicia los vectores, b, el escalar y el área de resultados."""
         reiniciar_celdas(self.vectores_entries, self.b_entries, [self.entry_c])
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)

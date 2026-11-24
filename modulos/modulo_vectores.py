@@ -11,6 +11,11 @@ import customtkinter as ctk
 from backend.eliminacion import eliminacion_con_pasos, solucion_general
 from backend.matriz import formatear_valor, subindice
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
+    fuente_mono,
     llenar,
     boton_primario,
     boton_secundario,
@@ -27,6 +32,83 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _crear_vistas_resultado(modulo):
+    """Crea pestañas locales, manteniendo intacta la zona compartida del módulo."""
+    padre = modulo.resultado.master
+    modulo.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+    modulo.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+    modulo.vistas_resultado.grid_remove()
+    modulo.vistas_resultado.grid_columnconfigure(0, weight=1)
+    modulo.vistas_resultado.grid_rowconfigure(0, weight=1)
+    modulo.pestanas_resultado = ctk.CTkTabview(
+        modulo.vistas_resultado, fg_color=COLOR["suave"],
+        segmented_button_fg_color=COLOR["tarjeta"],
+        segmented_button_selected_color=COLOR["acento"],
+        segmented_button_selected_hover_color=COLOR["hover"],
+        segmented_button_unselected_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+    )
+    modulo.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+    for nombre in ("Resumen", "Datos", "Procedimiento"):
+        modulo.pestanas_resultado.add(nombre)
+    modulo.tab_resumen = modulo.pestanas_resultado.tab("Resumen")
+    modulo.tab_datos = modulo.pestanas_resultado.tab("Datos")
+    modulo.tab_procedimiento = modulo.pestanas_resultado.tab("Procedimiento")
+    for tab in (modulo.tab_resumen, modulo.tab_datos, modulo.tab_procedimiento):
+        tab.grid_columnconfigure(0, weight=1)
+    modulo.tab_resumen.grid_rowconfigure(1, weight=1)
+    modulo.tab_datos.grid_rowconfigure(0, weight=1)
+    modulo.tab_procedimiento.grid_rowconfigure(0, weight=1)
+    modulo.caja_procedimiento = ctk.CTkTextbox(
+        modulo.tab_procedimiento, font=fuente_mono(12), wrap="word",
+        fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+        border_width=1, border_color=COLOR["borde"], corner_radius=10,
+    )
+    modulo.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+
+def _mostrar_resultado(modulo, lineas, resumen, vectores, matrices, dimension, encabezado):
+    texto = "\n".join(lineas) + "\n"
+    reemplazar_texto(modulo.resultado, texto, resumen)
+    if not hasattr(modulo, "vistas_resultado"):
+        return
+    for tab in (modulo.tab_resumen, modulo.tab_datos):
+        for widget in tab.winfo_children():
+            widget.destroy()
+    tarjeta = TarjetaResultado(modulo.tab_resumen, encabezado, resumen,
+                               "Consulta Datos y Procedimiento para revisar la comprobación.",
+                               estado="resultado")
+    tarjeta.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+    area = MarcoDesplazable(modulo.tab_resumen, color=COLOR["tarjeta"])
+    area.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
+    Panel(area.interior, titulo="Dimensiones", descripcion=dimension).pack(fill="x", padx=8, pady=6)
+    datos = MarcoDesplazable(modulo.tab_datos, color=COLOR["tarjeta"])
+    datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    panel = Panel(datos.interior, titulo="Vectores de entrada y resultados")
+    panel.pack(fill="x", padx=8, pady=6)
+    for nombre, vector in vectores:
+        ctk.CTkLabel(panel.contenido, text=f"{nombre}  =  ({' , '.join(map(str, vector))})",
+                     font=fuente_mono(12), text_color=COLOR["texto"], anchor="w").pack(anchor="w", padx=8, pady=3)
+    for nombre, matriz in matrices:
+        item = Panel(datos.interior, titulo=nombre, descripcion=f"{len(matriz)} × {len(matriz[0])}")
+        item.pack(fill="x", padx=8, pady=6)
+        grid = ctk.CTkFrame(item.contenido, fg_color="transparent")
+        grid.pack(anchor="w")
+        for i, fila in enumerate(matriz):
+            for j, valor in enumerate(fila):
+                ctk.CTkLabel(grid, text=str(valor), width=72, height=32, font=fuente_mono(12),
+                             fg_color=COLOR["suave"], text_color=COLOR["texto"]).grid(row=i, column=j, padx=2, pady=2)
+    modulo.caja_procedimiento.configure(state="normal")
+    modulo.caja_procedimiento.delete("1.0", "end")
+    modulo.caja_procedimiento.insert("1.0", texto)
+    modulo.caja_procedimiento.configure(state="disabled")
+    modulo.vistas_resultado.grid()
+
+
+def _ocultar_vistas_resultado(modulo):
+    if hasattr(modulo, "vistas_resultado"):
+        modulo.vistas_resultado.grid_remove()
 
 
 def _texto_pasos_independencia(pasos, cantidad_variables):
@@ -176,6 +258,7 @@ class ModuloVectores(ctk.CTkFrame):
                        "los pivotes y las variables libres.",
         )
         self.resultado = zonas.resultado
+        _crear_vistas_resultado(self)
         contenido = zonas.contenido
 
         controles, entradas = crear_controles(
@@ -219,6 +302,7 @@ class ModuloVectores(ctk.CTkFrame):
                 entry.grid(row=i + 1, column=j, padx=3, pady=3)
                 self.entradas_vectores[j].append(entry)
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)
 
     def leer_datos(self):
         """Lee los vectores de la tabla, equivalente a definir elementos de R^n."""
@@ -334,7 +418,13 @@ class ModuloVectores(ctk.CTkFrame):
                 "Linealmente independientes (L.I.)" if independiente
                 else "Linealmente dependientes (L.D.)"
             ) + f"   ·   {len(pivotes)} pivote(s) de {k} vector(es)"
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+            _mostrar_resultado(
+                self, lineas, resumen,
+                [(f"v{subindice(j + 1)}", vector) for j, vector in enumerate(vectores)],
+                [("Matriz de columnas A", matriz), ("Forma reducida [R|0]", reducida)],
+                f"Rango(A) = {rango}; dimensión de cada vector = {n}; cantidad = {k}",
+                "Independencia lineal",
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
 
@@ -350,3 +440,4 @@ class ModuloVectores(ctk.CTkFrame):
         """Reinicia todas las componentes ingresadas a cero y limpia el resultado."""
         reiniciar_celdas(self.entradas_vectores)
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)

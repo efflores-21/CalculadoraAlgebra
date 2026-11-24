@@ -29,6 +29,13 @@ from backend.operaciones_matriciales import (
 )
 from backend.verificador import verificar_propiedades_matrices
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
+    encabezado_seccion,
+    etiqueta,
+    fuente_mono,
     llenar,
     boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
@@ -75,6 +82,28 @@ def _detalle_entradas(A, B, C, operador):
             for i in range(len(A)) for j in range(len(A[0]))]
 
 
+_NOMBRES_OPERACION = {
+    "suma": "Suma de matrices",
+    "resta": "Resta de matrices",
+    "escalar": "Multiplicación por escalar",
+    "producto": "Producto de matrices",
+    "transpuesta": "Matriz transpuesta",
+    "determinante": "Determinante",
+    "inversa": "Inversa por Gauss-Jordan",
+    "adjunta": "Inversa por adjunta",
+    "propiedades": "Verificador de propiedades",
+}
+
+
+def _nombres_datos_operacion(operacion):
+    """Matrices de entrada que participan en cada operación del menú."""
+    if operacion in {"suma", "resta", "producto"}:
+        return ("A", "B")
+    if operacion == "propiedades":
+        return ("A", "B", "C")
+    return ("A",)
+
+
 class ModuloMatrices(ctk.CTkFrame):
     """Panel del Módulo III con las nueve operaciones del menú y los teoremas clave."""
 
@@ -106,6 +135,7 @@ class ModuloMatrices(ctk.CTkFrame):
                        "los pasos de cada método y la comprobación A · A⁻¹ = I.",
         )
         self.resultado = zonas.resultado
+        self._crear_vistas_resultado()
         self._crear_controles(zonas.contenido)
         self._crear_tablas(zonas.contenido)
         self._crear_portapapeles(zonas.contenido)
@@ -187,6 +217,7 @@ class ModuloMatrices(ctk.CTkFrame):
         self.entradas_A, self.entradas_B, self.entradas_C = (
             self._construir_tabla(marco, filas, columnas) for marco, (filas, columnas) in zip(self.marcos, tamanos)
         )
+        self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
     def _construir_tabla(self, marco, filas, columnas):
@@ -221,7 +252,126 @@ class ModuloMatrices(ctk.CTkFrame):
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
             return
+        matrices = {"A": A}
+        for nombre in _nombres_datos_operacion(operacion)[1:]:
+            entradas = self.entradas_B if nombre == "B" else self.entradas_C
+            matrices[nombre] = self._leer_matriz(entradas, nombre)
+        self._actualizar_vistas_resultado(operacion, matrices, lineas, resumen)
         reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+        self.resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        self.vistas_resultado.grid()
+
+    def _crear_vistas_resultado(self):
+        """Crea vistas de resumen, datos y procedimiento solo para este módulo."""
+        padre = self.resultado.master
+        self.resultado.grid_remove()
+        self.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+        self.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.vistas_resultado.grid_remove()
+        self.vistas_resultado.grid_columnconfigure(0, weight=1)
+        self.vistas_resultado.grid_rowconfigure(0, weight=1)
+        self.pestanas_resultado = ctk.CTkTabview(
+            self.vistas_resultado, fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+        for nombre in ("Resumen", "Datos", "Procedimiento"):
+            self.pestanas_resultado.add(nombre)
+        self.tab_resumen = self.pestanas_resultado.tab("Resumen")
+        self.tab_resumen.grid_columnconfigure(0, weight=1)
+        self.tab_resumen.grid_rowconfigure(1, weight=1)
+        self.tab_datos = self.pestanas_resultado.tab("Datos")
+        self.tab_datos.grid_columnconfigure(0, weight=1)
+        self.tab_datos.grid_rowconfigure(0, weight=1)
+        self.tab_procedimiento = self.pestanas_resultado.tab("Procedimiento")
+        self.tab_procedimiento.grid_columnconfigure(0, weight=1)
+        self.tab_procedimiento.grid_rowconfigure(0, weight=1)
+        self.caja_procedimiento = ctk.CTkTextbox(
+            self.tab_procedimiento, font=fuente_mono(12), wrap="word",
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            border_width=1, border_color=COLOR["borde"], corner_radius=10,
+        )
+        self.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        pendientes = list(self.winfo_children())
+        while pendientes:
+            widget = pendientes.pop()
+            pendientes.extend(widget.winfo_children())
+            if isinstance(widget, ctk.CTkButton) and str(widget.cget("text")).startswith("?  Cómo usar"):
+                widget.configure(command=self.mostrar_guia)
+                break
+
+    @staticmethod
+    def _crear_vista_matriz(parent, nombre, matriz):
+        """Dibuja una matriz alineada en celdas con desplazamiento si hace falta."""
+        panel = Panel(parent, titulo=nombre, descripcion=f"Dimensión: {_tam(matriz)}")
+        panel.pack(fill="x", padx=8, pady=6)
+        grilla = ctk.CTkFrame(panel.contenido, fg_color="transparent")
+        grilla.pack(anchor="w")
+        for j in range(len(matriz[0])):
+            grilla.grid_columnconfigure(j, minsize=74, weight=1)
+        for i, fila in enumerate(matriz):
+            for j, valor in enumerate(fila):
+                ctk.CTkLabel(
+                    grilla, text=formatear_valor(valor), width=70, height=34,
+                    font=fuente_mono(12), text_color=COLOR["texto"],
+                    fg_color=COLOR["suave"], corner_radius=6,
+                    anchor="center", justify="center", wraplength=72,
+                ).grid(row=i, column=j, sticky="nsew", padx=2, pady=2)
+        return panel
+
+    def _actualizar_vistas_resultado(self, operacion, matrices, lineas, resumen):
+        for widget in self.tab_resumen.winfo_children():
+            widget.destroy()
+        for widget in self.tab_datos.winfo_children():
+            widget.destroy()
+        etiqueta(self.tab_resumen, _NOMBRES_OPERACION[operacion].upper(),
+                 tamano=11, color="acento", negrita=True).grid(
+                     row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+        resultado = self.ultima_matriz_resultado
+        if resultado is not None:
+            desplazable = MarcoDesplazable(self.tab_resumen, color=COLOR["tarjeta"])
+            desplazable.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
+            self._crear_vista_matriz(desplazable.interior, "Resultado principal", resultado)
+        else:
+            tarjeta = TarjetaResultado(
+                self.tab_resumen, "Resultado principal", resumen,
+                "El procedimiento y las condiciones aplicables están en la pestaña Procedimiento.",
+            )
+            tarjeta.grid(row=1, column=0, sticky="ew", padx=8, pady=6)
+        if operacion == "escalar":
+            detalle = f"Escalar utilizado: k = {formatear_valor(leer_fraccion(self.entry_escalar, 'el escalar k'))}"
+            etiqueta(self.tab_resumen, detalle, color="gris").grid(
+                row=2, column=0, sticky="w", padx=12, pady=(4, 8))
+        datos = MarcoDesplazable(self.tab_datos, color=COLOR["tarjeta"])
+        datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        for nombre in _nombres_datos_operacion(operacion):
+            self._crear_vista_matriz(datos.interior, f"Matriz {nombre}", matrices[nombre])
+        if operacion in {"escalar", "propiedades"}:
+            valores = [f"Escalar k = {formatear_valor(leer_fraccion(self.entry_escalar, 'el escalar k'))}"]
+            if operacion == "propiedades":
+                valores.append(
+                    f"Filas usadas: i = {leer_entero(self.entry_fila_i, 'La fila i')}, "
+                    f"j = {leer_entero(self.entry_fila_j, 'La fila j')}"
+                )
+            panel_valores = Panel(self.tab_datos, titulo="Otros valores")
+            panel_valores.pack(fill="x", padx=8, pady=6)
+            etiqueta(panel_valores.contenido, " · ".join(valores), color="texto",
+                     justify="left", anchor="w", wraplength=440).pack(anchor="w")
+        self.caja_procedimiento.configure(state="normal")
+        self.caja_procedimiento.delete("1.0", "end")
+        self.caja_procedimiento.insert("1.0", "\n".join(lineas))
+        self.caja_procedimiento.configure(state="disabled")
+
+    def mostrar_guia(self):
+        """Oculta las vistas del resultado y restablece la guía compartida."""
+        self.vistas_resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        reemplazar_texto(self.resultado, "")
 
     def _suma(self, A):
         """Opción 1: A + B entrada a entrada."""
@@ -426,6 +576,7 @@ class ModuloMatrices(ctk.CTkFrame):
         """Pone en cero A, B, C y el escalar, y vuelve a mostrar la guía."""
         reiniciar_celdas(self.entradas_A, self.entradas_B, self.entradas_C, [self.entry_escalar])
         self.ultima_matriz_resultado = None
+        self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
 

@@ -12,6 +12,11 @@ from backend.matriz import formatear_valor
 from backend.matrices import determinante_cofactores_con_pasos, determinante_triangular
 from backend.operaciones_matriciales import LIMITE_COFACTORES, suma_matrices
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
+    fuente_mono,
     llenar,
     boton_primario,
     boton_secundario,
@@ -20,6 +25,7 @@ from modulos._comun import (
     copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles,
     entrada_numero,
+    etiqueta,
     formatear_matriz,
     leer_entero,
     leer_fraccion,
@@ -212,6 +218,23 @@ def comparar_determinante_suma(A, B):
     }
 
 
+def _interpretacion_determinante(determinante):
+    """Interpretación rigurosa para una matriz cuadrada según det(A)."""
+    if determinante == 0:
+        return "det(A) = 0: A es singular y no tiene inversa. Sus filas y columnas son linealmente dependientes."
+    return "det(A) ≠ 0: A es invertible y sus filas y columnas son linealmente independientes."
+
+
+def _metodos_determinante(n):
+    """Métodos que el módulo realmente ejecuta para un orden dado."""
+    metodos = ["Triangulación (método principal)"]
+    if n <= LIMITE_COFACTORES:
+        metodos.append("Expansión recursiva por cofactores (comprobación)")
+    if n == 3:
+        metodos.append("Regla de Sarrus (comprobación)")
+    return metodos
+
+
 class ModuloDeterminantes(ctk.CTkFrame):
     """Permite ingresar una matriz cuadrada y analizar su determinante en el panel principal."""
 
@@ -249,6 +272,7 @@ class ModuloDeterminantes(ctk.CTkFrame):
                        "los pivotes, el valor de det(A) y si A es invertible.",
         )
         self.resultado = zonas.resultado
+        self._crear_vistas_resultado()
         contenido = zonas.contenido
 
         controles, entradas = crear_controles(
@@ -329,6 +353,8 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 entry.grid(row=i, column=j, padx=4, pady=4)
                 fila.append(entry)
             self.entradas.append(fila)
+        if hasattr(self, "vistas_resultado"):
+            self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
     def calcular(self):
@@ -398,9 +424,129 @@ class ModuloDeterminantes(ctk.CTkFrame):
             resumen = f"det(A) = {formatear_valor(determinante)}   ·   " + (
                 "A es invertible" if determinante != 0 else "A es singular (no tiene inversa)"
             )
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+            texto = "\n".join(lineas) + "\n"
+            reemplazar_texto(self.resultado, texto, resumen)
+            if hasattr(self, "vistas_resultado"):
+                self._actualizar_vistas(
+                    titulo="Determinante de A",
+                    valor=f"det(A) = {formatear_valor(determinante)}",
+                    detalle=(f"Dimensión: {len(matriz)} × {len(matriz)} · Métodos: "
+                             f"{', '.join(_metodos_determinante(len(matriz)))}"),
+                    estado=("Invertible", "ok") if determinante != 0 else ("Singular", "mal"),
+                    interpretacion=_interpretacion_determinante(determinante),
+                    matrices=(("Matriz A", matriz),), matriz_principal=matriz,
+                    procedimiento=lineas,
+                )
+                self.resultado.grid_remove()
+                self.resultado.respuesta.grid_remove()
+                self.vistas_resultado.grid()
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+
+    def _crear_vistas_resultado(self):
+        """Construye las pestañas locales del resultado, sin cambiar _comun.py."""
+        padre = self.resultado.master
+        self.resultado.grid_remove()
+        self.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+        self.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.vistas_resultado.grid_remove()
+        self.vistas_resultado.grid_columnconfigure(0, weight=1)
+        self.vistas_resultado.grid_rowconfigure(0, weight=1)
+        self.pestanas_resultado = ctk.CTkTabview(
+            self.vistas_resultado, fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+        for nombre in ("Resumen", "Datos", "Procedimiento"):
+            self.pestanas_resultado.add(nombre)
+        self.tab_resumen = self.pestanas_resultado.tab("Resumen")
+        self.tab_resumen.grid_columnconfigure(0, weight=1)
+        self.tab_datos = self.pestanas_resultado.tab("Datos")
+        self.tab_datos.grid_columnconfigure(0, weight=1)
+        self.tab_datos.grid_rowconfigure(0, weight=1)
+        self.tab_procedimiento = self.pestanas_resultado.tab("Procedimiento")
+        self.tab_procedimiento.grid_columnconfigure(0, weight=1)
+        self.tab_procedimiento.grid_rowconfigure(0, weight=1)
+        self.caja_procedimiento = ctk.CTkTextbox(
+            self.tab_procedimiento, font=fuente_mono(12), wrap="word",
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            border_width=1, border_color=COLOR["borde"], corner_radius=10,
+        )
+        self.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        pendientes = list(self.winfo_children())
+        while pendientes:
+            widget = pendientes.pop()
+            pendientes.extend(widget.winfo_children())
+            if isinstance(widget, ctk.CTkButton) and str(widget.cget("text")).startswith("?  Cómo usar"):
+                widget.configure(command=self.mostrar_guia)
+                break
+
+    @staticmethod
+    def _crear_matriz_visual(parent, nombre, matriz):
+        """Muestra una matriz con barras de determinante y desplazamiento adaptativo."""
+        panel = Panel(parent, titulo=nombre, descripcion=f"Dimensión: {len(matriz)} × {len(matriz[0])}")
+        panel.pack(fill="x", padx=8, pady=6)
+        marco = ctk.CTkFrame(panel.contenido, fg_color="transparent")
+        marco.pack(anchor="w")
+        grilla = ctk.CTkFrame(marco, fg_color="transparent")
+        grilla.grid(row=0, column=1, padx=8)
+        n = len(matriz)
+        for j in range(len(matriz[0])):
+            grilla.grid_columnconfigure(j, minsize=76, weight=1)
+        for i, fila in enumerate(matriz):
+            grilla.grid_rowconfigure(i, minsize=36, weight=1)
+            for j, valor in enumerate(fila):
+                ctk.CTkLabel(
+                    grilla, text=formatear_valor(valor), width=72, height=34,
+                    font=fuente_mono(12), text_color=COLOR["texto"],
+                    fg_color=COLOR["suave"], corner_radius=6,
+                    anchor="center", justify="center", wraplength=72,
+                ).grid(row=i, column=j, sticky="nsew", padx=2, pady=2)
+        for columna in (0, 2):
+            barra = ctk.CTkFrame(marco, width=2, fg_color=COLOR["acento"], corner_radius=0)
+            barra.grid(row=0, column=columna, sticky="ns", pady=2)
+        marco.grid_rowconfigure(0, minsize=max(36, n * 38), weight=1)
+        return panel
+
+    def _actualizar_vistas(self, titulo, valor, detalle, estado, interpretacion,
+                           matrices, matriz_principal, procedimiento):
+        for widget in self.tab_resumen.winfo_children():
+            widget.destroy()
+        for widget in self.tab_datos.winfo_children():
+            widget.destroy()
+        etiqueta(self.tab_resumen, titulo.upper(), tamano=11, color="acento", negrita=True).grid(
+            row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+        tarjeta = TarjetaResultado(
+            self.tab_resumen, "Resultado principal", valor, detalle,
+            estado=(estado[0], estado[1]),
+        )
+        tarjeta.valor.configure(wraplength=420)
+        tarjeta.detalle.configure(wraplength=460)
+        tarjeta.grid(row=1, column=0, sticky="ew", padx=8, pady=6)
+        etiqueta(self.tab_resumen, interpretacion, color="texto", justify="left", anchor="w",
+                 wraplength=500).grid(row=2, column=0, sticky="ew", padx=12, pady=(4, 8))
+        desplazable = MarcoDesplazable(self.tab_resumen, color=COLOR["tarjeta"])
+        desplazable.grid(row=3, column=0, sticky="nsew", padx=8, pady=6)
+        self.tab_resumen.grid_rowconfigure(3, weight=1)
+        self._crear_matriz_visual(desplazable.interior, "Matriz del determinante", matriz_principal)
+        datos = MarcoDesplazable(self.tab_datos, color=COLOR["tarjeta"])
+        datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        for nombre, matriz in matrices:
+            self._crear_matriz_visual(datos.interior, nombre, matriz)
+        self.caja_procedimiento.configure(state="normal")
+        self.caja_procedimiento.delete("1.0", "end")
+        self.caja_procedimiento.insert("1.0", "\n".join(procedimiento))
+        self.caja_procedimiento.configure(state="disabled")
+
+    def mostrar_guia(self):
+        """Oculta las pestañas y devuelve el panel compartido a la guía inicial."""
+        self.vistas_resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        reemplazar_texto(self.resultado, "")
 
     @staticmethod
     def _crear_entradas_2x2(parent, valores):
@@ -473,6 +619,21 @@ class ModuloDeterminantes(ctk.CTkFrame):
                 f"det(A+B) = {formatear_valor(datos['det_suma'])}; "
                 f"det(A)+det(B) = {formatear_valor(datos['suma_determinantes'])}",
             )
+            if hasattr(self, "vistas_resultado"):
+                self._actualizar_vistas(
+                    titulo="Comparación de determinantes",
+                    valor=(f"det(A+B) = {formatear_valor(datos['det_suma'])}\n"
+                           f"det(A) + det(B) = {formatear_valor(datos['suma_determinantes'])}"),
+                    detalle="Se comparan los dos valores calculados para las matrices ingresadas.",
+                    estado=("Contraejemplo" if not datos["coinciden"] else "Coinciden en este caso",
+                            "ok" if not datos["coinciden"] else "warning"),
+                    interpretacion=conclusion,
+                    matrices=(("Matriz A", matriz_a), ("Matriz B", matriz_b)),
+                    matriz_principal=datos["suma"], procedimiento=lineas,
+                )
+                self.resultado.grid_remove()
+                self.resultado.respuesta.grid_remove()
+                self.vistas_resultado.grid()
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
 
@@ -488,6 +649,7 @@ class ModuloDeterminantes(ctk.CTkFrame):
         """Reinicia a cero todas las entradas de la matriz."""
         reiniciar_celdas(self.entradas, self.entradas_A_suma, self.entradas_B_suma)
         self.ultima_matriz_resultado = None
+        self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
     def copiar_entrada(self):

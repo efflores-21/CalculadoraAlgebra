@@ -7,6 +7,7 @@ Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorg
 
 import re
 import sys
+import weakref
 from types import SimpleNamespace
 
 import customtkinter as ctk
@@ -18,26 +19,44 @@ from modulos.teoremas.resumen_teoremas import obtener_resumen
 
 DIMENSION_MAXIMA = 12
 
-# Paleta oscura: sin superficies blancas, para usar la calculadora con poca luz.
+# Tokens visuales compartidos. Las claves históricas se conservan porque las
+# pantallas actuales las importan directamente desde este módulo.
 COLOR = {
-    "fondo": "#121214",
-    "tarjeta": "#1C1C1F",
-    "suave": "#232327",
-    "borde": "#2C2C31",
-    "borde_fuerte": "#3B3B41",
-    "texto": "#E4E4E7",
-    "gris": "#9A9AA2",
-    "acento": "#3A3A41",
-    "texto_acento": "#F0F0F2",
-    "hover": "#4A4A52",
-    "hover_claro": "#2A2A2F",
-    "marca": "#5E5E66",
-    # Colores suaves del resultado: ayudan a leerlo por partes sin deslumbrar.
-    "titulo_fondo": "#2A2A30",
-    "paso": "#9DB8F5",
-    "ok": "#86CFA0",
-    "mal": "#EE9A94",
+    "fondo": "#10151D",
+    "fondo_secundario": "#151C26",
+    "tarjeta": "#18212C",
+    "suave": "#202B38",
+    "interaccion": "#293449",
+    "borde": "#293342",
+    "borde_fuerte": "#354255",
+    "texto": "#EDF3FA",
+    "gris": "#A6B4C5",
+    "deshabilitado": "#718096",
+    "acento": "#43B3D5",
+    "texto_acento": "#10202A",
+    "hover": "#64C7E3",
+    "hover_claro": "#293449",
+    "marca": "#718096",
+    "titulo_fondo": "#293449",
+    "paso": "#9B8CF4",
+    "ok": "#55C69A",
+    "mal": "#E87983",
+    "primario": "#43B3D5",
+    "primario_hover": "#64C7E3",
+    "primario_deshabilitado": "#354255",
+    "violeta": "#9B8CF4",
+    "verde": "#55C69A",
+    "advertencia": "#F0B45E",
+    "advertencia_hover": "#F5C77F",
+    "error": "#E87983",
+    "error_hover": "#EE929B",
+    "informacion": "#43B3D5",
+    "neutral": "#A6B4C5",
 }
+
+ESPACIADO = {"xxs": 4, "xs": 8, "sm": 12, "md": 16, "lg": 24, "xl": 32}
+RADIO = {"sm": 8, "md": 10, "lg": 12, "xl": 16}
+TAMANO_TEXTO = {"ayuda": 12, "cuerpo": 14, "subtitulo": 16, "titulo": 24}
 
 # Marca discreta de cada módulo, en el orden de entrega de los programas del curso.
 MARCAS = {
@@ -54,16 +73,21 @@ MARCAS = {
 }
 
 if sys.platform.startswith("win"):
+    _FAMILIA_UI = "Segoe UI"
     _FAMILIA_MONO = "Consolas"
 elif sys.platform == "darwin":
+    _FAMILIA_UI = "Helvetica Neue"
     _FAMILIA_MONO = "Menlo"
 else:
+    _FAMILIA_UI = "DejaVu Sans"
     _FAMILIA_MONO = "DejaVu Sans Mono"
 
 
 def fuente(tamano=13, negrita=False):
-    """Fuente principal de la interfaz (la familia la define el tema)."""
-    return ctk.CTkFont(size=tamano, weight="bold" if negrita else "normal")
+    """Fuente de interfaz con familia coherente y tamaño escalable por CTk."""
+    return ctk.CTkFont(
+        family=_FAMILIA_UI, size=tamano, weight="bold" if negrita else "normal"
+    )
 
 
 def fuente_mono(tamano=13, negrita=False):
@@ -269,65 +293,190 @@ def mensaje_error(error):
 
 
 def tarjeta(parent, **opciones):
-    """Superficie blanca con esquinas redondeadas y borde fino."""
+    """Superficie compartida; mantiene la firma usada por las pantallas actuales."""
+    opciones.setdefault("corner_radius", RADIO["lg"])
+    opciones.setdefault("border_width", 1)
+    opciones.setdefault("border_color", COLOR["borde"])
+    opciones.setdefault("fg_color", COLOR["tarjeta"])
     return ctk.CTkFrame(
         parent,
-        fg_color=COLOR["tarjeta"],
-        corner_radius=18,
-        border_width=1,
-        border_color=COLOR["borde"],
+        **opciones,
+    )
+
+
+_ESTADOS = {
+    "success": ("✓", COLOR["ok"]),
+    "converged": ("✓", COLOR["ok"]),
+    "warning": ("!", COLOR["advertencia"]),
+    "error": ("×", COLOR["error"]),
+    "info": ("i", COLOR["informacion"]),
+    "neutral": ("•", COLOR["neutral"]),
+}
+
+
+def _crear_boton(parent, texto, comando, variante, **opciones):
+    """Fabrica botones con colores semanticos, geometria y estados coherentes."""
+    estilos = {
+        "primary": (COLOR["primario"], COLOR["primario_hover"], COLOR["texto_acento"],
+                    0, COLOR["primario"], COLOR["primario_deshabilitado"]),
+        "secondary": (COLOR["tarjeta"], COLOR["interaccion"], COLOR["texto"],
+                      1, COLOR["borde_fuerte"], COLOR["deshabilitado"]),
+        "neutral": (COLOR["interaccion"], COLOR["borde_fuerte"], COLOR["texto"],
+                    0, COLOR["interaccion"], COLOR["deshabilitado"]),
+        "warning": (COLOR["advertencia"], COLOR["advertencia_hover"], "#2A2114",
+                    0, COLOR["advertencia"], "#58431E"),
+        "danger": (COLOR["error"], COLOR["error_hover"], "#2B171B",
+                   0, COLOR["error"], "#542A31"),
+        "text": ("transparent", COLOR["interaccion"], COLOR["texto"],
+                 0, COLOR["interaccion"], COLOR["deshabilitado"]),
+    }
+    fondo, hover, texto_color, borde, color_borde, texto_deshabilitado = estilos[variante]
+    opciones.setdefault("height", 40 if variante == "primary" else 36)
+    radio = opciones.pop("corner_radius", RADIO["sm"])
+    return ctk.CTkButton(
+        parent, text=texto, command=comando, corner_radius=radio,
+        fg_color=fondo, hover_color=hover, text_color=texto_color,
+        text_color_disabled=texto_deshabilitado, border_width=borde,
+        border_color=color_borde, font=fuente(14 if variante == "primary" else 13,
+                                               negrita=variante == "primary"),
         **opciones,
     )
 
 
 def boton_primario(parent, texto, comando, **opciones):
-    """Botón negro para la acción principal."""
-    opciones.setdefault("height", 40)
-    return ctk.CTkButton(
-        parent,
-        text=texto,
-        command=comando,
-        corner_radius=10,
-        fg_color=COLOR["acento"],
-        hover_color=COLOR["hover"],
-        text_color=COLOR["texto_acento"],
-        font=fuente(14, negrita=True),
-        **opciones,
-    )
+    """Botón para la acción principal; conserva la API histórica."""
+    return _crear_boton(parent, texto, comando, "primary", **opciones)
 
 
 def boton_secundario(parent, texto, comando, **opciones):
-    """Botón blanco con borde, para acciones de apoyo."""
-    opciones.setdefault("height", 36)
-    return ctk.CTkButton(
-        parent,
-        text=texto,
-        command=comando,
-        corner_radius=10,
-        fg_color=COLOR["tarjeta"],
-        hover_color=COLOR["hover_claro"],
-        border_width=1,
-        border_color=COLOR["borde_fuerte"],
-        text_color=COLOR["texto"],
-        font=fuente(13),
-        **opciones,
-    )
+    """Botón de acción secundaria con superficie y borde sutiles."""
+    return _crear_boton(parent, texto, comando, "secondary", **opciones)
+
+
+def boton_neutral(parent, texto, comando, **opciones):
+    """Botón neutral para acciones auxiliares que necesitan más presencia que un enlace."""
+    return _crear_boton(parent, texto, comando, "neutral", **opciones)
+
+
+def boton_advertencia(parent, texto, comando, **opciones):
+    """Botón para confirmar una acción que requiere atención."""
+    return _crear_boton(parent, texto, comando, "warning", **opciones)
+
+
+def boton_destructivo(parent, texto, comando, **opciones):
+    """Botón para una acción destructiva; usar solo cuando exista tal acción."""
+    return _crear_boton(parent, texto, comando, "danger", **opciones)
 
 
 def boton_texto(parent, texto, comando, **opciones):
-    """Botón sin fondo, como un enlace discreto."""
+    """Botón discreto sin superficie para navegación y acciones de bajo énfasis."""
     opciones.setdefault("height", 32)
-    return ctk.CTkButton(
-        parent,
-        text=texto,
-        command=comando,
-        corner_radius=10,
-        fg_color="transparent",
-        hover_color=COLOR["borde"],
-        text_color=COLOR["texto"],
-        font=fuente(13),
-        **opciones,
+    return _crear_boton(parent, texto, comando, "text", **opciones)
+
+
+def etiqueta_estado(parent, texto, estado="neutral", **opciones):
+    """Etiqueta con símbolo y color semántico; el significado no depende del color."""
+    simbolo, color = _ESTADOS.get(estado, _ESTADOS["neutral"])
+    opciones.setdefault("anchor", "w")
+    opciones.setdefault("justify", "left")
+    return ctk.CTkLabel(parent, text=f"{simbolo} {texto}", font=fuente(13),
+                        text_color=color, **opciones)
+
+
+def entrada_texto(parent, ancho=180, placeholder=None, justify="left"):
+    """Campo de texto de una línea con los mismos tokens que las entradas numéricas."""
+    return ctk.CTkEntry(
+        parent, width=ancho, height=38, placeholder_text=placeholder, justify=justify,
+        corner_radius=RADIO["sm"], border_width=1,
+        border_color=COLOR["borde_fuerte"], fg_color=COLOR["suave"],
+        text_color=COLOR["texto"], placeholder_text_color=COLOR["deshabilitado"],
+        font=fuente(TAMANO_TEXTO["cuerpo"]),
     )
+
+
+class Panel(ctk.CTkFrame):
+    """Panel reutilizable con encabezado opcional y un contenedor de contenido."""
+
+    def __init__(self, parent, titulo=None, descripcion=None, accion=None, **opciones):
+        opciones.setdefault("fg_color", COLOR["tarjeta"])
+        opciones.setdefault("corner_radius", RADIO["lg"])
+        opciones.setdefault("border_width", 1)
+        opciones.setdefault("border_color", COLOR["borde"])
+        super().__init__(parent, **opciones)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1 if titulo or descripcion or accion else 0, weight=1)
+
+        fila = 0
+        if titulo or descripcion or accion:
+            self.encabezado = encabezado_seccion(
+                self, titulo or "", descripcion=descripcion, accion=accion
+            )
+            self.encabezado.grid(row=0, column=0, sticky="ew",
+                                 padx=ESPACIADO["md"], pady=(ESPACIADO["md"], 0))
+            fila = 1
+        self.contenido = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        self.contenido.grid(row=fila, column=0, sticky="nsew",
+                            padx=ESPACIADO["md"], pady=ESPACIADO["md"])
+        self.contenido.grid_columnconfigure(0, weight=1)
+
+
+def encabezado_seccion(parent, titulo, descripcion=None, accion=None):
+    """Crea un encabezado de sección; `accion` puede ser `(texto, callback)`."""
+    marco = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+    marco.grid_columnconfigure(0, weight=1)
+    etiqueta(marco, titulo, tamano=TAMANO_TEXTO["subtitulo"], color="texto",
+             negrita=True).grid(row=0, column=0, sticky="w")
+    if descripcion:
+        etiqueta(marco, descripcion, tamano=TAMANO_TEXTO["ayuda"], color="gris",
+                 justify="left", anchor="w", wraplength=560).grid(
+                     row=1, column=0, sticky="w", pady=(ESPACIADO["xxs"], 0))
+    if accion:
+        texto, comando = accion
+        boton_neutral(marco, texto, comando).grid(row=0, column=1, rowspan=2,
+                                                  sticky="e", padx=(ESPACIADO["md"], 0))
+    return marco
+
+
+class TarjetaResultado(ctk.CTkFrame):
+    """Tarjeta compacta para un resultado, métrica y estado destacados."""
+
+    def __init__(self, parent, titulo, valor="—", detalle=None, estado=None, **opciones):
+        opciones.setdefault("fg_color", COLOR["suave"])
+        opciones.setdefault("corner_radius", RADIO["md"])
+        opciones.setdefault("border_width", 1)
+        opciones.setdefault("border_color", COLOR["borde"])
+        super().__init__(parent, **opciones)
+        self.grid_columnconfigure(0, weight=1)
+        self.titulo = etiqueta(self, titulo, tamano=TAMANO_TEXTO["ayuda"], color="gris")
+        self.titulo.grid(row=0, column=0, sticky="w", padx=ESPACIADO["md"],
+                         pady=(ESPACIADO["sm"], 0))
+        self.valor = ctk.CTkLabel(self, text=str(valor), font=fuente(22, negrita=True),
+                                  text_color=COLOR["texto"], anchor="w", justify="left")
+        self.valor.grid(row=1, column=0, sticky="ew", padx=ESPACIADO["md"],
+                        pady=(ESPACIADO["xxs"], 0))
+        self.detalle = etiqueta(self, detalle or "", tamano=TAMANO_TEXTO["ayuda"],
+                                color="gris", justify="left", anchor="w", wraplength=440)
+        self.detalle.grid(row=2, column=0, sticky="ew", padx=ESPACIADO["md"],
+                          pady=(ESPACIADO["xxs"], ESPACIADO["sm"]))
+        self.estado = etiqueta_estado(self, estado[0], estado[1]) if estado else None
+        if self.estado:
+            self.estado.grid(row=3, column=0, sticky="w", padx=ESPACIADO["md"],
+                             pady=(0, ESPACIADO["sm"]))
+
+    def actualizar(self, valor, detalle=None, estado=None):
+        """Actualiza los datos visibles sin reconstruir la tarjeta."""
+        self.valor.configure(text=str(valor))
+        if detalle is not None:
+            self.detalle.configure(text=detalle)
+        if estado is not None:
+            if self.estado is None:
+                self.estado = etiqueta_estado(self, estado[0], estado[1])
+                self.estado.grid(row=3, column=0, sticky="w", padx=ESPACIADO["md"],
+                                 pady=(0, ESPACIADO["sm"]))
+            else:
+                texto, tipo = estado
+                simbolo, color = _ESTADOS.get(tipo, _ESTADOS["neutral"])
+                self.estado.configure(text=f"{simbolo} {texto}", text_color=color)
 
 
 class Selector(ctk.CTkFrame):
@@ -366,6 +515,68 @@ class Selector(ctk.CTkFrame):
         return self._valor
 
 
+class _GestorRueda:
+    """Enruta la rueda al MarcoDesplazable que contiene el widget del evento."""
+
+    _SECUENCIAS = (
+        "<MouseWheel>",
+        "<Shift-MouseWheel>",
+        "<Button-4>",
+        "<Button-5>",
+    )
+
+    def __init__(self, raiz):
+        self._contenedores = weakref.WeakSet()
+        for secuencia in self._SECUENCIAS:
+            raiz.bind_all(
+                secuencia,
+                lambda evento, actual=secuencia: self._despachar(evento, actual),
+                add="+",
+            )
+
+    def registrar(self, contenedor):
+        self._contenedores.add(contenedor)
+
+    def desregistrar(self, contenedor):
+        self._contenedores.discard(contenedor)
+
+    def _contenedor_del_evento(self, evento):
+        widget = getattr(evento, "widget", None)
+        while widget is not None:
+            if widget in self._contenedores:
+                try:
+                    if widget.winfo_ismapped():
+                        return widget
+                except TclError:
+                    self._contenedores.discard(widget)
+                    return None
+            widget = getattr(widget, "master", None)
+        return None
+
+    def _despachar(self, evento, secuencia):
+        contenedor = self._contenedor_del_evento(evento)
+        if contenedor is None:
+            return None
+        if secuencia == "<Shift-MouseWheel>":
+            contenedor._rueda_horizontal(evento)
+        elif secuencia == "<MouseWheel>":
+            contenedor._rueda(evento)
+        elif secuencia == "<Button-4>":
+            contenedor._desplazar_v(-1)
+        else:
+            contenedor._desplazar_v(1)
+        return "break"
+
+
+def _gestor_rueda(parent):
+    raiz = parent.winfo_toplevel()
+    gestor = getattr(raiz, "_gestor_rueda_marco_desplazable", None)
+    if gestor is None:
+        gestor = _GestorRueda(raiz)
+        raiz._gestor_rueda_marco_desplazable = gestor
+    return gestor
+
+
 class MarcoDesplazable(ctk.CTkFrame):
     """
     Área con desplazamiento vertical y horizontal para tablas grandes.
@@ -391,18 +602,64 @@ class MarcoDesplazable(ctk.CTkFrame):
         )
         self.interior = ctk.CTkFrame(self._lienzo, fg_color=color, corner_radius=0)
         self._ventana = self._lienzo.create_window(0, 0, window=self.interior, anchor="nw")
-        self.interior.bind("<Configure>", lambda evento: self._actualizar())
-        self._lienzo.bind("<Configure>", lambda evento: self._actualizar())
-        self.bind("<Enter>", lambda evento: self._activar_rueda(True))
-        self.bind("<Leave>", self._al_salir)
+        self.interior.bind(
+            "<Configure>", lambda evento: self._diagnostico_configure(evento, "interior")
+        )
+        self._lienzo.bind(
+            "<Configure>", lambda evento: self._diagnostico_configure(evento, "canvas")
+        )
+        self._gestor_rueda = _gestor_rueda(parent)
+        self._gestor_rueda.registrar(self)
+        from modulos._diagnostico_ui import ACTIVO, instrumentar_scroll
+        self._diagnostico_medidor = instrumentar_scroll(self) if ACTIVO else None
+        if self._diagnostico_medidor is not None:
+            # CTkScrollbar dibuja el thumb en un Canvas interno: los eventos
+            # llegan a ese Canvas, no al Frame contenedor.
+            canvas_barra = getattr(self._barra_v, "_canvas", self._barra_v)
+            canvas_barra.bind("<ButtonPress-1>", self._diagnostico_arrastre_inicio, add="+")
+            canvas_barra.bind("<B1-Motion>", self._diagnostico_arrastre_movimiento, add="+")
+            canvas_barra.bind("<ButtonRelease-1>", self._diagnostico_arrastre_fin, add="+")
 
-    def _al_salir(self, evento):
-        """Desactiva la rueda solo si el puntero salió de verdad (no si entró a una celda)."""
-        x, y = self.winfo_pointerxy()
-        debajo = self.winfo_containing(x, y)
-        if debajo is not None and str(debajo).startswith(str(self)):
+    def _diagnostico_configure(self, evento, origen):
+        """Registra Configure si está activado; conserva el ajuste habitual."""
+        from modulos._diagnostico_ui import registrar_configure
+        registrar_configure(self, origen)
+
+    def _diagnostico_arrastre_inicio(self, evento):
+        """Registra todo press y clasifica el elemento Canvas bajo el cursor."""
+        lienzo = getattr(self._barra_v, "_canvas", None)
+        if lienzo is None or self._diagnostico_medidor is None:
             return
-        self._activar_rueda(False)
+        try:
+            elementos = lienzo.find_withtag("current")
+            elemento = elementos[-1] if elementos else None
+            tags = lienzo.gettags(elemento) if elemento is not None else ()
+            error_identificacion = None
+        except Exception as error:
+            elemento, tags = None, ()
+            error_identificacion = f"error_identificando_elemento:{error}"
+        reconocido = "scrollbar_parts" in tags
+        motivo = None if reconocido else error_identificacion or (
+            "sin_elemento_current" if elemento is None else "elemento_actual_sin_tag_scrollbar_parts"
+        )
+        info = self._diagnostico_medidor.registrar_press(
+            evento, elemento, tags, reconocido, motivo
+        )
+        self._diagnostico_arrastre_activo = True
+        self._diagnostico_medidor.iniciar_arrastre(info)
+
+    def _diagnostico_arrastre_movimiento(self, evento):
+        if getattr(self, "_diagnostico_arrastre_activo", False):
+            self._diagnostico_medidor.mover_arrastre(evento)
+
+    def _diagnostico_arrastre_fin(self, evento):
+        if getattr(self, "_diagnostico_arrastre_activo", False):
+            self._diagnostico_medidor.terminar_arrastre(
+                release_info=self._diagnostico_medidor.info_release(evento)
+            )
+        elif self._diagnostico_medidor is not None:
+            self._diagnostico_medidor.registrar_release_sin_sesion(evento)
+        self._diagnostico_arrastre_activo = False
 
     def _actualizar(self):
         """Ajusta la región desplazable y muestra solo las barras necesarias."""
@@ -423,17 +680,12 @@ class MarcoDesplazable(ctk.CTkFrame):
                 barra.grid_remove()
                 vista(0)
 
-    def _activar_rueda(self, activa):
-        """La rueda del mouse solo mueve esta área mientras el puntero está encima."""
-        if activa:
-            self.bind_all("<MouseWheel>", self._rueda)
-            self.bind_all("<Shift-MouseWheel>", self._rueda_horizontal)
-            # Linux entrega la rueda como botones 4 (arriba) y 5 (abajo).
-            self.bind_all("<Button-4>", lambda evento: self._desplazar_v(-1))
-            self.bind_all("<Button-5>", lambda evento: self._desplazar_v(1))
-        else:
-            for secuencia in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>"):
-                self.unbind_all(secuencia)
+    def destroy(self):
+        if (self._diagnostico_medidor is not None
+                and self._diagnostico_medidor.arrastrando):
+            self._diagnostico_medidor.terminar_arrastre("contenedor_destruido")
+        self._gestor_rueda.desregistrar(self)
+        super().destroy()
 
     def _pasos_rueda(self, evento):
         # Windows entrega múltiplos de 120; macOS, valores pequeños.
@@ -442,34 +694,40 @@ class MarcoDesplazable(ctk.CTkFrame):
         return -1 if evento.delta > 0 else 1
 
     def _desplazar_v(self, pasos):
+        if self._diagnostico_medidor is not None:
+            self._diagnostico_medidor.interaccion("rueda_o_boton_vertical")
         if self._barra_v.winfo_ismapped():
             self._lienzo.yview_scroll(pasos, "units")
 
     def _rueda(self, evento):
+        if self._diagnostico_medidor is not None:
+            self._diagnostico_medidor.interaccion("rueda_vertical")
         self._desplazar_v(self._pasos_rueda(evento))
 
     def _rueda_horizontal(self, evento):
+        if self._diagnostico_medidor is not None:
+            self._diagnostico_medidor.interaccion("rueda_horizontal")
         if self._barra_h.winfo_ismapped():
             self._lienzo.xview_scroll(self._pasos_rueda(evento), "units")
 
 
 def entrada_numero(parent, ancho=62):
-    """Celda numérica centrada que selecciona su contenido al recibir el foco."""
+    """Celda numerica centrada que selecciona su contenido al recibir el foco."""
     entry = ctk.CTkEntry(
         parent,
         width=ancho,
-        height=36,
+        height=38,
         justify="center",
-        corner_radius=8,
+        corner_radius=RADIO["sm"],
         border_width=1,
         border_color=COLOR["borde_fuerte"],
-        fg_color=COLOR["tarjeta"],
-        font=fuente(14),
+        fg_color=COLOR["suave"],
+        text_color=COLOR["texto"],
+        font=fuente(TAMANO_TEXTO["cuerpo"]),
     )
     entry.insert(0, "0")
     entry.bind("<FocusIn>", lambda evento, celda=entry: celda.select_range(0, "end"))
     return entry
-
 
 def etiqueta(parent, texto, tamano=12, color="gris", negrita=False, **opciones):
     """Texto pequeño (en gris por defecto) para encabezados de tablas y ayudas."""
@@ -483,37 +741,31 @@ def etiqueta(parent, texto, tamano=12, color="gris", negrita=False, **opciones):
 
 
 def subtitulo(parent, texto):
-    """Título de una sección dentro de una tarjeta."""
+    """Titulo de una seccion dentro de un panel."""
     return ctk.CTkLabel(
-        parent, text=texto, font=fuente(15, negrita=True), text_color=COLOR["texto"]
+        parent, text=texto,
+        font=fuente(TAMANO_TEXTO["subtitulo"], negrita=True),
+        text_color=COLOR["texto"],
     )
 
 
-def campo(parent, texto, valor, ancho=70, al_enter=None):
-    """
-    Crea un campo con su etiqueta encima y lo devuelve.
-
-    Devuelve (marco, entry): el marco se coloca con pack/grid y el entry se
-    usa para leer el valor. Si se da `al_enter`, pulsar Enter lo ejecuta.
-    """
-    marco = ctk.CTkFrame(parent, fg_color="transparent")
-    etiqueta(marco, texto).pack(anchor="w", pady=(0, 2))
-    entry = ctk.CTkEntry(
-        marco,
-        width=ancho,
-        height=36,
-        justify="center",
-        corner_radius=8,
-        border_width=1,
-        border_color=COLOR["borde_fuerte"],
-        font=fuente(14),
+def campo(parent, texto, valor, ancho=70, al_enter=None, ayuda=None):
+    """Crea un campo rotulado; devuelve (marco, entry) como antes."""
+    marco = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+    etiqueta(marco, texto, tamano=TAMANO_TEXTO["ayuda"], color="gris").pack(
+        anchor="w", pady=(0, ESPACIADO["xxs"])
     )
+    entry = entrada_texto(marco, ancho=ancho, justify="center")
     entry.insert(0, valor)
     entry.pack(anchor="w")
+    if ayuda:
+        etiqueta(marco, ayuda, tamano=TAMANO_TEXTO["ayuda"], color="gris",
+                 justify="left", anchor="w", wraplength=max(ancho * 3, 180)).pack(
+                     anchor="w", pady=(ESPACIADO["xxs"], 0)
+                 )
     if al_enter is not None:
         entry.bind("<Return>", lambda evento: al_enter())
     return marco, entry
-
 
 def crear_controles(parent, especificacion, al_aplicar, texto_boton="Crear tabla"):
     """
@@ -536,7 +788,7 @@ def crear_controles(parent, especificacion, al_aplicar, texto_boton="Crear tabla
         caja, entry = campo(
             marco, texto, valor, ancho=ancho, al_enter=al_aplicar if es_tamano else None
         )
-        caja.pack(side="left", padx=(0, 12), anchor="s")
+        caja.pack(side="left", padx=(0, ESPACIADO["sm"]), anchor="s")
         entradas[clave] = entry
     if texto_boton:
         boton_secundario(marco, texto_boton, al_aplicar, width=110).pack(

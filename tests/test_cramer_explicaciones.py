@@ -14,7 +14,11 @@ from modulos.modulo_sistemas import ModuloSistemas
 class ExplicacionesCramer(unittest.TestCase):
     def presentar(self, A, b):
         with patch("modulos.modulo_sistemas.reemplazar_texto") as reemplazar:
-            ModuloSistemas._mostrar_cramer(SimpleNamespace(resultado=object()), A, b)
+            instancia = SimpleNamespace(resultado=object())
+            instancia._presentar_resultado = lambda texto, resumen, estado, metodo, matriz, vector, *extra, **kwargs: reemplazar(
+                instancia.resultado, texto, resumen
+            )
+            ModuloSistemas._mostrar_cramer(instancia, A, b)
         return reemplazar.call_args.args[1]
 
     def assert_traza_determinante_en_orden(self, texto, nombre, pasos, cursor=0):

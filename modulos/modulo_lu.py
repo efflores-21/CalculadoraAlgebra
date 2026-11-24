@@ -13,10 +13,14 @@ from backend.matriz import formatear_valor, subindice
 from backend.operaciones_matriciales import multiplicar_matrices
 
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
     llenar,
     Selector, boton_primario, boton_secundario, copiar_entradas_al_portapapeles,
     copiar_matriz_al_portapapeles, crear_controles, crear_estructura, entrada_numero,
-    etiqueta, formatear_matriz, formatear_vector, leer_entero, leer_fraccion,
+    etiqueta, fuente_mono, formatear_matriz, formatear_vector, leer_entero, leer_fraccion,
     formatear_paso_explicado, mensaje_error, pegar_matriz_en_entradas, reemplazar_texto, reiniciar_celdas, subtitulo,
 )
 
@@ -28,6 +32,62 @@ LOGO = (
 SIN_PIVOTEO, CON_PIVOTEO = "Sin pivoteo (A = LU)", "Pivoteo parcial (PA = LU)"
 
 
+def _modelo_vistas_lu(datos):
+    """Organiza exclusivamente datos ya calculados para las vistas del módulo."""
+    matriz_a = datos["A"]
+    lu = datos.get("lu")
+    sistema = datos.get("sistema")
+    matrices = [("Matriz A", matriz_a), ("Matriz L", datos["L"]), ("Matriz U", datos["U"])]
+    vectores = [("Vector b", datos["b"])]
+    if datos.get("modo") == CON_PIVOTEO and sistema:
+        matrices.insert(1, ("Matriz P", sistema["P"]))
+        if datos.get("PA") is not None:
+            matrices.append(("P · A", datos["PA"]))
+        if datos.get("LU") is not None:
+            matrices.append(("L · U", datos["LU"]))
+        for nombre, clave in (("Vector Pb", "Pb"), ("Vector y", "y")):
+            valor = datos.get(clave, sistema.get(clave))
+            if valor is not None:
+                vectores.append((nombre, valor))
+        x = sistema.get("solucion_particular")
+        if x is not None and sistema["estado"] == "unica":
+            vectores.append(("Solución x", x))
+        estado_sistema = sistema["estado"]
+        solucion = (formatear_vector(x) if x is not None else
+                    "Solución no única" if estado_sistema == "infinitas" else "Sistema incompatible")
+        correcta = datos.get("factorizacion_correcta", False)
+    else:
+        if lu and lu.get("LU") is not None:
+            matrices.append(("Producto L · U", lu["LU"]))
+        fuente = sistema if sistema is not None else lu
+        if fuente and fuente.get("y") is not None:
+            vectores.append(("Vector y", fuente["y"]))
+        if lu and lu.get("x") is not None:
+            vectores.append(("Solución x", lu["x"]))
+        elif sistema and sistema.get("solucion_particular") is not None:
+            vectores.append(("Solución particular", sistema["solucion_particular"]))
+        estado_sistema = sistema.get("estado") if sistema else None
+        if lu and lu.get("x") is not None:
+            solucion = formatear_vector(lu["x"])
+        elif estado_sistema == "infinitas":
+            solucion = "Infinitas soluciones"
+        elif estado_sistema == "incompatible":
+            solucion = "Sistema incompatible"
+        elif sistema and sistema.get("solucion_particular") is not None:
+            solucion = f"Solución particular: {formatear_vector(sistema['solucion_particular'])}"
+        else:
+            solucion = "Ax = b clasificado en el procedimiento"
+        correcta = lu.get("factorizacion_correcta", False) if lu else datos.get("factorizacion_correcta", False)
+    return {
+        "matrices": matrices,
+        "vectores": vectores,
+        "factorizacion_correcta": correcta,
+        "solucion": solucion,
+        "dimensiones": (len(matriz_a), len(matriz_a[0])),
+        "modo": datos["modo"],
+    }
+
+
 class ModuloLU(ctk.CTkFrame):
     """Panel que factoriza A = LU (o PA = LU) y resuelve Ax = b por doble sustitución."""
 
@@ -37,6 +97,7 @@ class ModuloLU(ctk.CTkFrame):
         self.on_back = on_back
         self.entradas_A, self.entradas_b = [], []
         self.ultima_L = self.ultima_U = None
+        self.ultimo_datos_vista = None
         self._construir_interfaz()
         self.actualizar_entradas()
 
@@ -57,6 +118,7 @@ class ModuloLU(ctk.CTkFrame):
                        "la verificación L·U = A, las etapas Ly = b y Ux = y, y la comprobación A·x = b.",
         )
         self.resultado = zonas.resultado
+        self._crear_vistas_resultado()
         
         controles, entradas = crear_controles(
             zonas.contenido,
@@ -103,6 +165,7 @@ class ModuloLU(ctk.CTkFrame):
         
         self.entradas_A, self.entradas_b = [], []
         self.ultima_L = self.ultima_U = None
+        self.ultimo_datos_vista = None
         
         for i in range(m):
             fila = [entrada_numero(self.tabla) for _ in range(n)]
@@ -113,11 +176,13 @@ class ModuloLU(ctk.CTkFrame):
             self.entradas_A.append(fila)
             self.entradas_b.append(celda_b)
             
+        self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
     def calcular(self):
         """Lee A y b y muestra la factorización y la solución con el método elegido."""
         self.ultima_L = self.ultima_U = None
+        self.ultimo_datos_vista = None
         try:
             # Fracciones exactas: así L·U == A y A·x == b se comparan sin errores de redondeo.
             A = [[leer_fraccion(celda, f"La entrada ({i + 1},{j + 1}) de A") for j, celda in enumerate(fila)]
@@ -133,11 +198,132 @@ class ModuloLU(ctk.CTkFrame):
             return
             
         reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+        if self.ultimo_datos_vista is not None:
+            self._actualizar_vistas(self.ultimo_datos_vista, lineas, resumen)
+            self.resultado.grid_remove()
+            self.resultado.respuesta.grid_remove()
+            self.vistas_resultado.grid()
+
+    def _crear_vistas_resultado(self):
+        """Crea pestañas locales para el resumen, los datos y el desarrollo LU."""
+        padre = self.resultado.master
+        self.resultado.grid_remove()
+        self.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+        self.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.vistas_resultado.grid_remove()
+        self.vistas_resultado.grid_columnconfigure(0, weight=1)
+        self.vistas_resultado.grid_rowconfigure(0, weight=1)
+        self.pestanas_resultado = ctk.CTkTabview(
+            self.vistas_resultado, fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+        for nombre in ("Resumen", "Datos", "Procedimiento"):
+            self.pestanas_resultado.add(nombre)
+        self.tab_resumen = self.pestanas_resultado.tab("Resumen")
+        self.tab_resumen.grid_columnconfigure(0, weight=1)
+        self.tab_resumen.grid_rowconfigure(2, weight=1)
+        self.tab_datos = self.pestanas_resultado.tab("Datos")
+        self.tab_datos.grid_columnconfigure(0, weight=1)
+        self.tab_datos.grid_rowconfigure(0, weight=1)
+        self.tab_procedimiento = self.pestanas_resultado.tab("Procedimiento")
+        self.tab_procedimiento.grid_columnconfigure(0, weight=1)
+        self.tab_procedimiento.grid_rowconfigure(0, weight=1)
+        self.caja_procedimiento = ctk.CTkTextbox(
+            self.tab_procedimiento, font=fuente_mono(12), wrap="word",
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            border_width=1, border_color=COLOR["borde"], corner_radius=10,
+        )
+        self.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        pendientes = list(self.winfo_children())
+        while pendientes:
+            widget = pendientes.pop()
+            pendientes.extend(widget.winfo_children())
+            if isinstance(widget, ctk.CTkButton) and str(widget.cget("text")).startswith("?  Cómo usar"):
+                widget.configure(command=self.mostrar_guia)
+                break
+
+    @staticmethod
+    def _crear_matriz_visual(parent, nombre, matriz):
+        """Renderiza una matriz numérica en celdas alineadas y desplazables."""
+        panel = Panel(parent, titulo=nombre, descripcion=f"Dimensión: {len(matriz)} × {len(matriz[0])}")
+        panel.pack(fill="x", padx=8, pady=6)
+        grilla = ctk.CTkFrame(panel.contenido, fg_color="transparent")
+        grilla.pack(anchor="w")
+        for j in range(len(matriz[0])):
+            grilla.grid_columnconfigure(j, minsize=74, weight=1)
+        for i, fila in enumerate(matriz):
+            grilla.grid_rowconfigure(i, minsize=36, weight=1)
+            for j, valor in enumerate(fila):
+                ctk.CTkLabel(
+                    grilla, text=formatear_valor(valor), width=70, height=34,
+                    font=fuente_mono(12), text_color=COLOR["texto"],
+                    fg_color=COLOR["suave"], corner_radius=6,
+                    anchor="center", justify="center", wraplength=72,
+                ).grid(row=i, column=j, sticky="nsew", padx=2, pady=2)
+        return panel
+
+    def _actualizar_vistas(self, datos, lineas, resumen):
+        modelo = _modelo_vistas_lu(datos)
+        for widget in self.tab_resumen.winfo_children():
+            widget.destroy()
+        for widget in self.tab_datos.winfo_children():
+            widget.destroy()
+        modo_con_pivoteo = modelo["modo"] == CON_PIVOTEO
+        formula = "P · A = L · U" if modo_con_pivoteo else "A = L · U"
+        estado = ("Factorización correcta", "ok") if modelo["factorizacion_correcta"] else (
+            "Verificación fallida", "mal")
+        detalle = (f"Dimensión de A: {modelo['dimensiones'][0]} × {modelo['dimensiones'][1]} · "
+                   f"{datos['modo']}\n{resumen}\nSolución: {modelo['solucion']}")
+        tarjeta = TarjetaResultado(
+            self.tab_resumen, "Estado de la factorización", formula, detalle, estado=estado,
+        )
+        tarjeta.valor.configure(wraplength=440)
+        tarjeta.detalle.configure(wraplength=480)
+        tarjeta.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+        desplazable = MarcoDesplazable(self.tab_resumen, color=COLOR["tarjeta"])
+        desplazable.grid(row=2, column=0, sticky="nsew", padx=8, pady=6)
+        etiqueta(desplazable.interior, formula, tamano=15, color="acento", negrita=True).pack(
+            anchor="w", padx=12, pady=(10, 4))
+        resumen_matrices = [("Matriz P", datos["sistema"]["P"])] if modo_con_pivoteo else []
+        resumen_matrices.extend((nombre, matriz) for nombre, matriz in modelo["matrices"]
+                                if nombre in {"Matriz L", "Matriz U"})
+        for nombre, matriz in resumen_matrices:
+            self._crear_matriz_visual(desplazable.interior, nombre, matriz)
+
+        datos_vista = MarcoDesplazable(self.tab_datos, color=COLOR["tarjeta"])
+        datos_vista.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        for nombre, matriz in modelo["matrices"]:
+            self._crear_matriz_visual(datos_vista.interior, nombre, matriz)
+        panel_vectores = Panel(datos_vista.interior, titulo="Vectores del sistema")
+        panel_vectores.pack(fill="x", padx=8, pady=6)
+        for nombre, vector in modelo["vectores"]:
+            etiqueta(panel_vectores.contenido, f"{nombre} = {formatear_vector(vector)}",
+                     color="texto", justify="left", anchor="w", wraplength=460).pack(
+                         anchor="w", pady=2)
+        self.caja_procedimiento.configure(state="normal")
+        self.caja_procedimiento.delete("1.0", "end")
+        self.caja_procedimiento.insert("1.0", "\n".join(lineas))
+        self.caja_procedimiento.configure(state="disabled")
+
+    def mostrar_guia(self):
+        """Restablece la guía de uso y oculta la presentación del último cálculo."""
+        self.vistas_resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        reemplazar_texto(self.resultado, "")
 
     def _sin_pivoteo(self, A, b):
         """A = LU solo con reemplazos de fila (lo que pide el programa) y solución de Ax = b."""
         datos = resolver_lu(A, b)
         self.ultima_L, self.ultima_U = datos["L"], datos["U"]
+        self.ultimo_datos_vista = {
+            "A": A, "b": b, "modo": SIN_PIVOTEO, "lu": datos, "sistema": None,
+            "L": datos["L"], "U": datos["U"],
+        }
         lineas = _texto_factorizacion(A, datos)
         
         if datos["cuadrada"]:
@@ -145,6 +331,7 @@ class ModuloLU(ctk.CTkFrame):
             
         # Con A rectangular Ux = y no tiene solución única garantizada: se clasifica el sistema.
         sistema = resolver_sistema_lu(A, b)
+        self.ultimo_datos_vista["sistema"] = sistema
         return (lineas + ["", "3. Solución de Ax = b (A rectangular)"] + _texto_clasificacion(A, b, sistema),
                 f"L·U = A ✓   ·   {_resumen_sistema(sistema)}")
 
@@ -159,6 +346,13 @@ class ModuloLU(ctk.CTkFrame):
                   "Pasos (intercambios, multiplicadores y eliminación):"]
         lineas.extend(_texto_pasos_registrados(pasos, estado_final={"P": P, "L": L, "U": U}))
         producto_LU, PA = multiplicar_matrices(L, U), multiplicar_matrices(P, A)
+        vector_pb = next((paso["vector"][1] for paso in pasos
+                          if paso.get("vector", (None,))[0] == "Pb"), None)
+        self.ultimo_datos_vista = {
+            "A": A, "b": b, "modo": CON_PIVOTEO, "sistema": sistema,
+            "L": L, "U": U, "LU": producto_LU, "PA": PA, "Pb": vector_pb,
+            "factorizacion_correcta": producto_LU == PA,
+        }
         lineas.extend(["", "P =", formatear_matriz(P), "L =", formatear_matriz(L), "U =", formatear_matriz(U),
                        "", "Comparación para verificar PA = LU:", "P · A =", formatear_matriz(PA),
                        "L · U =", formatear_matriz(producto_LU),
@@ -198,6 +392,8 @@ class ModuloLU(ctk.CTkFrame):
         """Pone en cero A y b y vuelve a mostrar la guía."""
         reiniciar_celdas(self.entradas_A, self.entradas_b)
         self.ultima_L = self.ultima_U = None
+        self.ultimo_datos_vista = None
+        self.vistas_resultado.grid_remove()
         reemplazar_texto(self.resultado, "")
 
 

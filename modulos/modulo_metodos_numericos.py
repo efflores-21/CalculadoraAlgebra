@@ -18,10 +18,13 @@ from backend.newton_raphson import resolver_newton_raphson
 from backend.notacion_posicional import binario_a_decimal, decimal_a_binario, descomponer_decimal
 from modulos._comun import (
     COLOR,
+    Panel,
+    TarjetaResultado,
     boton_primario,
     boton_secundario,
     boton_texto,
     etiqueta,
+    fuente_mono,
     reemplazar_texto,
     mostrar_teoremas,
 )
@@ -70,6 +73,115 @@ def _formatear_numero(valor):
     if 1e-4 <= magnitud < 1e7:
         return f"{valor:.8g}"
     return f"{valor:.6e}"
+
+
+def _texto_procedimiento_biseccion(datos, expresion, intervalo_inicial):
+    """Organiza exclusivamente valores existentes en el resultado y la traza."""
+    lineas = [
+        f"1. Función: f(x) = {expresion}",
+        f"2. Intervalo inicial: [{_formatear_numero(intervalo_inicial[0])}, "
+        f"{_formatear_numero(intervalo_inicial[1])}]",
+    ]
+    if not datos["tabla"]:
+        lineas.extend([
+            "3. No se requieren iteraciones: el backend encontró una raíz exacta en un extremo.",
+            "4. En los demás casos, Bisección requiere un cambio de signo y continuidad en todo "
+            "el intervalo para aplicar Bolzano.",
+        ])
+    else:
+        lineas.extend([
+            "3. El backend validó el cambio de signo en los extremos. Este cambio por sí solo "
+            "no prueba continuidad; consulta la advertencia de Bolzano.",
+            "4. En cada fila se calcula xr = a/2 + b/2, se evalúa f(xr) y se conserva el "
+            "subintervalo cuyos extremos mantienen signos opuestos.",
+        ])
+    for paso in datos["tabla"]:
+        siguiente = paso["intervalo_siguiente"]
+        lineas.extend([
+            f"\nIteración {paso['k']} · intervalo usado "
+            f"[{_formatear_numero(paso['a'])}, {_formatear_numero(paso['b'])}]",
+            f"f(a) = {_formatear_numero(paso['fa'])}; f(b) = {_formatear_numero(paso['fb'])}",
+            f"xr = a/2 + b/2 = {_formatear_numero(paso['xr'])}",
+            f"f(xr) = {_formatear_numero(paso['fr'])}",
+            f"Cota de semiancho = {_formatear_numero(paso['cota_error'])}",
+            f"Intervalo siguiente: [{_formatear_numero(siguiente[0])}, "
+            f"{_formatear_numero(siguiente[1])}]",
+            "Decisión: " + paso["decision"],
+        ])
+        if paso["error_absoluto_aprox"] is not None:
+            lineas.append("Cambio absoluto entre puntos medios = " +
+                          _formatear_numero(paso["error_absoluto_aprox"]))
+    lineas.extend([
+        "\nCriterio de terminación: " + datos["motivo"],
+        f"Resultado reportado: x ≈ {_formatear_numero(datos['raiz'])}; "
+        f"f(x) = {_formatear_numero(datos['f_raiz'])}.",
+    ])
+    return "\n".join(lineas)
+
+
+def _estado_visual_newton(datos):
+    """Clasifica el resultado para presentarlo sin inferir convergencia."""
+    if datos["convergio"]:
+        return "Convergencia satisfactoria", "success"
+    motivo = (datos.get("motivo") or "").lower()
+    if datos["estado"] == "maximo":
+        return "Aproximación obtenida · convergencia no confirmada", "warning"
+    if "derivada" in motivo:
+        return "Detenido por derivada inválida o cercana a cero", "warning"
+    if datos["estado"] == "error":
+        return "Error de evaluación o numérico", "error"
+    return "Detenido sin convergencia", "error"
+
+
+def _texto_procedimiento_newton(datos, indice):
+    """Construye la explicación del paso con valores registrados por el backend."""
+    lineas = [
+        f"1. Función: f(x) = {datos['expresion']}",
+        f"2. Derivada utilizada: f′(x) = {datos['derivada']}",
+        f"3. Valor inicial: x₀ = {_formatear_numero(datos['valor_inicial'])}",
+        "4. Fórmula: xₙ₊₁ = xₙ − f(xₙ) / f′(xₙ)",
+    ]
+    tabla = datos["tabla"]
+    if tabla:
+        paso = tabla[max(0, min(len(tabla) - 1, indice))]
+        lineas.extend([
+            f"5. Iteración {paso['k']}: xₙ = {_formatear_numero(paso['xi'])}",
+            f"   f(xₙ) = {_formatear_numero(paso['fxi'])}",
+            f"   f′(xₙ) = {_formatear_numero(paso.get('derivada'))}",
+        ])
+        siguiente = paso.get("xi_siguiente")
+        if siguiente is None:
+            lineas.append("   No se calculó xₙ₊₁.")
+            if paso.get("motivo"):
+                lineas.append(f"   Motivo: {paso['motivo']}")
+        else:
+            error_paso = paso.get("error_aproximado_porcentual")
+            if error_paso is None and siguiente == 0:
+                error_texto = "No definido (xₙ₊₁ = 0)"
+            else:
+                error_texto = _formatear_numero(error_paso) + "%"
+            lineas.append(
+                "   Sustitución: xₙ₊₁ = "
+                f"{_formatear_numero(paso['xi'])} − "
+                f"({_formatear_numero(paso['fxi'])}) / "
+                f"({_formatear_numero(paso.get('derivada'))}) = "
+                f"{_formatear_numero(siguiente)}"
+            )
+            lineas.append(
+                f"   Error aproximado porcentual: {error_texto}"
+            )
+            lineas.append(
+                f"   Residuo |f(xₙ₊₁)|: {_formatear_numero(paso.get('residuo'))}"
+            )
+    else:
+        lineas.append(
+            "5. No hubo iteraciones: " + (
+                "el valor inicial ya es una raíz exacta."
+                if datos["convergio"] else "el proceso terminó antes del primer paso."
+            )
+        )
+    lineas.append(f"6. Criterio de terminación: {datos['motivo']}")
+    return "\n".join(lineas)
 
 
 class ModuloMetodosNumericos(ctk.CTkFrame):
@@ -140,8 +252,23 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         acciones.pack(anchor="w", padx=12, pady=5)
         boton_primario(acciones, "Resolver por bisección", self.calcular_biseccion, width=205).pack(side="left", padx=(0, 8))
         boton_secundario(acciones, "Graficar este intervalo", self.graficar_intervalo_biseccion, width=195).pack(side="left")
-        self.b_resultado = ctk.CTkFrame(marco, fg_color="transparent")
-        self.b_resultado.pack(fill="x", expand=True, padx=6, pady=(8, 12))
+        self.b_resultado = ctk.CTkTabview(
+            marco, fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.b_resultado.pack(fill="both", expand=True, padx=6, pady=(8, 12))
+        for nombre in ("Resumen", "Iteraciones", "Gráfica", "Procedimiento"):
+            self.b_resultado.add(nombre)
+        self.b_tab_resumen = self.b_resultado.tab("Resumen")
+        self.b_tab_iteraciones = self.b_resultado.tab("Iteraciones")
+        self.b_tab_grafica = self.b_resultado.tab("Gráfica")
+        self.b_tab_procedimiento = self.b_resultado.tab("Procedimiento")
+        self.b_datos = None
+        self.b_paso_seleccionado = None
 
     def calcular_biseccion(self):
         """Calcula la raíz y explica resumen, cota y trazabilidad de cada intervalo."""
@@ -155,13 +282,17 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             "expresion": self.b_expr.get().strip(),
             "a": float(self.b_a.get()), "b": float(self.b_b.get()), **datos,
         }
-        for widget in self.b_resultado.winfo_children():
-            widget.destroy()
+        self.b_datos = datos
+        self.b_paso_seleccionado = len(datos["tabla"]) - 1 if datos["tabla"] else None
+        for tab in (self.b_tab_resumen, self.b_tab_iteraciones,
+                    self.b_tab_grafica, self.b_tab_procedimiento):
+            for widget in tab.winfo_children():
+                widget.destroy()
 
         def numero(valor):
             return "—" if valor is None else f"{valor:.8g}"
 
-        resumen = ctk.CTkFrame(self.b_resultado, fg_color="transparent")
+        resumen = ctk.CTkFrame(self.b_tab_resumen, fg_color="transparent")
         resumen.pack(fill="x", padx=6, pady=(0, 8))
         valores = (
             ("Raíz aproximada", numero(datos["raiz"])),
@@ -169,6 +300,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             ("Iteraciones teóricas", str(datos["iteraciones_teoricas"])),
             ("Intervalo final", f"[{numero(datos['intervalo_final'][0])}, {numero(datos['intervalo_final'][1])}]"),
             ("Cota de error final", numero(datos["cota_error"])),
+            ("f(raíz aproximada)", numero(datos["f_raiz"])),
             ("Tolerancia solicitada", numero(float(self.b_tol.get()))),
         )
         for columna in range(3):
@@ -194,7 +326,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             color_estado = "#66C2A5" if datos["alcanzada_tolerancia"] else "#F4A261"
         tarjeta_estado = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
                                       border_width=1, border_color=COLOR["borde"])
-        tarjeta_estado.grid(row=2, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+        tarjeta_estado.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
         etiqueta(tarjeta_estado, "Estado de terminación", tamano=11, color="gris").pack(
             anchor="w", padx=12, pady=(8, 1)
         )
@@ -209,14 +341,14 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             "no garantiza que el error sea menor o igual que el valor solicitado."
         )
         if datos["aviso_discontinuidad"]:
-            ctk.CTkLabel(self.b_resultado, text="⚠  " + datos["aviso_discontinuidad"], text_color=COLOR["mal"],
+            ctk.CTkLabel(self.b_tab_resumen, text="⚠  " + datos["aviso_discontinuidad"], text_color=COLOR["mal"],
                          font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left",
                          wraplength=900).pack(anchor="w", padx=10, pady=(6, 2))
-        etiqueta(self.b_resultado, datos["advertencia"], tamano=11, color="gris").pack(
+        etiqueta(self.b_tab_resumen, datos["advertencia"], tamano=11, color="gris").pack(
             anchor="w", padx=10, pady=(4, 6)
         )
 
-        contenedor = ctk.CTkFrame(self.b_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
+        contenedor = ctk.CTkFrame(self.b_tab_iteraciones, fg_color=COLOR["tarjeta"], corner_radius=10)
         contenedor.pack(fill="x", expand=True, padx=6, pady=(0, 6))
         canvas = tk.Canvas(contenedor, height=330, background=COLOR["tarjeta"],
                            highlightthickness=0, borderwidth=0)
@@ -232,9 +364,9 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         canvas.create_window((0, 0), window=tabla, anchor="nw")
         tabla.bind("<Configure>", lambda _evento: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        titulos = ("Iteración", "a", "b", "Punto medio (xr)", "f(xr)", "Cota de error",
-                   "Error aproximado", "Intervalo conservado")
-        anchos = (76, 145, 145, 165, 145, 145, 165, 260)
+        titulos = ("Iteración k", "a", "b", "f(a)", "f(b)", "Punto medio xr",
+                   "f(xr)", "Cota de error", "Error aproximado", "Intervalo siguiente")
+        anchos = (82, 120, 120, 125, 125, 145, 125, 135, 145, 250)
         for columna, (titulo, ancho) in enumerate(zip(titulos, anchos)):
             ctk.CTkLabel(tabla, text=titulo, width=ancho, height=42, anchor="center",
                          fg_color=COLOR["acento"], text_color=COLOR["texto"],
@@ -242,14 +374,15 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
                              row=0, column=columna, sticky="nsew", padx=1, pady=1)
         if not datos["tabla"]:
             etiqueta(tabla, "La raíz exacta está en un extremo; no se requieren iteraciones.",
-                     tamano=12, color="gris").grid(row=1, column=0, columnspan=8, sticky="w", padx=12, pady=12)
+                     tamano=12, color="gris").grid(row=1, column=0, columnspan=10, sticky="w", padx=12, pady=12)
         fuente_celda = ctk.CTkFont(size=12)
+        self.b_filas_tabla = {}
         for fila, paso in enumerate(_filas_a_mostrar(datos["tabla"]), 1):
             if paso is None:
                 omitidas = len(datos["tabla"]) - MAX_FILAS_TABLA
                 etiqueta(tabla, f"…  {omitidas} iteraciones intermedias no se muestran "
-                                f"(hay {len(datos['tabla'])} en total; el resumen de arriba usa todas)  …",
-                         tamano=12, color="gris").grid(row=fila, column=0, columnspan=8, pady=8)
+                         f"(hay {len(datos['tabla'])} en total; el resumen de arriba usa todas)  …",
+                         tamano=12, color="gris").grid(row=fila, column=0, columnspan=10, pady=8)
                 continue
             intervalo = paso["intervalo_siguiente"]
             if paso["fr"] == 0:
@@ -258,24 +391,154 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
                 conservado = f"[a, xr] = [{numero(intervalo[0])}, {numero(intervalo[1])}]"
             else:
                 conservado = f"[xr, b] = [{numero(intervalo[0])}, {numero(intervalo[1])}]"
-            celdas = (str(paso["k"]), numero(paso["a"]), numero(paso["b"]), numero(paso["xr"]),
+            celdas = (str(paso["k"]), numero(paso["a"]), numero(paso["b"]),
+                      numero(paso["fa"]), numero(paso["fb"]), numero(paso["xr"]),
                       numero(paso["fr"]), numero(paso["cota_error"]),
                       numero(paso["error_absoluto_aprox"]), conservado)
             fondo = COLOR["suave"] if fila % 2 == 0 else COLOR["tarjeta"]
+            celdas_widgets = []
             for columna, (valor, ancho) in enumerate(zip(celdas, anchos)):
-                ctk.CTkLabel(tabla, text=valor, width=ancho, height=34, anchor="center",
-                             fg_color=fondo, text_color=COLOR["texto"],
-                             font=fuente_celda).grid(
-                                 row=fila, column=columna, sticky="nsew", padx=1, pady=1)
-        cabecera = ctk.CTkFrame(self.b_resultado, fg_color=COLOR["suave"], corner_radius=8)
+                celda = ctk.CTkLabel(tabla, text=valor, width=ancho, height=34, anchor="center",
+                                     fg_color=fondo, text_color=COLOR["texto"],
+                                     font=fuente_celda)
+                celda.grid(row=fila, column=columna, sticky="nsew", padx=1, pady=1)
+                celdas_widgets.append((celda, fondo))
+                celda.bind(
+                    "<Button-1>",
+                    lambda _evento, indice=paso["k"] - 1:
+                        self._seleccionar_paso_biseccion(indice),
+                )
+            self.b_filas_tabla[paso["k"] - 1] = celdas_widgets
+        cabecera = ctk.CTkFrame(self.b_tab_resumen, fg_color=COLOR["suave"], corner_radius=8)
         cabecera.pack(fill="x", padx=6, pady=(4, 0))
         ctk.CTkLabel(cabecera, text=estado, text_color=color_estado,
                      font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(9, 2))
         etiqueta(cabecera, explicacion, tamano=12, color="texto").pack(anchor="w", padx=12, pady=(0, 9))
+        etiqueta(cabecera, "Criterio: " + datos["motivo"], tamano=11, color="gris").pack(
+            anchor="w", padx=12, pady=(0, 9)
+        )
+        self._crear_grafica_biseccion()
+        self._crear_procedimiento_biseccion(datos)
+        self._resaltar_fila_biseccion()
+
+    def _crear_procedimiento_biseccion(self, datos):
+        """Ordena la traza ya calculada sin alterar sus criterios ni valores."""
+        texto = _texto_procedimiento_biseccion(
+            datos, self.ultimo_resultado["expresion"],
+            (self.ultimo_resultado["a"], self.ultimo_resultado["b"]),
+        )
+        caja = ctk.CTkTextbox(self.b_tab_procedimiento, wrap="word", height=330,
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            font=ctk.CTkFont(family="Consolas", size=12))
+        caja.pack(fill="both", expand=True, padx=10, pady=10)
+        caja.insert("1.0", texto)
+        caja.configure(state="disabled")
+
+    def _crear_grafica_biseccion(self):
+        """Dibuja f(x) y el intervalo de la iteración seleccionada desde la traza."""
+        marco = ctk.CTkFrame(self.b_tab_grafica, fg_color=COLOR["tarjeta"], corner_radius=10)
+        marco.pack(fill="both", expand=True, padx=10, pady=10)
+        self.b_grafica_info = ctk.CTkLabel(marco, text="", anchor="w", wraplength=850,
+                                           text_color=COLOR["texto"])
+        self.b_grafica_info.pack(fill="x", padx=12, pady=(10, 4))
+        controles = ctk.CTkFrame(marco, fg_color="transparent")
+        controles.pack(fill="x", padx=12)
+        self.b_slider = ctk.CTkSlider(controles, from_=0,
+            to=max(1, len(self.b_datos["tabla"]) - 1), command=self._cambiar_paso_biseccion)
+        self.b_slider.pack(fill="x", expand=True, side="left", padx=(0, 10))
+        self.b_canvas = tk.Canvas(marco, height=330, background=COLOR["tarjeta"],
+                                  highlightthickness=0, borderwidth=0)
+        self.b_canvas.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        self.b_canvas.bind("<Configure>", lambda _evento: self._dibujar_grafica_biseccion())
+        self._dibujar_grafica_biseccion()
+
+    def _cambiar_paso_biseccion(self, valor):
+        if self.b_datos and self.b_datos["tabla"]:
+            self._seleccionar_paso_biseccion(round(float(valor)))
+
+    def _seleccionar_paso_biseccion(self, indice):
+        if not self.b_datos or not self.b_datos["tabla"]:
+            return
+        indice = max(0, min(len(self.b_datos["tabla"]) - 1, int(indice)))
+        self.b_paso_seleccionado = indice
+        if hasattr(self, "b_slider"):
+            self.b_slider.set(indice)
+        self._resaltar_fila_biseccion()
+        self._dibujar_grafica_biseccion()
+
+    def _resaltar_fila_biseccion(self):
+        for indice, celdas in getattr(self, "b_filas_tabla", {}).items():
+            for celda, fondo in celdas:
+                if celda.winfo_exists():
+                    celda.configure(fg_color=COLOR["interaccion"] if indice == self.b_paso_seleccionado else fondo)
+
+    def _dibujar_grafica_biseccion(self):
+        canvas = getattr(self, "b_canvas", None)
+        datos = getattr(self, "b_datos", None)
+        if canvas is None or datos is None or not canvas.winfo_exists():
+            return
+        ancho, alto = max(280, canvas.winfo_width()), max(200, canvas.winfo_height())
+        margen = 54
+        a0, b0 = self.ultimo_resultado["a"], self.ultimo_resultado["b"]
+        canvas.delete("all")
+        try:
+            muestra = muestrear_funcion(datos.get("expresion", self.ultimo_resultado["expresion"]),
+                                       a0, b0, cantidad=500)
+        except (ValueError, OverflowError):
+            canvas.create_text(ancho / 2, alto / 2, text="No fue posible dibujar la función en el intervalo.",
+                               fill=COLOR["advertencia"])
+            return
+        valores = [y for segmento in muestra["segmentos"] for _, y in segmento]
+        ymin, ymax = min(valores + [0.0]), max(valores + [0.0])
+        if ymin == ymax:
+            ymin, ymax = ymin - 1, ymax + 1
+        else:
+            espacio = (ymax - ymin) * 0.08
+            ymin, ymax = ymin - espacio, ymax + espacio
+        px = lambda x: margen + (x - a0) * (ancho - 2 * margen) / (b0 - a0)
+        py = lambda y: alto - margen - (y - ymin) * (alto - 2 * margen) / (ymax - ymin)
+        for i in range(6):
+            gx = margen + i * (ancho - 2 * margen) / 5
+            gy = margen + i * (alto - 2 * margen) / 5
+            canvas.create_line(gx, margen, gx, alto - margen, fill=COLOR["borde"])
+            canvas.create_line(margen, gy, ancho - margen, gy, fill=COLOR["borde"])
+        if ymin <= 0 <= ymax:
+            canvas.create_line(margen, py(0), ancho - margen, py(0), fill=COLOR["gris"], width=2)
+        if a0 <= 0 <= b0:
+            canvas.create_line(px(0), margen, px(0), alto - margen, fill=COLOR["gris"], width=2)
+        for segmento in muestra["segmentos"]:
+            coords = [coordenada for x, y in segmento for coordenada in (px(x), py(y))]
+            if len(coords) >= 4:
+                canvas.create_line(*coords, fill=COLOR["verde"], width=2)
+        paso = datos["tabla"][self.b_paso_seleccionado] if datos["tabla"] else None
+        if paso:
+            intervalo = paso["intervalo_siguiente"]
+            if ymin <= 0 <= ymax:
+                canvas.create_line(px(intervalo[0]), py(0), px(intervalo[1]), py(0),
+                                   fill=COLOR["advertencia"], width=5)
+            for x, y, color, marca in ((paso["a"], paso["fa"], COLOR["acento"], "a"),
+                                       (paso["b"], paso["fb"], COLOR["acento"], "b"),
+                                       (paso["xr"], paso["fr"], COLOR["advertencia"], "c") ):
+                canvas.create_oval(px(x)-5, py(y)-5, px(x)+5, py(y)+5,
+                                   fill=color, outline=COLOR["texto"])
+                canvas.create_text(px(x)+7, py(y)-10, text=marca, fill=color, anchor="w")
+            self.b_grafica_info.configure(text=(
+                f"Iteración {paso['k']} · intervalo usado [{_formatear_numero(paso['a'])}, "
+                f"{_formatear_numero(paso['b'])}] · siguiente [{_formatear_numero(intervalo[0])}, "
+                f"{_formatear_numero(intervalo[1])}] · xr = {_formatear_numero(paso['xr'])}"
+            ))
+        else:
+            raiz = datos["raiz"]
+            canvas.create_oval(px(raiz)-5, py(datos["f_raiz"])-5,
+                               px(raiz)+5, py(datos["f_raiz"])+5,
+                               fill=COLOR["advertencia"], outline=COLOR["texto"])
+            self.b_grafica_info.configure(text="Raíz exacta en un extremo; no se generaron iteraciones.")
+        canvas.create_text(ancho / 2, 14, text=f"f(x) = {self.ultimo_resultado['expresion']}",
+                           fill=COLOR["texto"], font=("Segoe UI", 12, "bold"))
 
     def _crear_newton_raphson(self, parent):
         """Construye el formulario, el resumen numérico y la tabla de Newton-Raphson."""
-        marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        marco = ctk.CTkFrame(parent, fg_color="transparent")
         marco.pack(fill="both", expand=True)
         etiqueta(
             marco,
@@ -293,29 +556,35 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         fila_parametros.pack(anchor="w", padx=12)
         self.nr_tol = self._entrada(fila_parametros, "Tolerancia (%)", "0.0001", 150)
         self.nr_max = self._entrada(fila_parametros, "Máximo de iteraciones", "100", 180)
-
-        acciones = ctk.CTkFrame(marco, fg_color="transparent")
-        acciones.pack(anchor="w", padx=12, pady=5)
-        boton_primario(acciones, "Calcular", self.calcular_newton_raphson, width=130).pack(side="left", padx=(0, 8))
-        boton_secundario(acciones, "Ejemplo", self.ejemplo_newton_raphson, width=110).pack(side="left", padx=(0, 8))
-        boton_secundario(acciones, "Limpiar", self.limpiar_newton_raphson, width=110).pack(side="left")
+        boton_primario(
+            fila_parametros, "Calcular", self.calcular_newton_raphson, width=120
+        ).pack(side="left", padx=(2, 6), pady=(22, 0))
+        boton_secundario(
+            fila_parametros, "Ejemplo", self.ejemplo_newton_raphson, width=100
+        ).pack(side="left", padx=(0, 6), pady=(22, 0))
+        boton_secundario(
+            fila_parametros, "Limpiar", self.limpiar_newton_raphson, width=100
+        ).pack(side="left", pady=(22, 0))
 
         self.nr_estado = ctk.CTkLabel(
             marco, text="Ingresa una función y sus parámetros para comenzar.",
             text_color=COLOR["gris"], anchor="w", justify="left",
             font=ctk.CTkFont(size=13),
         )
-        self.nr_estado.pack(fill="x", padx=16, pady=(4, 6))
+        self.nr_estado.pack(fill="x", padx=16, pady=(4, 4))
         self.nr_resultado = ctk.CTkFrame(marco, fg_color="transparent")
         self.nr_resultado.pack(fill="both", expand=True, padx=6, pady=(4, 12))
         self.nr_grafica = None
         self.nr_datos = None
         self.nr_paso_seleccionado = 0
+        self.nr_filas_tabla = {}
 
     def _vaciar_resultado_newton(self):
         """Elimina el resumen y las filas anteriores antes de una nueva ejecución."""
         for widget in self.nr_resultado.winfo_children():
             widget.destroy()
+        self.nr_datos = None
+        self.nr_filas_tabla = {}
 
     def ejemplo_newton_raphson(self):
         """Carga un ejemplo didáctico válido para el evaluador actual."""
@@ -353,7 +622,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             maximo = _leer_entero(self.nr_max.get(), "El máximo de iteraciones")
             datos = resolver_newton_raphson(expresion, x0, tolerancia, maximo)
         except (ValueError, OverflowError) as error:
-            self.nr_estado.configure(text="No se pudo calcular. Revisa los datos ingresados.",
+            self.nr_estado.configure(text="Datos inválidos o función no evaluable.",
                                      text_color=COLOR["mal"])
             self._mostrar_error(error)
             return
@@ -368,74 +637,133 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         self._mostrar_resultado_newton(datos)
 
     def _mostrar_resultado_newton(self, datos):
-        """Muestra las métricas devueltas por el backend y la traza de iteraciones."""
-        if datos["convergio"]:
-            estado = "Convergió"
-            color_estado = COLOR["ok"]
-            self.nr_estado.configure(text="Newton-Raphson convergió con los criterios solicitados.",
-                                     text_color=color_estado)
-        elif datos["estado"] == "maximo":
-            estado = "No convergió dentro del máximo de iteraciones"
-            color_estado = "#F4A261"
-            self.nr_estado.configure(text=estado + ". La última aproximación no se confirma como raíz.",
-                                     text_color=color_estado)
-        else:
-            estado = "Detenido por una condición matemática o numérica"
-            color_estado = COLOR["mal"]
-            self.nr_estado.configure(text=estado + ". Revisa el motivo indicado en los resultados.",
-                                     text_color=color_estado)
+        """Presenta estado, métricas, gráfico, traza y explicación de la ejecución."""
+        estado, variante = _estado_visual_newton(datos)
+        color_estado = {
+            "success": COLOR["ok"],
+            "warning": COLOR["advertencia"],
+            "error": COLOR["mal"],
+        }[variante]
+        etiqueta_aproximacion = (
+            "raíz" if datos["convergio"] else "última aproximación"
+        )
+        self.nr_estado.configure(
+            text=(f"{estado} · {etiqueta_aproximacion} x = "
+                  f"{_formatear_numero(datos['aproximacion'])}"),
+            text_color=color_estado,
+        )
+        self.nr_datos = datos
+        self.nr_paso_seleccionado = max(0, len(datos["tabla"]) - 1)
+        self.nr_filas_tabla = {}
+        self.nr_selector_vista = ctk.CTkSegmentedButton(
+            self.nr_resultado,
+            values=("Gráfica", "Resumen", "Iteraciones", "Procedimiento"),
+            command=self._cambiar_vista_newton,
+        )
+        self.nr_selector_vista.pack(pady=(0, 5))
+        self.nr_area_vistas = ctk.CTkFrame(self.nr_resultado, fg_color="transparent")
+        self.nr_area_vistas.pack(fill="both", expand=True, padx=6, pady=(0, 4))
+        self.nr_area_vistas.grid_rowconfigure(0, weight=1)
+        self.nr_area_vistas.grid_columnconfigure(0, weight=1)
+        self.nr_panel_grafica = ctk.CTkFrame(self.nr_area_vistas, fg_color="transparent")
+        self.nr_panel_resumen = ctk.CTkFrame(self.nr_area_vistas, fg_color="transparent")
+        self.nr_panel_iteraciones = ctk.CTkFrame(self.nr_area_vistas, fg_color="transparent")
+        self.nr_panel_procedimiento = ctk.CTkFrame(self.nr_area_vistas, fg_color="transparent")
+        self.nr_paneles_vista = {
+            "Gráfica": self.nr_panel_grafica,
+            "Resumen": self.nr_panel_resumen,
+            "Iteraciones": self.nr_panel_iteraciones,
+            "Procedimiento": self.nr_panel_procedimiento,
+        }
+        for panel in self.nr_paneles_vista.values():
+            panel.grid(row=0, column=0, sticky="nsew")
+        self._crear_resumen_newton(self.nr_panel_resumen, datos, estado, color_estado)
+        self._crear_grafica_newton(self.nr_panel_grafica)
+        self._crear_tabla_newton(self.nr_panel_iteraciones, datos)
+        self._crear_procedimiento_newton(self.nr_panel_procedimiento, datos)
+        self.nr_selector_vista.set("Gráfica")
+        self._cambiar_vista_newton("Gráfica")
+        self._actualizar_resaltado_fila_newton()
+
+    def _cambiar_vista_newton(self, nombre):
+        panel = getattr(self, "nr_paneles_vista", {}).get(nombre)
+        if panel is not None:
+            panel.tkraise()
+
+    def _crear_resumen_newton(self, parent, datos, estado, color_estado):
+        """Destaca la aproximación y conserva las métricas finales del algoritmo."""
+        principal = ctk.CTkFrame(parent, fg_color=COLOR["tarjeta"],
+                                 corner_radius=12, border_width=1,
+                                 border_color=COLOR["borde"])
+        principal.pack(fill="x", padx=6, pady=(0, 7))
+        principal.grid_columnconfigure(0, weight=3)
+        principal.grid_columnconfigure(1, weight=2)
+        etiqueta_aproximacion = (
+            "Raíz aproximada" if datos["convergio"]
+            else "Última aproximación · no confirmada como raíz"
+        )
+        etiqueta(principal, etiqueta_aproximacion, tamano=12, color="gris").grid(
+            row=0, column=0, sticky="w", padx=16, pady=(10, 0)
+        )
+        ctk.CTkLabel(
+            principal, text=_formatear_numero(datos["aproximacion"]),
+            text_color=COLOR["texto"], font=ctk.CTkFont(size=28, weight="bold"),
+            anchor="w",
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 3))
+        ctk.CTkLabel(
+            principal, text=f"f(x) = {datos['expresion']}\nf′(x) = {datos['derivada']}",
+            text_color=COLOR["gris"], font=ctk.CTkFont(size=12),
+            anchor="w", justify="left", wraplength=600,
+        ).grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+        estado_widget = ctk.CTkLabel(
+            principal, text=estado, text_color=color_estado,
+            font=ctk.CTkFont(size=15, weight="bold"), anchor="w",
+            justify="left", wraplength=330,
+        )
+        estado_widget.grid(row=0, column=1, rowspan=2, sticky="w", padx=12, pady=12)
+        motivo = ctk.CTkLabel(
+            principal, text=datos["motivo"], text_color=COLOR["gris"],
+            font=ctk.CTkFont(size=11), anchor="w", justify="left", wraplength=340,
+        )
+        motivo.grid(row=2, column=1, sticky="ew", padx=12, pady=(0, 12))
 
         if datos["error_final"] is not None:
             error_final = _formatear_numero(datos["error_final"]) + "%"
         elif datos["iteraciones"] and datos["tabla"][-1].get("xi_siguiente") == 0:
             error_final = "No definido (xₙ₊₁ = 0)"
         elif datos["iteraciones"] == 0 and datos["convergio"]:
-            error_final = "No aplica (raíz inicial exacta)"
+            error_final = "No aplica · raíz inicial exacta"
         else:
             error_final = "No disponible"
-
-        etiqueta_aproximacion = (
-            "Aproximación de la raíz" if datos["convergio"]
-            else "Última aproximación (no confirmada como raíz)"
-        )
-        valores = (
-            ("Función original", datos["expresion"]),
-            ("Derivada simbólica", datos["derivada"]),
-            (etiqueta_aproximacion, _formatear_numero(datos["aproximacion"])),
-            ("Estado", estado),
-            ("Iteraciones realizadas", str(datos["iteraciones"])),
+        residuo_relativo = datos.get("residuo_relativo_porcentual_final")
+        metricas = (
+            ("Iteraciones", str(datos["iteraciones"])),
             ("Error aproximado final", error_final),
-            ("Residuo final |f(x)|", _formatear_numero(datos["residuo_final"])),
-            ("Residuo relativo al inicial", (
-                "—" if datos.get("residuo_relativo_porcentual_final") is None else
-                _formatear_numero(datos["residuo_relativo_porcentual_final"]) + "%"
-            )),
-            ("Motivo de finalización", datos["motivo"]),
+            ("|f(x)| final", _formatear_numero(datos["residuo_final"])),
+            ("Residuo relativo inicial", "—" if residuo_relativo is None else
+             _formatear_numero(residuo_relativo) + "%"),
         )
-        resumen = ctk.CTkFrame(self.nr_resultado, fg_color="transparent")
-        resumen.pack(fill="x", padx=6, pady=(0, 8))
-        for columna in range(3):
-            resumen.grid_columnconfigure(columna, weight=1, uniform="resumen_newton")
-        for indice, (titulo, valor) in enumerate(valores):
-            tarjeta = ctk.CTkFrame(resumen, fg_color=COLOR["tarjeta"], corner_radius=10,
+        fila = ctk.CTkFrame(parent, fg_color="transparent")
+        fila.pack(fill="x", padx=3, pady=(0, 5))
+        for columna, (titulo, valor) in enumerate(metricas):
+            fila.grid_columnconfigure(columna, weight=1, uniform="indicadores_newton")
+            tarjeta = ctk.CTkFrame(fila, fg_color=COLOR["tarjeta"], corner_radius=9,
                                    border_width=1, border_color=COLOR["borde"])
-            tarjeta.grid(row=indice // 3, column=indice % 3, sticky="nsew", padx=4, pady=4)
-            etiqueta(tarjeta, titulo, tamano=11, color="gris").pack(anchor="w", padx=12, pady=(8, 1))
+            tarjeta.grid(row=0, column=columna, sticky="nsew", padx=3)
+            etiqueta(tarjeta, titulo, tamano=10, color="gris").pack(
+                anchor="w", padx=10, pady=(7, 1)
+            )
             ctk.CTkLabel(
-                tarjeta, text=valor, text_color=color_estado if titulo == "Estado" else COLOR["texto"],
-                font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left",
-                wraplength=340,
-            ).pack(anchor="w", fill="x", padx=12, pady=(0, 8))
+                tarjeta, text=valor, text_color=COLOR["texto"],
+                font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
+                justify="left", wraplength=210,
+            ).pack(anchor="w", fill="x", padx=10, pady=(0, 7))
 
-        self.nr_datos = datos
-        self.nr_paso_seleccionado = max(0, len(datos["tabla"]) - 1)
-        self._crear_grafica_newton()
-
-        etiqueta(self.nr_resultado, "Tabla de iteraciones", tamano=15, negrita=True, color="texto").pack(
-            anchor="w", padx=10, pady=(6, 4)
-        )
-        contenedor = ctk.CTkFrame(self.nr_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
-        contenedor.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+    def _crear_tabla_newton(self, parent, datos):
+        etiqueta(parent, "Selecciona una fila para enfocar esa iteración en la gráfica.",
+                 tamano=12, color="gris").pack(anchor="w", padx=12, pady=(8, 4))
+        contenedor = ctk.CTkFrame(parent, fg_color=COLOR["tarjeta"], corner_radius=10)
+        contenedor.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         canvas = tk.Canvas(contenedor, height=290, background=COLOR["tarjeta"],
                            highlightthickness=0, borderwidth=0)
         barra_y = ctk.CTkScrollbar(contenedor, orientation="vertical", command=canvas.yview)
@@ -447,8 +775,8 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         contenedor.grid_rowconfigure(0, weight=1)
         contenedor.grid_columnconfigure(0, weight=1)
 
-        titulos = ("Iteración", "Xi", "f(Xi)", "f′(Xi)", "Xi+1", "Error aprox. (%)",
-                   "Residuo |f(Xi+1)|", "Residuo relativo (%)")
+        titulos = ("Iteración k", "xₙ", "f(xₙ)", "f′(xₙ)", "xₙ₊₁", "Error aprox. (%)",
+                   "Residuo |f(xₙ₊₁)|", "Residuo relativo (%)")
         anchos = (76, 130, 145, 145, 130, 150, 165, 170)
         tabla = ctk.CTkFrame(canvas, fg_color=COLOR["tarjeta"], width=sum(anchos))
         canvas.create_window((0, 0), window=tabla, anchor="nw")
@@ -486,25 +814,77 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
                 ("—" if paso.get("residuo_relativo_porcentual") is None else
                  _formatear_numero(paso["residuo_relativo_porcentual"]) + "%"),
             )
+            indice_paso = paso["k"] - 1
             fondo = COLOR["suave"] if fila % 2 == 0 else COLOR["tarjeta"]
+            celdas_fila = []
             for columna, (valor, ancho) in enumerate(zip(celdas, anchos)):
-                celda = ctk.CTkLabel(tabla, text=valor, width=ancho, height=34, anchor="center",
-                                     fg_color=fondo, text_color=COLOR["texto"], font=fuente_celda)
+                celda = ctk.CTkLabel(
+                    tabla, text=valor, width=ancho, height=34,
+                    anchor="center" if columna == 0 else "e",
+                    fg_color=fondo, text_color=COLOR["texto"], font=fuente_celda,
+                )
                 celda.grid(
-                                 row=fila, column=columna, sticky="nsew", padx=1, pady=1)
-                celda.bind("<Button-1>", lambda _evento, indice=len([p for p in datos["tabla"][:paso["k"]]
-                                                                      if p is not None]) - 1:
-                           self._seleccionar_paso_newton(indice))
+                    row=fila, column=columna, sticky="nsew", padx=1, pady=1
+                )
+                celda.bind(
+                    "<Button-1>",
+                    lambda _evento, indice=indice_paso:
+                        self._seleccionar_paso_newton(indice, desde_tabla=True),
+                )
+                celdas_fila.append((celda, fondo))
+            self.nr_filas_tabla[indice_paso] = celdas_fila
 
-    def _crear_grafica_newton(self):
+    def _crear_procedimiento_newton(self, parent, datos):
+        etiqueta(
+            parent,
+            "Cada valor se toma de la traza calculada. Cambia la iteración desde la gráfica o la tabla para revisar su sustitución.",
+            tamano=12, color="gris", justify="left", anchor="w", wraplength=900,
+        ).pack(anchor="w", fill="x", padx=14, pady=(12, 7))
+        panel = ctk.CTkFrame(parent, fg_color=COLOR["suave"], corner_radius=10)
+        panel.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.nr_texto_procedimiento = ctk.CTkTextbox(
+            panel, wrap="word", font=ctk.CTkFont(family="Consolas", size=13),
+            fg_color=COLOR["suave"], text_color=COLOR["texto"],
+        )
+        self.nr_texto_procedimiento.pack(fill="both", expand=True, padx=10, pady=10)
+        self._actualizar_procedimiento_newton()
+
+    def _actualizar_procedimiento_newton(self):
+        caja = getattr(self, "nr_texto_procedimiento", None)
+        if caja is None or not caja.winfo_exists() or not self.nr_datos:
+            return
+        caja.configure(state="normal")
+        caja.delete("1.0", "end")
+        caja.insert("1.0", _texto_procedimiento_newton(
+            self.nr_datos, self.nr_paso_seleccionado
+        ))
+        caja.configure(state="disabled")
+
+    def _actualizar_resaltado_fila_newton(self):
+        for indice, celdas in getattr(self, "nr_filas_tabla", {}).items():
+            for celda, color_base in celdas:
+                if celda.winfo_exists():
+                    color = (
+                        COLOR["interaccion"]
+                        if indice == self.nr_paso_seleccionado else color_base
+                    )
+                    celda.configure(fg_color=color)
+
+    def _crear_grafica_newton(self, parent):
         """Crea la gráfica y controles; navegar reutiliza la traza ya calculada."""
-        marco = ctk.CTkFrame(self.nr_resultado, fg_color=COLOR["tarjeta"], corner_radius=10)
-        marco.pack(fill="x", padx=6, pady=(4, 10))
-        etiqueta(marco, "Gráfica interactiva de Newton-Raphson", tamano=15,
-                 negrita=True, color="texto").pack(anchor="w", padx=12, pady=(9, 2))
+        marco = ctk.CTkFrame(parent, fg_color=COLOR["tarjeta"], corner_radius=10)
+        marco.pack(fill="both", expand=True, padx=8, pady=8)
         self.nr_info_paso = ctk.CTkLabel(marco, text="", anchor="w", justify="left",
-                                          text_color=COLOR["texto"])
-        self.nr_info_paso.pack(fill="x", padx=12, pady=(0, 5))
+                                          text_color=COLOR["texto"],
+                                          font=ctk.CTkFont(size=12, weight="bold"))
+        self.nr_info_paso.pack(fill="x", padx=12, pady=(9, 4))
+        marco.bind(
+            "<Configure>",
+            lambda evento: self.nr_info_paso.configure(
+                wraplength=max(240, evento.width - 36)
+            ),
+            add="+",
+        )
         controles = ctk.CTkFrame(marco, fg_color="transparent")
         controles.pack(fill="x", padx=10, pady=(0, 5))
         self.nr_boton_anterior = boton_secundario(
@@ -521,7 +901,7 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         self.nr_boton_siguiente.pack(side="left", padx=(8, 0))
         self.nr_canvas = tk.Canvas(marco, height=350, background=COLOR["tarjeta"],
                                    highlightthickness=0, borderwidth=0)
-        self.nr_canvas.pack(fill="x", expand=True, padx=6, pady=(0, 8))
+        self.nr_canvas.pack(fill="both", expand=True, padx=6, pady=(0, 8))
         self.nr_canvas.bind("<Configure>", lambda _evento: self._dibujar_grafica_newton())
         self._dibujar_grafica_newton()
 
@@ -533,14 +913,19 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
     def _cambiar_paso_newton(self, valor):
         self._seleccionar_paso_newton(round(float(valor)), desde_slider=True)
 
-    def _seleccionar_paso_newton(self, indice, desde_slider=False):
+    def _seleccionar_paso_newton(self, indice, desde_slider=False, desde_tabla=False):
         if not self.nr_datos or not self.nr_datos["tabla"]:
             return
         indice = max(0, min(len(self.nr_datos["tabla"]) - 1, int(indice)))
         self.nr_paso_seleccionado = indice
         if not desde_slider:
             self.nr_slider.set(indice)
+        self._actualizar_resaltado_fila_newton()
+        self._actualizar_procedimiento_newton()
         self._dibujar_grafica_newton()
+        if desde_tabla and hasattr(self, "nr_selector_vista"):
+            self.nr_selector_vista.set("Gráfica")
+            self._cambiar_vista_newton("Gráfica")
 
     @staticmethod
     def _rango_robusto(valores, incluir_cero=False):
@@ -563,8 +948,8 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         canvas = getattr(self, "nr_canvas", None)
         if not datos or canvas is None or not canvas.winfo_exists():
             return
-        ancho, alto = max(280, canvas.winfo_width()), max(220, canvas.winfo_height())
-        margen = 55
+        ancho, alto = max(280, canvas.winfo_width()), max(140, canvas.winfo_height())
+        margen = max(32, min(70, alto * 0.23))
         filas = datos["tabla"]
         indice = min(self.nr_paso_seleccionado, len(filas) - 1) if filas else -1
         x0 = datos["valor_inicial"]
@@ -601,12 +986,15 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         for marca in range(6):
             gx = margen + marca * (ancho - 2 * margen) / 5
             gy = margen + marca * (alto - 2 * margen) / 5
-            canvas.create_line(gx, margen, gx, alto - margen, fill="#303036")
-            canvas.create_line(margen, gy, ancho - margen, gy, fill="#303036")
+            canvas.create_line(gx, margen, gx, alto - margen, fill=COLOR["borde"])
+            canvas.create_line(margen, gy, ancho - margen, gy, fill=COLOR["borde"])
             canvas.create_text(gx, alto - margen + 16,
                                text=f"{xmin + marca * (xmax - xmin) / 5:.3g}", fill="#B8B8C0")
             canvas.create_text(margen - 27, gy,
                                text=f"{ymax - marca * (ymax - ymin) / 5:.3g}", fill="#B8B8C0")
+        canvas.create_text(15, alto / 2, text="f(x)", fill=COLOR["gris"], angle=90)
+        canvas.create_text(ancho - margen + 34, alto - margen + 16, text="x",
+                           fill=COLOR["gris"], anchor="w")
         if xmin <= 0 <= xmax:
             canvas.create_line(px(0), margen, px(0), alto - margen, fill="#85858D", width=2)
         if ymin <= 0 <= ymax:
@@ -663,8 +1051,26 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
                                text="raíz confirmada", fill="#66D19E", anchor="w")
         canvas.create_text(ancho / 2, 15, text=f"Newton-Raphson · f(x) = {datos['expresion']}",
                            fill=COLOR["texto"], font=("Segoe UI", 12, "bold"))
-        canvas.create_text(ancho - 110, 32, text="━ f(x)   ┄ tangente   ● aproximación",
-                           fill=COLOR["texto"])
+        leyenda_x = max(margen + 12, ancho - 425)
+        leyenda_y = 34
+        canvas.create_line(leyenda_x, leyenda_y, leyenda_x + 18, leyenda_y,
+                           fill="#66C2A5", width=2)
+        canvas.create_text(leyenda_x + 23, leyenda_y, text="f(x)",
+                           fill=COLOR["texto"], anchor="w")
+        canvas.create_line(leyenda_x + 82, leyenda_y, leyenda_x + 100, leyenda_y,
+                           fill="#F4A261", width=2, dash=(5, 3))
+        canvas.create_text(leyenda_x + 105, leyenda_y, text="tangente",
+                           fill=COLOR["texto"], anchor="w")
+        canvas.create_oval(leyenda_x + 180, leyenda_y - 4,
+                           leyenda_x + 188, leyenda_y + 4,
+                           fill="#F4A261", outline="white")
+        canvas.create_text(leyenda_x + 194, leyenda_y, text="xₙ",
+                           fill=COLOR["texto"], anchor="w")
+        canvas.create_oval(leyenda_x + 236, leyenda_y - 4,
+                           leyenda_x + 244, leyenda_y + 4,
+                           fill="#B39DDB", outline="white")
+        canvas.create_text(leyenda_x + 250, leyenda_y, text="xₙ₊₁",
+                           fill=COLOR["texto"], anchor="w")
         if indice >= 0:
             paso = filas[indice]
             detalle = (f"Iteración {paso['k']} / {len(filas)}   ·   xi = {_formatear_numero(paso['xi'])}"
@@ -724,17 +1130,66 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
 
     def _crear_graficador(self, parent):
         marco = ctk.CTkFrame(parent, fg_color="transparent")
-        marco.pack(fill="both", expand=True)
-        fila = ctk.CTkFrame(marco, fg_color="transparent")
-        fila.pack(anchor="w", padx=12, pady=4)
-        self.g_expr = self._entrada(fila, "f(x)", "1/x", 220)
-        self.g_xmin = self._entrada(fila, "x mínimo", "-5", 90)
-        self.g_xmax = self._entrada(fila, "x máximo", "5", 90)
-        self.g_ymin = self._entrada(fila, "y mínimo (opcional)", "", 120)
-        self.g_ymax = self._entrada(fila, "y máximo (opcional)", "", 120)
-        boton_primario(fila, "Graficar", self.dibujar_grafica, width=110).pack(side="left", padx=6, pady=20)
-        self.canvas = tk.Canvas(marco, background="#171719", highlightthickness=0, height=400)
-        self.canvas.pack(fill="both", expand=True, padx=12, pady=(4, 12))
+        marco.pack(fill="both", expand=True, padx=12, pady=10)
+        marco.grid_columnconfigure(0, weight=1)
+        marco.grid_rowconfigure(2, weight=1)
+
+        configuracion = ctk.CTkFrame(
+            marco, fg_color=COLOR["tarjeta"], corner_radius=12,
+            border_width=1, border_color=COLOR["borde"],
+        )
+        configuracion.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        configuracion.grid_columnconfigure(0, weight=4, uniform="grafica_campos")
+        for columna in range(1, 5):
+            configuracion.grid_columnconfigure(columna, weight=1, uniform="grafica_campos")
+        etiqueta(configuracion, "Configuración de la gráfica", tamano=15,
+                 negrita=True, color="texto").grid(
+            row=0, column=0, columnspan=5, sticky="w", padx=14, pady=(12, 4)
+        )
+
+        def crear_campo(columna, titulo, inicial, ancho):
+            grupo = ctk.CTkFrame(configuracion, fg_color="transparent")
+            grupo.grid(row=1, column=columna, sticky="ew", padx=8, pady=(2, 10))
+            etiqueta(grupo, titulo, tamano=11, color="gris").pack(anchor="w", padx=2)
+            campo = ctk.CTkEntry(grupo, width=ancho)
+            campo.insert(0, str(inicial))
+            campo.pack(fill="x", expand=True, pady=(4, 0))
+            return campo
+
+        self.g_expr = crear_campo(0, "Función f(x)", "1/x", 300)
+        self.g_xmin = crear_campo(1, "x mínimo", "-5", 90)
+        self.g_xmax = crear_campo(2, "x máximo", "5", 90)
+        self.g_ymin = crear_campo(3, "y mínimo · opcional", "", 110)
+        self.g_ymax = crear_campo(4, "y máximo · opcional", "", 110)
+        boton_primario(configuracion, "Graficar", self.dibujar_grafica, width=130).grid(
+            row=2, column=0, sticky="w", padx=14, pady=(0, 12)
+        )
+        etiqueta(configuracion, "Deja ambos límites y vacíos para ajustar la escala automáticamente.",
+                 tamano=11, color="gris").grid(
+            row=2, column=1, columnspan=4, sticky="w", padx=8, pady=(0, 12)
+        )
+
+        panel_grafica = ctk.CTkFrame(
+            marco, fg_color=COLOR["tarjeta"], corner_radius=12,
+            border_width=1, border_color=COLOR["borde"],
+        )
+        panel_grafica.grid(row=2, column=0, sticky="nsew")
+        panel_grafica.grid_columnconfigure(0, weight=1)
+        panel_grafica.grid_rowconfigure(1, weight=1)
+        encabezado = ctk.CTkFrame(panel_grafica, fg_color="transparent")
+        encabezado.grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 2))
+        encabezado.grid_columnconfigure(0, weight=1)
+        etiqueta(encabezado, "Vista gráfica", tamano=15, negrita=True, color="texto").grid(
+            row=0, column=0, sticky="w"
+        )
+        self.g_estado = etiqueta(encabezado, "Ingresa una función y pulsa Graficar.",
+                                 tamano=11, color="gris")
+        self.g_estado.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.canvas = tk.Canvas(
+            panel_grafica, background=COLOR["fondo_secundario"],
+            highlightthickness=0, height=420,
+        )
+        self.canvas.grid(row=1, column=0, sticky="nsew", padx=8, pady=(4, 8))
         self.canvas.bind("<Configure>", lambda _evento: self._repintar_ultima_grafica())
 
     def dibujar_grafica(self):
@@ -749,7 +1204,14 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             )
         except (ValueError, OverflowError) as error:
             self._mostrar_error(error)
+            self.g_estado.configure(text="No se pudo graficar; revisa la función y los límites.",
+                                    text_color=COLOR["mal"])
             return
+        cantidad_segmentos = len(self.ultima_muestra["segmentos"])
+        estado = ("Sin puntos reales finitos en el intervalo." if not cantidad_segmentos else
+                  f"Función muestreada · {cantidad_segmentos} segmento(s)")
+        self.g_estado.configure(text=estado,
+                                text_color=COLOR["advertencia"] if not cantidad_segmentos else COLOR["ok"])
         self._repintar_ultima_grafica()
 
     def _repintar_ultima_grafica(self):
@@ -783,47 +1245,85 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             canvas.create_line(margen, gy, ancho - margen, gy, fill="#303036")
             xv = xmin + indice * (xmax - xmin) / 5
             yv = ymax - indice * (ymax - ymin) / 5
-            canvas.create_text(gx, alto - margen + 17, text=f"{xv:.3g}", fill="#B8B8C0")
-            canvas.create_text(margen - 24, gy, text=f"{yv:.3g}", fill="#B8B8C0")
+            canvas.create_text(gx, alto - margen + 17, text=f"{xv:.3g}", fill=COLOR["gris"])
+            canvas.create_text(margen - 24, gy, text=f"{yv:.3g}", fill=COLOR["gris"])
         if xmin <= 0 <= xmax:
-            canvas.create_line(px(0), margen, px(0), alto - margen, fill="#85858D", width=2)
+            canvas.create_line(px(0), margen, px(0), alto - margen, fill=COLOR["deshabilitado"], width=2)
         if ymin <= 0 <= ymax:
-            canvas.create_line(margen, py(0), ancho - margen, py(0), fill="#85858D", width=2)
+            canvas.create_line(margen, py(0), ancho - margen, py(0), fill=COLOR["deshabilitado"], width=2)
         for segmento in muestra["segmentos"]:
             coords = [coordenada for x, y in segmento for coordenada in (px(x), py(y))]
             if len(coords) >= 4:
-                canvas.create_line(*coords, fill="#66C2A5", width=2, smooth=False)
-        canvas.create_text(ancho / 2, 14, text=f"f(x) = {self.g_expr.get()}", fill="#F0F0F2", font=("Segoe UI", 12, "bold"))
-        canvas.create_text(ancho / 2, alto - 9, text="x", fill="#E4E4E7")
-        canvas.create_text(13, alto / 2, text="f(x)", fill="#E4E4E7", angle=90)
-        canvas.create_rectangle(ancho - 160, 18, ancho - 142, 27, fill="#66C2A5", outline="")
-        canvas.create_text(ancho - 136, 23, text="f(x)", fill="#E4E4E7", anchor="w")
+                canvas.create_line(*coords, fill=COLOR["verde"], width=2, smooth=False)
+        canvas.create_text(ancho / 2, 14, text=f"f(x) = {self.g_expr.get()}",
+                           fill=COLOR["texto"], font=("Segoe UI", 12, "bold"),
+                           width=max(160, ancho - 100))
+        canvas.create_text(ancho / 2, alto - 9, text="x", fill=COLOR["texto"])
+        canvas.create_text(13, alto / 2, text="f(x)", fill=COLOR["texto"], angle=90)
+        canvas.create_rectangle(ancho - 160, 18, ancho - 142, 27, fill=COLOR["verde"], outline="")
+        canvas.create_text(ancho - 136, 23, text="f(x)", fill=COLOR["texto"], anchor="w")
         resultado = self.ultimo_resultado
         if resultado and resultado["expresion"] == self.g_expr.get().strip():
             xr, fr = resultado["raiz"], resultado["f_raiz"]
             a0, b0 = resultado["a"], resultado["b"]
             if xmin <= a0 <= xmax and xmin <= b0 <= xmax and ymin <= 0 <= ymax:
                 # La guía pide identificar qué intervalo se dibuja: es el inicial [a, b].
-                canvas.create_line(px(a0), py(0), px(b0), py(0), fill="#F4A261", width=4)
-                canvas.create_text((px(a0) + px(b0)) / 2, py(0) + 16, fill="#F4A261",
+                canvas.create_line(px(a0), py(0), px(b0), py(0), fill=COLOR["advertencia"], width=4)
+                canvas.create_text((px(a0) + px(b0)) / 2, py(0) + 16, fill=COLOR["advertencia"],
                                    text=f"intervalo inicial de bisección [{a0:g}, {b0:g}]")
             if xmin <= xr <= xmax and ymin <= fr <= ymax:
-                canvas.create_oval(px(xr)-5, py(fr)-5, px(xr)+5, py(fr)+5, fill="#F4A261", outline="white")
-                canvas.create_text(px(xr)+9, py(fr)-10, text=f"raíz ≈ {xr:.6g}", fill="#F4A261", anchor="w")
+                canvas.create_oval(px(xr)-5, py(fr)-5, px(xr)+5, py(fr)+5,
+                                   fill=COLOR["advertencia"], outline=COLOR["texto"])
+                canvas.create_text(px(xr)+9, py(fr)-10, text=f"raíz ≈ {xr:.6g}",
+                                   fill=COLOR["advertencia"], anchor="w")
 
     def _crear_notacion(self, parent):
         marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        marco.pack(fill="both", expand=True)
-        fila = ctk.CTkFrame(marco, fg_color="transparent")
-        fila.pack(anchor="w", padx=12, pady=12)
-        self.n_decimal = self._entrada(fila, "Entero decimal", "84506", 180)
-        boton_primario(fila, "Descomponer y convertir", self.convertir_decimal, width=205).pack(side="left", padx=8, pady=18)
-        segunda = ctk.CTkFrame(marco, fg_color="transparent")
-        segunda.pack(anchor="w", padx=12)
-        self.n_binario = self._entrada(segunda, "Número binario", "11110011", 180)
-        boton_secundario(segunda, "Convertir a decimal", self.convertir_binario, width=180).pack(side="left", padx=8, pady=18)
-        etiqueta(marco, "Los negativos conservan su signo y la descomposición se realiza sobre el valor absoluto.", tamano=13).pack(anchor="w", padx=12, pady=8)
-        self.n_resultado = self._caja_texto(marco, 12)
+        marco.pack(fill="both", expand=True, padx=10, pady=10)
+        marco.grid_columnconfigure((0, 1), weight=1, uniform="notacion_operaciones")
+        etiqueta(marco, "Conversiones entre decimal y binario", tamano=19,
+                 negrita=True, color="texto").grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(4, 2)
+        )
+        etiqueta(marco, "Trabaja con enteros; las descomposiciones muestran los dígitos, "
+                 "sus potencias y la comprobación del resultado.", tamano=12,
+                 color="gris", justify="left", anchor="w", wraplength=850).grid(
+            row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 10)
+        )
+
+        decimal = Panel(
+            marco, titulo="Decimal → binario",
+            descripcion="Introduce un entero decimal para obtener su desarrollo en base 10 y su equivalente binario.",
+        )
+        decimal.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        decimal.contenido.grid_columnconfigure(0, weight=1)
+        etiqueta(decimal.contenido, "Número decimal", tamano=12,
+                 color="texto", negrita=True).grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.n_decimal = ctk.CTkEntry(decimal.contenido, height=38, font=fuente_mono(14))
+        self.n_decimal.insert(0, "84506")
+        self.n_decimal.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        boton_primario(decimal.contenido, "Descomponer y convertir",
+                       self.convertir_decimal).grid(row=2, column=0, sticky="ew")
+
+        binario = Panel(
+            marco, titulo="Binario → decimal",
+            descripcion="Usa únicamente dígitos 0 y 1, con signo opcional, para obtener el desarrollo en base 2 y el entero decimal.",
+        )
+        binario.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
+        binario.contenido.grid_columnconfigure(0, weight=1)
+        etiqueta(binario.contenido, "Número binario", tamano=12,
+                 color="texto", negrita=True).grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.n_binario = ctk.CTkEntry(binario.contenido, height=38, font=fuente_mono(14))
+        self.n_binario.insert(0, "11110011")
+        self.n_binario.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        boton_secundario(binario.contenido, "Convertir a decimal",
+                         self.convertir_binario).grid(row=2, column=0, sticky="ew")
+
+        self.n_resultado = Panel(marco, titulo="Resultado",
+            descripcion="La equivalencia y el procedimiento aparecerán aquí al realizar una conversión.")
+        self.n_resultado.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=(8, 5))
+        self.n_resultado.contenido.grid_columnconfigure(0, weight=1)
+        self.n_resultado.contenido.grid_remove()
 
     def convertir_decimal(self):
         """Muestra forma posicional en base 10 y su conversión exacta a base 2."""
@@ -835,7 +1335,15 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             self._mostrar_error(error)
             return
         signo = "El signo se conserva; las potencias se aplican al valor absoluto.\n" if valor < 0 else ""
-        self._poner(self.n_resultado, f"Base de origen: 10\n{signo}({valor})₁₀ = {decimal['descomposicion']}\nSuma posicional = {valor}\n\nBase del resultado: 2\n({valor})₁₀ = ({binario['binario']})₂\nComprobación: la conversión inversa produce {binario['equivalente']}₁₀.")
+        texto = (f"Base de origen: 10\n{signo}({valor})₁₀ = {decimal['descomposicion']}\n"
+                 f"Suma posicional = {valor}\n\nBase del resultado: 2\n"
+                 f"({valor})₁₀ = ({binario['binario']})₂\n"
+                 f"Comprobación: la conversión inversa produce {binario['equivalente']}₁₀.")
+        self._presentar_resultado_notacion(
+            "Conversión decimal → binario", binario["binario"],
+            f"({valor})₁₀ = ({binario['binario']})₂",
+            f"Base de origen: 10 · Base de destino: 2 · Valor original: {valor}", texto,
+        )
 
     def convertir_binario(self):
         """Muestra la expansión binaria y su suma posicional decimal."""
@@ -850,39 +1358,153 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             suma = f"-({suma})"
         # Sin ceros a la izquierda: es lo que devuelve de verdad la conversión inversa.
         inverso = ("-" if datos["decimal"] < 0 else "") + format(abs(datos["decimal"]), "b")
-        self._poner(self.n_resultado, f"Base de origen: 2\n{signo}({datos['binario']})₂ = {datos['descomposicion']}\n= {suma} = ({datos['decimal']})₁₀\nComprobación: decimal a binario devuelve {inverso}.")
+        texto = (f"Base de origen: 2\n{signo}({datos['binario']})₂ = {datos['descomposicion']}\n"
+                 f"= {suma} = ({datos['decimal']})₁₀\n"
+                 f"Comprobación: decimal a binario devuelve {inverso}.")
+        self._presentar_resultado_notacion(
+            "Conversión binario → decimal", str(datos["decimal"]),
+            f"({datos['binario']})₂ = ({datos['decimal']})₁₀",
+            f"Base de origen: 2 · Base de destino: 10 · Dígitos: {len(datos['binario'].lstrip('+-'))}", texto,
+        )
+
+    def _presentar_resultado_notacion(self, titulo, valor, equivalencia, detalles, procedimiento):
+        """Separa el valor convertido de su desarrollo, conservando el texto calculado."""
+        contenido = self.n_resultado.contenido
+        for widget in contenido.winfo_children():
+            widget.destroy()
+        tarjeta = TarjetaResultado(
+            contenido, titulo, valor, equivalencia,
+            estado=("Conversión realizada", "success"),
+        )
+        tarjeta.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        tarjeta.valor.configure(font=fuente_mono(20, negrita=True), wraplength=780)
+        etiqueta(contenido, detalles, tamano=11, color="gris", anchor="w",
+                 justify="left", wraplength=820).grid(row=1, column=0, sticky="w", pady=(0, 8))
+        desarrollo = Panel(contenido, titulo="Desarrollo posicional",
+            descripcion="Descomposición, suma y comprobación de la conversión.")
+        desarrollo.grid(row=2, column=0, sticky="nsew")
+        desarrollo.contenido.grid_columnconfigure(0, weight=1)
+        caja = ctk.CTkTextbox(
+            desarrollo.contenido, height=150, wrap="word",
+            font=fuente_mono(12), fg_color=COLOR["suave"],
+            text_color=COLOR["texto"], border_width=1,
+            border_color=COLOR["borde"], corner_radius=10,
+        )
+        caja.grid(row=0, column=0, sticky="nsew")
+        caja.insert("1.0", procedimiento)
+        caja.configure(state="disabled")
+        self.n_resultado.contenido.grid()
 
     def _crear_errores(self, parent):
         marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        marco.pack(fill="both", expand=True)
+        marco.pack(fill="both", expand=True, padx=10, pady=10)
+        marco.grid_columnconfigure(0, weight=1)
+        etiqueta(marco, "Errores numéricos", tamano=19, negrita=True,
+                 color="texto").grid(row=0, column=0, sticky="w", padx=6, pady=(2, 0))
+        etiqueta(marco, "Compara valores y estudia cómo las aproximaciones afectan los cálculos.",
+                 tamano=12, color="gris", anchor="w", justify="left",
+                 wraplength=900).grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 10))
+
         punto = analizar_punto_flotante()
-        bloque = (
-            "REPRESENTACIÓN FLOAT\n"
-            f"0.1 + 0.2 = {punto['suma']!r}; comparación con 0.3: {punto['igual_a_03']}\n"
-            f"Diferencia respecto a 0.3: {punto['diferencia']:.18g}\n"
-            f"Épsilon de máquina: {punto['epsilon']:.17g} — {punto['epsilon_explicacion']}\n"
-            f"Overflow ilustrativo (1e308 × 1e308): {punto['overflow']}\n"
-            f"Underflow ilustrativo (1e-300 × 1e-300): {punto['underflow']}\n"
-            f"Pérdida de precisión (1e16 + 1 − 1e16): {punto['perdida']}\n"
-            "Overflow: la magnitud supera el rango representable y aquí produce infinito. "
-            "Underflow: la magnitud cae por debajo del rango y aquí se redondea a cero.\n"
-            f"Por qué: {punto['razon_binaria']}\n\nTIPOS DE ERROR\n" +
-            "\n".join(f"{nombre}: {descripcion}" for nombre, descripcion in resumen_tipos_error())
+        flotante = Panel(
+            marco, titulo="Representación en punto flotante",
+            descripcion="Ejemplos reproducibles de precisión finita; los valores se generan con el análisis existente.",
         )
-        etiqueta(marco, bloque, tamano=13, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
-        etiqueta(marco, "Error absoluto y relativo", tamano=16, negrita=True, color="texto").pack(anchor="w", padx=12, pady=(8, 0))
-        fila = ctk.CTkFrame(marco, fg_color="transparent")
-        fila.pack(anchor="w", padx=12)
-        self.e_verdadero = self._entrada(fila, "Valor verdadero", "10", 150)
-        self.e_aproximado = self._entrada(fila, "Valor aproximado", "9.8", 150)
-        boton_primario(fila, "Calcular errores", self.calcular_errores, width=150).pack(side="left", padx=8, pady=18)
-        etiqueta(marco, "Propagación para f(x) = sin(x) + x²", tamano=16, negrita=True, color="texto").pack(anchor="w", padx=12, pady=(8, 0))
-        fila2 = ctk.CTkFrame(marco, fg_color="transparent")
-        fila2.pack(anchor="w", padx=12)
-        self.e_x = self._entrada(fila2, "x (radianes)", "0.5", 150)
-        self.e_dx = self._entrada(fila2, "Δx", "0.01", 150)
-        boton_secundario(fila2, "Calcular propagación", self.calcular_propagacion, width=180).pack(side="left", padx=8, pady=18)
-        self.e_resultado = self._caja_texto(marco, 8)
+        flotante.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        cuerpo_float = flotante.contenido
+        cuerpo_float.grid_columnconfigure((0, 1, 2), weight=1, uniform="errores_float")
+        ejemplos = (
+            ("0.1 + 0.2", f"{punto['suma']!r} · igual a 0.3: {punto['igual_a_03']}"),
+            ("Diferencia respecto a 0.3", f"{punto['diferencia']:.18g}"),
+            ("Épsilon de máquina", f"{punto['epsilon']:.17g}"),
+            ("Overflow · 1e308 × 1e308", str(punto["overflow"])),
+            ("Underflow · 1e-300 × 1e-300", str(punto["underflow"])),
+            ("Pérdida · 1e16 + 1 − 1e16", str(punto["perdida"])),
+        )
+        for indice, (titulo, valor) in enumerate(ejemplos):
+            fila, columna = divmod(indice, 3)
+            metrica = TarjetaResultado(cuerpo_float, titulo, valor)
+            metrica.grid(row=fila, column=columna, sticky="ew", padx=4, pady=4)
+        etiqueta(cuerpo_float, punto["epsilon_explicacion"], tamano=11,
+                 color="gris", anchor="w", justify="left", wraplength=900).grid(
+            row=2, column=0, columnspan=3, sticky="ew", padx=4, pady=(6, 2)
+        )
+        etiqueta(cuerpo_float,
+                 "Overflow: la magnitud supera el rango representable y aquí produce infinito. "
+                 "Underflow: la magnitud cae por debajo del rango y aquí se redondea a cero. "
+                 f"{punto['razon_binaria']}", tamano=11, color="texto", anchor="w",
+                 justify="left", wraplength=900).grid(
+            row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=(2, 8)
+        )
+        definiciones = Panel(cuerpo_float, titulo="Tipos de error",
+                             descripcion="Distinciones conceptuales incluidas en el módulo.")
+        definiciones.grid(row=4, column=0, columnspan=3, sticky="ew", padx=4, pady=(4, 2))
+        for fila, (nombre, descripcion) in enumerate(resumen_tipos_error()):
+            etiqueta(definiciones.contenido, nombre, tamano=12, negrita=True,
+                     color="texto").grid(row=fila, column=0, sticky="nw", padx=(0, 10), pady=3)
+            etiqueta(definiciones.contenido, descripcion, tamano=11, color="gris",
+                     justify="left", anchor="w", wraplength=780).grid(
+                row=fila, column=1, sticky="ew", pady=3
+            )
+        definiciones.contenido.grid_columnconfigure(1, weight=1)
+
+        panel_error = Panel(
+            marco, titulo="Error entre valor verdadero y aproximado",
+            descripcion="Calcula error absoluto, relativo y porcentual. Si el valor verdadero es cero, el relativo y el porcentual quedan sin definir.",
+        )
+        panel_error.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        entrada_error = panel_error.contenido
+        entrada_error.grid_columnconfigure((0, 1), weight=1, uniform="errores_campos")
+        self.e_verdadero = self._campo_error(entrada_error, "Valor verdadero", "10", 0)
+        self.e_aproximado = self._campo_error(entrada_error, "Valor aproximado", "9.8", 1)
+        boton_primario(entrada_error, "Calcular errores", self.calcular_errores).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        self.e_resultado = Panel(marco, titulo="Resultados de la comparación",
+                                 descripcion="Los errores y su sustitución aparecerán al calcular.")
+        self.e_resultado.grid(row=4, column=0, sticky="ew", padx=5, pady=(0, 8))
+        self.e_resultado.contenido.grid_columnconfigure((0, 1, 2), weight=1, uniform="errores_resultado")
+        self.e_resultado.contenido.grid_remove()
+
+        panel_propagacion = Panel(
+            marco, titulo="Propagación de error · f(x) = sin(x) + x²",
+            descripcion="Compara el cambio real de la función con la aproximación lineal usando x en radianes y la perturbación Δx.",
+        )
+        panel_propagacion.grid(row=5, column=0, sticky="ew", padx=5, pady=5)
+        entrada_propagacion = panel_propagacion.contenido
+        entrada_propagacion.grid_columnconfigure((0, 1), weight=1, uniform="propagacion_campos")
+        self.e_x = self._campo_error(entrada_propagacion, "x (radianes)", "0.5", 0)
+        self.e_dx = self._campo_error(entrada_propagacion, "Perturbación Δx", "0.01", 1)
+        boton_secundario(entrada_propagacion, "Calcular propagación", self.calcular_propagacion).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        self.e_resultado_propagacion = Panel(
+            marco, titulo="Resultados de propagación",
+            descripcion="Cambios observados y linealización calculada para los datos ingresados.",
+        )
+        self.e_resultado_propagacion.grid(row=6, column=0, sticky="ew", padx=5, pady=(0, 8))
+        self.e_resultado_propagacion.contenido.grid_columnconfigure((0, 1, 2), weight=1, uniform="propagacion_resultado")
+        self.e_resultado_propagacion.contenido.grid_remove()
+
+    @staticmethod
+    def _campo_error(parent, titulo, inicial, columna):
+        grupo = ctk.CTkFrame(parent, fg_color="transparent")
+        grupo.grid(row=0, column=columna, sticky="ew", padx=5, pady=3)
+        etiqueta(grupo, titulo, tamano=11, color="gris").pack(anchor="w", pady=(0, 3))
+        campo = ctk.CTkEntry(grupo, height=36, font=fuente_mono(13))
+        campo.insert(0, inicial)
+        campo.pack(fill="x", expand=True)
+        return campo
+
+    @staticmethod
+    def _limpiar_panel_error(panel):
+        for widget in panel.contenido.winfo_children():
+            widget.destroy()
+
+    @staticmethod
+    def _tarjeta_error(parent, titulo, valor, detalle=None):
+        tarjeta = TarjetaResultado(parent, titulo, valor, detalle)
+        return tarjeta
 
     def calcular_errores(self):
         """Calcula y presenta errores absoluto, relativo y porcentual."""
@@ -893,7 +1515,27 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             return
         relativo = "No definido porque el valor verdadero es cero." if datos["relativo"] is None else f"{datos['relativo']:.10g}"
         porcentaje = "No definido." if datos["porcentual"] is None else f"{datos['porcentual']:.10g}%"
-        self._poner(self.e_resultado, f"Error absoluto = |{datos['verdadero']} − {datos['aproximado']}| = {datos['absoluto']}\nError relativo = {relativo}\nError porcentual = {porcentaje}")
+        panel = self.e_resultado
+        contenido = panel.contenido
+        self._limpiar_panel_error(panel)
+        valores = (
+            ("Valor verdadero", str(datos["verdadero"])),
+            ("Valor aproximado", str(datos["aproximado"])),
+            ("Error absoluto", str(datos["absoluto"])),
+            ("Error relativo", relativo),
+            ("Error porcentual", porcentaje),
+        )
+        for indice, (titulo, valor) in enumerate(valores):
+            fila, columna = divmod(indice, 3)
+            self._tarjeta_error(contenido, titulo, valor).grid(
+                row=fila, column=columna, sticky="ew", padx=4, pady=4
+            )
+        detalle = (
+            f"Error absoluto = |{datos['verdadero']} − {datos['aproximado']}| = {datos['absoluto']}\n"
+            f"Error relativo = {relativo}\nError porcentual = {porcentaje}"
+        )
+        self._procedimiento_error(contenido, "Cálculo de errores", detalle, 2, 3)
+        contenido.grid()
 
     def calcular_propagacion(self):
         """Calcula cambio real, aproximación lineal y su diferencia absoluta."""
@@ -911,7 +1553,36 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             f"Diferencia absoluta = {datos['diferencia_absoluta']:.12g}\n"
             "La derivada proporciona una linealización de primer orden; suele aproximar mejor para perturbaciones pequeñas."
         )
-        self._poner(self.e_resultado, texto)
+        panel = self.e_resultado_propagacion
+        contenido = panel.contenido
+        self._limpiar_panel_error(panel)
+        valores = (
+            ("f(x)", f"{datos['f_x']:.12g}"),
+            ("f(x + Δx)", f"{datos['f_perturbado']:.12g}"),
+            ("Cambio real · Δy", f"{datos['delta_y_real']:.12g}"),
+            ("Cambio aproximado · Δy", f"{datos['delta_y_aproximado']:.12g}"),
+            ("Diferencia absoluta", f"{datos['diferencia_absoluta']:.12g}"),
+            ("Derivada · f'(x)", f"{datos['derivada']:.12g}"),
+        )
+        for indice, (titulo, valor) in enumerate(valores):
+            fila, columna = divmod(indice, 3)
+            self._tarjeta_error(contenido, titulo, valor).grid(
+                row=fila, column=columna, sticky="ew", padx=4, pady=4
+            )
+        self._procedimiento_error(contenido, "Desarrollo de la propagación", texto, 2, 3)
+        contenido.grid()
+
+    @staticmethod
+    def _procedimiento_error(parent, titulo, texto, fila, columnas):
+        panel = Panel(parent, titulo=titulo, descripcion="Procedimiento y valores reportados por el cálculo.")
+        panel.grid(row=fila, column=0, columnspan=columnas, sticky="ew", pady=(6, 2))
+        panel.contenido.grid_columnconfigure(0, weight=1)
+        caja = ctk.CTkTextbox(panel.contenido, height=120, wrap="word",
+                              font=fuente_mono(12), fg_color=COLOR["suave"],
+                              text_color=COLOR["texto"])
+        caja.grid(row=0, column=0, sticky="ew")
+        caja.insert("1.0", texto)
+        caja.configure(state="disabled")
 
     @staticmethod
     def _poner(caja, texto):

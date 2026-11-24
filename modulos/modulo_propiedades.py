@@ -22,6 +22,10 @@ from backend.operaciones_matriciales import (
     transponer_matriz,
 )
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
     llenar,
     boton_primario,
     boton_secundario,
@@ -29,6 +33,7 @@ from modulos._comun import (
     crear_estructura,
     entrada_numero,
     etiqueta,
+    fuente_mono,
     formatear_matriz,
     formatear_vector,
     leer_entero,
@@ -665,6 +670,7 @@ class ModuloPropiedades(ctk.CTkFrame):
         self.entradas_B_transposicion = []
         self.entradas_producto = {"A": [], "B": [], "C": []}
         self.entradas_invertibilidad = []
+        self.ultimo_resultado_vistas = None
         self._construir_interfaz()
         self.actualizar_entradas()
         self._actualizar_matrices_transposicion()
@@ -689,17 +695,38 @@ class ModuloPropiedades(ctk.CTkFrame):
                 "Escribe el tamaño de A (filas × columnas) y pulsa «Crear tablas». "
                 "u y v tendrán tantos componentes como columnas tenga A.",
                 "Llena la matriz A, los vectores u y v, y el escalar c.",
-                "Pulsa «Verificar propiedades».",
+                "Pulsa «Verificar linealidad» para revisar la propiedad de A sobre u y v.",
             ],
             clave_teoremas="propiedades", ejemplo=self.cargar_ejemplo,
             indicacion="Aquí verás cada lado de las dos igualdades calculado paso "
                        "a paso y si se cumplen.",
         )
         self.resultado = zonas.resultado
+        self._crear_vistas_resultado()
         contenido = zonas.contenido
 
-        controles, entradas = crear_controles(
+        subtitulo(contenido, "Selecciona el tipo de propiedad que deseas analizar").pack(
+            anchor="w", padx=10, pady=(10, 4)
+        )
+        self.pestanas_entrada = ctk.CTkTabview(
             contenido,
+            fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas_entrada.pack(fill="both", expand=True, padx=6, pady=(2, 8))
+        for nombre in ("Linealidad", "Transposición", "Producto", "Criterios"):
+            self.pestanas_entrada.add(nombre)
+        tab_linealidad = self.pestanas_entrada.tab("Linealidad")
+        tab_transposicion = self.pestanas_entrada.tab("Transposición")
+        tab_producto = self.pestanas_entrada.tab("Producto")
+        tab_criterios = self.pestanas_entrada.tab("Criterios")
+
+        controles, entradas = crear_controles(
+            tab_linealidad,
             [("m", "Filas de A", "2", 80), ("n", "Columnas de A", "2", 100),
              ("c", "Escalar c", "2", 80, False)],
             self.actualizar_entradas,
@@ -708,21 +735,24 @@ class ModuloPropiedades(ctk.CTkFrame):
         controles.pack(anchor="w", padx=10, pady=(10, 0))
         self.entry_m, self.entry_n, self.entry_c = entradas["m"], entradas["n"], entradas["c"]
 
-        self.panel_entradas = ctk.CTkFrame(contenido, fg_color="transparent")
+        self.panel_entradas = ctk.CTkFrame(tab_linealidad, fg_color="transparent")
         self.panel_entradas.pack(anchor="w", fill="x")
+        boton_primario(tab_linealidad, "Verificar linealidad", self.verificar).pack(
+            anchor="w", padx=10, pady=(10, 8)
+        )
 
-        subtitulo(contenido, "Teoremas de transposición").pack(
+        subtitulo(tab_transposicion, "Teoremas de transposición").pack(
             anchor="w", padx=10, pady=(24, 6)
         )
         self.teorema_transposicion_var = ctk.StringVar(value=TEOREMAS_TRANSPOSICION[0])
         ctk.CTkOptionMenu(
-            contenido,
+            tab_transposicion,
             variable=self.teorema_transposicion_var,
             values=list(TEOREMAS_TRANSPOSICION),
             width=260,
         ).pack(anchor="w", padx=10, pady=(0, 8))
         controles_transposicion, entradas_transposicion = crear_controles(
-            contenido,
+            tab_transposicion,
             [("at_m", "Filas A", "2", 76), ("at_n", "Columnas A", "2", 90),
              ("bt_m", "Filas B", "2", 76), ("bt_n", "Columnas B", "2", 90),
              ("at_c", "Escalar c", "2", 76, False)],
@@ -732,55 +762,55 @@ class ModuloPropiedades(ctk.CTkFrame):
         controles_transposicion.pack(anchor="w", padx=10, pady=(0, 8))
         self.entries_dim_transposicion = entradas_transposicion
         self.panel_matrices_transposicion = ctk.CTkFrame(
-            contenido, fg_color="transparent"
+            tab_transposicion, fg_color="transparent"
         )
         self.panel_matrices_transposicion.pack(anchor="w", fill="x")
         boton_primario(
-            contenido, "Verificar transposición", self.verificar_transposicion, width=250
+            tab_transposicion, "Verificar transposición", self.verificar_transposicion, width=250
         ).pack(anchor="w", padx=10, pady=(8, 0))
 
-        subtitulo(contenido, "Teoremas de inversas y determinantes").pack(
+        subtitulo(tab_transposicion, "Teoremas de inversas y determinantes").pack(
             anchor="w", padx=10, pady=(24, 6)
         )
         self.teorema_inversa_determinante_var = ctk.StringVar(
             value=TEOREMAS_INVERSA_DETERMINANTE[0]
         )
         ctk.CTkOptionMenu(
-            contenido,
+            tab_transposicion,
             variable=self.teorema_inversa_determinante_var,
             values=list(TEOREMAS_INVERSA_DETERMINANTE),
             width=300,
         ).pack(anchor="w", padx=10, pady=(0, 8))
         etiqueta(
-            contenido,
+            tab_transposicion,
             "Usa las matrices A y B ingresadas arriba; A y B deben ser cuadradas "
             "cuando la igualdad lo requiera.",
             tamano=12,
         ).pack(anchor="w", padx=10, pady=(0, 8))
         boton_primario(
-            contenido,
+            tab_transposicion,
             "Verificar inversa/determinante",
             self.verificar_inversa_determinante,
             width=270,
         ).pack(anchor="w", padx=10, pady=(0, 8))
 
-        subtitulo(contenido, "Propiedades del producto de matrices").pack(
+        subtitulo(tab_producto, "Propiedades del producto de matrices").pack(
             anchor="w", padx=10, pady=(24, 6)
         )
         self.teorema_producto_var = ctk.StringVar(value=TEOREMAS_PRODUCTO[0])
         ctk.CTkOptionMenu(
-            contenido,
+            tab_producto,
             variable=self.teorema_producto_var,
             values=list(TEOREMAS_PRODUCTO),
             width=370,
         ).pack(anchor="w", padx=10, pady=(0, 8))
         etiqueta(
-            contenido,
+            tab_producto,
             "Define las dimensiones de A, B y C; las compatibilidades se validan al calcular.",
             tamano=12,
         ).pack(anchor="w", padx=10, pady=(0, 6))
         controles_producto, entradas_producto = crear_controles(
-            contenido,
+            tab_producto,
             [("pa_m", "A filas", "2", 68), ("pa_n", "A cols", "2", 68),
              ("pb_m", "B filas", "2", 68), ("pb_n", "B cols", "2", 68),
              ("pc_m", "C filas", "2", 68), ("pc_n", "C cols", "2", 68)],
@@ -790,10 +820,10 @@ class ModuloPropiedades(ctk.CTkFrame):
         controles_producto.pack(anchor="w", padx=10, pady=(0, 8))
         self.entries_dim_producto = entradas_producto
         self.panel_matrices_producto = ctk.CTkFrame(
-            contenido, fg_color="transparent"
+            tab_producto, fg_color="transparent"
         )
         self.panel_matrices_producto.pack(anchor="w", fill="x")
-        acciones_producto = ctk.CTkFrame(contenido, fg_color="transparent")
+        acciones_producto = ctk.CTkFrame(tab_producto, fg_color="transparent")
         acciones_producto.pack(anchor="w", padx=10, pady=(8, 0))
         boton_secundario(
             acciones_producto, "Ejemplo AB ≠ BA", self.cargar_ejemplo_no_conmutativo,
@@ -811,16 +841,16 @@ class ModuloPropiedades(ctk.CTkFrame):
             acciones_producto, "Verificar producto", self.verificar_producto, width=175
         ).pack(side="left")
 
-        subtitulo(contenido, "Criterios de invertibilidad").pack(
+        subtitulo(tab_criterios, "Criterios de invertibilidad").pack(
             anchor="w", padx=10, pady=(24, 6)
         )
         etiqueta(
-            contenido,
+            tab_criterios,
             "Para una matriz cuadrada: det(A) ≠ 0, pivote en cada columna y columnas independientes.",
             tamano=12,
         ).pack(anchor="w", padx=10, pady=(0, 6))
         controles_invertibilidad, entradas_invertibilidad = crear_controles(
-            contenido,
+            tab_criterios,
             [("inv_n", "Orden n", "2", 80)],
             self._actualizar_matriz_invertibilidad,
             texto_boton="Crear matriz",
@@ -828,22 +858,171 @@ class ModuloPropiedades(ctk.CTkFrame):
         controles_invertibilidad.pack(anchor="w", padx=10, pady=(0, 8))
         self.entry_orden_invertibilidad = entradas_invertibilidad["inv_n"]
         self.panel_invertibilidad = ctk.CTkFrame(
-            contenido, fg_color="transparent"
+            tab_criterios, fg_color="transparent"
         )
         self.panel_invertibilidad.pack(anchor="w", fill="x")
         boton_primario(
-            contenido, "Analizar criterios", self.verificar_invertibilidad, width=220
+            tab_criterios, "Analizar criterios", self.verificar_invertibilidad, width=220
         ).pack(anchor="w", padx=10, pady=(8, 0))
 
-        boton_primario(zonas.acciones, "Verificar propiedades", self.verificar).pack(
-            side="left", fill="x", expand=True, padx=(0, 8)
-        )
         boton_secundario(zonas.acciones, "Limpiar", self.limpiar, width=100, height=40).pack(
-            side="left"
+            side="right"
         )
+
+    def _crear_vistas_resultado(self):
+        """Prepara las pestañas locales sin modificar la zona compartida de resultados."""
+        padre = self.resultado.master
+        self.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+        self.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.vistas_resultado.grid_remove()
+        self.vistas_resultado.grid_columnconfigure(0, weight=1)
+        self.vistas_resultado.grid_rowconfigure(0, weight=1)
+        self.pestanas_resultado = ctk.CTkTabview(
+            self.vistas_resultado,
+            fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+        for nombre in ("Resumen", "Datos", "Procedimiento"):
+            self.pestanas_resultado.add(nombre)
+        self.tab_resumen = self.pestanas_resultado.tab("Resumen")
+        self.tab_resumen.grid_columnconfigure(0, weight=1)
+        self.tab_resumen.grid_rowconfigure(1, weight=1)
+        self.tab_datos = self.pestanas_resultado.tab("Datos")
+        self.tab_datos.grid_columnconfigure(0, weight=1)
+        self.tab_datos.grid_rowconfigure(0, weight=1)
+        self.tab_procedimiento = self.pestanas_resultado.tab("Procedimiento")
+        self.tab_procedimiento.grid_columnconfigure(0, weight=1)
+        self.tab_procedimiento.grid_rowconfigure(0, weight=1)
+        self.caja_procedimiento = ctk.CTkTextbox(
+            self.tab_procedimiento, font=fuente_mono(12), wrap="word",
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            border_width=1, border_color=COLOR["borde"], corner_radius=10,
+        )
+        self.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        pendientes = list(self.winfo_children())
+        while pendientes:
+            widget = pendientes.pop()
+            pendientes.extend(widget.winfo_children())
+            if isinstance(widget, ctk.CTkButton) and str(widget.cget("text")).startswith("?  Cómo usar"):
+                widget.configure(command=self.mostrar_guia)
+                break
+
+    @staticmethod
+    def _crear_matriz_resultado(parent, nombre, matriz):
+        """Muestra una matriz en celdas alineadas, con desplazamiento si hace falta."""
+        if not matriz or not matriz[0]:
+            return
+        filas, columnas = len(matriz), len(matriz[0])
+        panel = Panel(parent, titulo=nombre, descripcion=f"Dimensión: {filas} × {columnas}")
+        panel.pack(fill="x", padx=8, pady=6)
+        grilla = ctk.CTkFrame(panel.contenido, fg_color="transparent")
+        grilla.pack(anchor="w")
+        for columna in range(columnas):
+            grilla.grid_columnconfigure(columna, minsize=76, weight=1)
+        for i, fila in enumerate(matriz):
+            grilla.grid_rowconfigure(i, minsize=36, weight=1)
+            for j, valor in enumerate(fila):
+                ctk.CTkLabel(
+                    grilla, text=formatear_valor(valor), width=72, height=34,
+                    font=fuente_mono(12), text_color=COLOR["texto"],
+                    fg_color=COLOR["suave"], corner_radius=6,
+                    anchor="center", justify="center",
+                ).grid(row=i, column=j, sticky="nsew", padx=2, pady=2)
+
+    def _actualizar_vistas_resultado(
+        self, propiedad, conclusion, estado, matrices, vectores, procedimiento,
+        detalles=(), matrices_resumen=None,
+    ):
+        """Organiza sin recalcular los resultados existentes en tres vistas."""
+        if not hasattr(self, "vistas_resultado"):
+            return
+        self.ultimo_resultado_vistas = {
+            "propiedad": propiedad, "conclusion": conclusion, "estado": estado,
+            "matrices": list(matrices), "vectores": list(vectores),
+            "detalles": list(detalles), "procedimiento": procedimiento,
+        }
+        for widget in self.tab_resumen.winfo_children():
+            widget.destroy()
+        for widget in self.tab_datos.winfo_children():
+            widget.destroy()
+        tarjeta = TarjetaResultado(
+            self.tab_resumen, propiedad, conclusion,
+            "Conclusión para las entradas utilizadas. Consulta Datos y Procedimiento "
+            "para revisar las operaciones y los pasos completos.",
+            estado=estado,
+        )
+        tarjeta.valor.configure(wraplength=340)
+        tarjeta.detalle.configure(wraplength=360)
+        tarjeta.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+        contenido = MarcoDesplazable(self.tab_resumen, color=COLOR["tarjeta"])
+        contenido.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        seleccion_resumen = matrices_resumen
+        if seleccion_resumen is None:
+            seleccion_resumen = [
+                (nombre, matriz) for nombre, matriz in matrices
+                if nombre in {"Matriz A", "Matriz B", "Inversa A⁻¹"}
+            ]
+        for nombre, matriz in seleccion_resumen:
+            self._crear_matriz_resultado(contenido.interior, nombre, matriz)
+
+        datos = MarcoDesplazable(self.tab_datos, color=COLOR["tarjeta"])
+        datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        for nombre, matriz in matrices:
+            self._crear_matriz_resultado(datos.interior, nombre, matriz)
+        if vectores or detalles:
+            panel = Panel(datos.interior, titulo="Vectores y valores utilizados")
+            panel.pack(fill="x", padx=8, pady=6)
+            for nombre, vector in vectores:
+                etiqueta(panel.contenido, f"{nombre} = {formatear_vector(vector)}",
+                         color="texto", justify="left", anchor="w", wraplength=480).pack(
+                             anchor="w", padx=8, pady=3
+                         )
+            for detalle in detalles:
+                etiqueta(panel.contenido, detalle, color="texto", justify="left",
+                         anchor="w", wraplength=480).pack(anchor="w", padx=8, pady=3)
+        self.caja_procedimiento.configure(state="normal")
+        self.caja_procedimiento.delete("1.0", "end")
+        self.caja_procedimiento.insert("1.0", procedimiento)
+        self.caja_procedimiento.configure(state="disabled")
+        self.resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        self.vistas_resultado.grid()
+
+    def mostrar_guia(self):
+        """Oculta la última presentación y vuelve a mostrar la guía compartida."""
+        self.vistas_resultado.grid_remove()
+        self.resultado.respuesta.grid_remove()
+        reemplazar_texto(self.resultado, "")
+
+    def _mostrar_error_propiedades(self, error):
+        """Separa los errores de entrada de las comprobaciones no satisfechas."""
+        if not hasattr(self, "vistas_resultado"):
+            return
+        mensaje = str(error)
+        ModuloPropiedades._actualizar_vistas_resultado(
+            self,
+            "No se pudo completar la comprobación", mensaje,
+            ("Error de entrada o cálculo", "error"), [], [], mensaje,
+            ("Revisa los datos y las dimensiones requeridas por esta propiedad.",), [],
+        )
+
+    def _ocultar_vistas_resultado(self):
+        """Restablece la guía cuando se limpian resultados o se recrean entradas."""
+        if hasattr(self, "vistas_resultado"):
+            self.vistas_resultado.grid_remove()
+            self.ultimo_resultado_vistas = None
+        if hasattr(self.resultado, "respuesta"):
+            self.resultado.respuesta.grid_remove()
 
     def _actualizar_matrices_transposicion(self):
         """Construye A y B con las dimensiones seleccionadas para el teorema."""
+        self._ocultar_vistas_resultado()
+        reemplazar_texto(self.resultado, "")
         try:
             dimensiones = {
                 clave: leer_entero(entrada, etiqueta_dim)
@@ -876,9 +1055,12 @@ class ModuloPropiedades(ctk.CTkFrame):
         self.entradas_B_transposicion = self._crear_matriz(
             panel_b, dimensiones["bt_m"], dimensiones["bt_n"]
         )
+        self._ajustar_altura_pestanas_entrada()
 
     def _actualizar_matrices_producto(self):
         """Construye las matrices A, B y C con sus dimensiones independientes."""
+        self._ocultar_vistas_resultado()
+        reemplazar_texto(self.resultado, "")
         try:
             dimensiones = {
                 clave: leer_entero(entrada, nombre)
@@ -910,6 +1092,7 @@ class ModuloPropiedades(ctk.CTkFrame):
             self.entradas_producto[nombre] = self._crear_matriz(
                 panel, filas, columnas
             )
+        self._ajustar_altura_pestanas_entrada()
 
     def _cargar_matrices_ejemplo(self, teorema, matrices):
         """Ajusta las dimensiones a 2×2 y carga un ejemplo editable."""
@@ -1090,12 +1273,38 @@ class ModuloPropiedades(ctk.CTkFrame):
                     "Criterio del ejercicio: " + ("confirmado" if coincide else "no confirmado"),
                     "Conclusión: " + conclusion,
                 ])
-            reemplazar_texto(self.resultado, "\n".join(lineas))
+            texto = "\n".join(lineas)
+            reemplazar_texto(self.resultado, texto)
+            resultados = dict(pasos)
+            matrices_vista = [(f"Matriz {nombre}", matriz) for nombre, matriz in matrices.items()]
+            matrices_vista.extend((nombre, matriz) for nombre, matriz in resultados.items())
+            for nombre, matriz in ((nombre_izq, izquierda), (nombre_der, derecha)):
+                if nombre not in resultados:
+                    matrices_vista.append((nombre, matriz))
+            es_contraejemplo = teorema in (TEOREMAS_PRODUCTO[4], TEOREMAS_PRODUCTO[5], TEOREMAS_PRODUCTO[6])
+            estado_vista = (
+                ("Contraejemplo confirmado" if coincide else "Contraejemplo no confirmado"),
+                "success" if coincide else "neutral",
+            ) if es_contraejemplo else (
+                ("Igualdad verificada" if coincide else "Comprobación no satisfecha"),
+                "success" if coincide else "warning",
+            )
+            resumen_vista = conclusion
+            ModuloPropiedades._actualizar_vistas_resultado(
+                self, teorema, resumen_vista, estado_vista, matrices_vista, [], texto,
+                tuple(f"Dimensión de {nombre}: {len(matriz)} × {len(matriz[0])}"
+                      for nombre, matriz in matrices.items()),
+                [(f"Matriz {nombre}", matriz) for nombre, matriz in matrices.items()]
+                + [(nombre_izq, izquierda), (nombre_der, derecha)],
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+            ModuloPropiedades._mostrar_error_propiedades(self, error)
 
     def _actualizar_matriz_invertibilidad(self):
         """Crea una cuadrícula cuadrada para el análisis de invertibilidad."""
+        self._ocultar_vistas_resultado()
+        reemplazar_texto(self.resultado, "")
         try:
             orden = leer_entero(self.entry_orden_invertibilidad, "El orden de A")
         except (ValueError, AttributeError) as error:
@@ -1110,6 +1319,7 @@ class ModuloPropiedades(ctk.CTkFrame):
         self.entradas_invertibilidad = self._crear_matriz(
             self.panel_invertibilidad, orden, orden
         )
+        self._ajustar_altura_pestanas_entrada()
 
     def verificar_invertibilidad(self):
         """Muestra los pasos y la conclusión de los tres criterios equivalentes."""
@@ -1203,8 +1413,50 @@ class ModuloPropiedades(ctk.CTkFrame):
                 "\n".join(lineas),
                 "A es invertible" if datos["invertible"] else "A es singular",
             )
+            matrices_vista = [("Matriz A", A), ("Forma escalonada", datos["matriz_escalonada"])]
+            matrices_vista.extend(
+                (f"Estado del determinante, paso {indice}", estado)
+                for indice, (_, estado) in enumerate(datos["pasos_determinante"], 1)
+            )
+            matrices_vista.extend(
+                (f"Reducción de [A | 0], paso {indice}", paso["matriz"])
+                for indice, paso in enumerate(datos["pasos_eliminacion"], 1)
+            )
+            vectores_vista = []
+            if datos["inversa"] is not None:
+                matrices_vista.extend([
+                    ("Inversa A⁻¹", datos["inversa"]),
+                    ("A · A⁻¹", datos["producto_a_inversa"]),
+                    ("A⁻¹ · A", datos["producto_inversa_a"]),
+                ])
+                matrices_vista.extend(
+                    (f"Gauss-Jordan, paso {indice}", estado)
+                    for indice, (_, estado) in enumerate(datos["pasos_inversa"], 1)
+                )
+            conclusion_vista = (
+                "A es invertible; los criterios equivalentes se cumplen."
+                if datos["invertible"] else
+                "A es singular; los criterios de invertibilidad no se cumplen."
+            )
+            detalle_criterios = (
+                f"Dimensión: {n} × {n}; det(A) = {formatear_valor(datos['determinante'])}; "
+                f"rango = {datos['rango']} de {n}; columnas pivote: {columnas_texto or 'ninguna'}.",
+                f"Pivote en cada columna: {estado_si_no(datos['pivote_en_cada_columna'])}; "
+                f"independencia: {estado_si_no(datos['columnas_independientes'])}; "
+                f"inyectiva: {estado_si_no(datos['transformacion_inyectiva'])}; "
+                f"sobreyectiva: {estado_si_no(datos['transformacion_sobreyectiva'])}.",
+                f"Inversa izquierda CA = I: {estado_si_no(datos['inversa_izquierda'])}; "
+                f"inversa derecha AD = I: {estado_si_no(datos['inversa_derecha'])}.",
+            )
+            ModuloPropiedades._actualizar_vistas_resultado(
+                self, "Criterios equivalentes de invertibilidad", conclusion_vista,
+                ("Invertible" if datos["invertible"] else "Singular",
+                 "success" if datos["invertible"] else "warning"),
+                matrices_vista, vectores_vista, "\n".join(lineas), detalle_criterios,
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+            ModuloPropiedades._mostrar_error_propiedades(self, error)
 
     @staticmethod
     def _crear_matriz(parent, filas, columnas):
@@ -1242,6 +1494,7 @@ class ModuloPropiedades(ctk.CTkFrame):
 
     def actualizar_entradas(self):
         """Reconstruye la matriz A y los vectores con las dimensiones indicadas."""
+        self._ocultar_vistas_resultado()
         try:
             m = leer_entero(self.entry_m, "Las filas de A")
             n = leer_entero(self.entry_n, "Las columnas de A")
@@ -1273,6 +1526,25 @@ class ModuloPropiedades(ctk.CTkFrame):
         self.entradas_u = self._crear_vector(marco_vectores, 0, "u", n)
         self.entradas_v = self._crear_vector(marco_vectores, 1, "v", n)
         reemplazar_texto(self.resultado, "")
+        self._ajustar_altura_pestanas_entrada()
+
+    def _ajustar_altura_pestanas_entrada(self):
+        """Deja que el contenedor exterior desplace tablas de hasta 12 filas."""
+        if not hasattr(self, "pestanas_entrada"):
+            return
+        filas_linealidad = len(self.entradas_A)
+        filas_transposicion = max(
+            len(self.entradas_A_transposicion), len(self.entradas_B_transposicion)
+        )
+        filas_producto = sum(len(matriz) for matriz in self.entradas_producto.values())
+        filas_criterios = len(self.entradas_invertibilidad)
+        alturas = (
+            360 + 44 * filas_linealidad,
+            460 + 44 * filas_producto,
+            520 + 44 * filas_transposicion,
+            260 + 44 * filas_criterios,
+        )
+        self.pestanas_entrada.configure(height=max(alturas))
 
     def _leer_vector(self, entradas, nombre):
         """Convierte un conjunto de celdas a un vector de Fraction."""
@@ -1355,8 +1627,29 @@ class ModuloPropiedades(ctk.CTkFrame):
                 f"A(cu) = c(Au):  {estado_b.lower()}"
             )
             reemplazar_texto(self.resultado, texto, resumen)
+            conclusion_vista = (
+                "Aditividad y homogeneidad verificadas para los datos ingresados."
+                if datos["a_se_cumple"] and datos["b_se_cumple"]
+                else "Una o ambas comprobaciones no coinciden para los datos ingresados."
+            )
+            ModuloPropiedades._actualizar_vistas_resultado(
+                self, "Linealidad del producto matriz-vector", conclusion_vista,
+                ("Propiedades verificadas" if datos["a_se_cumple"] and datos["b_se_cumple"]
+                 else "Comprobación no satisfecha", "success" if datos["a_se_cumple"] and datos["b_se_cumple"] else "warning"),
+                [("Matriz A", A)],
+                [("u", u), ("v", v)] + [(nombre, datos[clave]) for nombre, clave in (
+                    ("u + v", "a_u_mas_v"),
+                    ("Au", "a_Au"), ("Av", "a_Av"),
+                    ("A(u + v)", "a_A_por_u_mas_v"),
+                    ("Au + Av", "a_Au_mas_Av"), ("cu", "b_c_por_u"),
+                    ("A(cu)", "b_A_por_cu"), ("c(Au)", "b_c_por_Au"),
+                )],
+                texto,
+                (f"Dimensión de A: {len(A)} × {len(A[0])}; u, v ∈ R^{len(u)}; c = {formatear_valor(c)}",),
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+            ModuloPropiedades._mostrar_error_propiedades(self, error)
 
     def verificar_transposicion(self):
         """Calcula y compara los dos lados del teorema seleccionado."""
@@ -1372,6 +1665,29 @@ class ModuloPropiedades(ctk.CTkFrame):
             pasos, nombre_izq, lado_izq, nombre_der, lado_der, coincide = (
                 calcular_teorema_transposicion(teorema, A, B, c)
             )
+            def actualizar_vistas(procedimiento):
+                matrices_vista = [("Matriz A", A)]
+                if B is not None:
+                    matrices_vista.append(("Matriz B", B))
+                matrices_vista.extend((nombre, matriz) for nombre, matriz in pasos if matriz is not None)
+                for nombre, matriz in ((nombre_izq, lado_izq), (nombre_der, lado_der)):
+                    if isinstance(matriz, list) and nombre not in {n for n, _ in matrices_vista}:
+                        matrices_vista.append((nombre, matriz))
+                detalles = [f"Dimensión de A: {len(A)} × {len(A[0])}."]
+                if B is not None:
+                    detalles.append(f"Dimensión de B: {len(B)} × {len(B[0])}.")
+                if c is not None:
+                    detalles.append(f"Escalar c = {formatear_valor(c)}.")
+                ModuloPropiedades._actualizar_vistas_resultado(
+                    self, teorema, f"{nombre_izq} = {nombre_der}: "
+                    f"{'se cumple' if coincide else 'no se cumple'}",
+                    ("Igualdad verificada" if coincide else "Comprobación no satisfecha",
+                     "success" if coincide else "warning"),
+                    matrices_vista, [], procedimiento, detalles,
+                    [("Matriz A", A)] + ([ ("Matriz B", B) ] if B is not None else [])
+                    + ([(nombre_izq, lado_izq)] if isinstance(lado_izq, list) else [])
+                    + ([(nombre_der, lado_der)] if isinstance(lado_der, list) else []),
+                )
             if teorema == TEOREMAS_TRANSPOSICION[1]:
                 texto = "\n".join([
                     f"Verificación: {teorema}",
@@ -1389,6 +1705,7 @@ class ModuloPropiedades(ctk.CTkFrame):
                     f"{nombre_izq} = {nombre_der}: "
                     f"{'se cumple' if coincide else 'no se cumple'}",
                 )
+                actualizar_vistas(texto)
                 return
             if teorema == TEOREMAS_TRANSPOSICION[3]:
                 texto = "\n".join([
@@ -1407,6 +1724,7 @@ class ModuloPropiedades(ctk.CTkFrame):
                     f"{nombre_izq} = {nombre_der}: "
                     f"{'se cumple' if coincide else 'no se cumple'}",
                 )
+                actualizar_vistas(texto)
                 return
             lineas = [f"Verificación: {teorema}", "Matriz A:", formatear_matriz(A)]
             if B is not None:
@@ -1426,8 +1744,10 @@ class ModuloPropiedades(ctk.CTkFrame):
                 "\n".join(lineas),
                 f"{nombre_izq} = {nombre_der}: {'se cumple' if coincide else 'no se cumple'}",
             )
+            actualizar_vistas("\n".join(lineas))
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+            ModuloPropiedades._mostrar_error_propiedades(self, error)
 
     def verificar_inversa_determinante(self):
         """Calcula los dos lados y presenta las trazas del teorema elegido."""
@@ -1443,6 +1763,22 @@ class ModuloPropiedades(ctk.CTkFrame):
             pasos, nombre_izq, lado_izq, nombre_der, lado_der, coincide = (
                 calcular_teorema_inversa_determinante(teorema, A, B)
             )
+            matrices_vista = [("Matriz A", A)]
+            if B is not None:
+                matrices_vista.append(("Matriz B", B))
+            matrices_vista.extend(
+                (descripcion, estado) for descripcion, estado in pasos
+                if isinstance(estado, list)
+            )
+            for nombre, valor in ((nombre_izq, lado_izq), (nombre_der, lado_der)):
+                if isinstance(valor, list) and nombre not in {n for n, _ in matrices_vista}:
+                    matrices_vista.append((nombre, valor))
+            detalle = [f"Dimensión de A: {len(A)} × {len(A[0])}."]
+            if B is not None:
+                detalle.append(f"Dimensión de B: {len(B)} × {len(B[0])}.")
+            for nombre, valor in ((nombre_izq, lado_izq), (nombre_der, lado_der)):
+                if not isinstance(valor, list):
+                    detalle.append(f"{nombre} = {formatear_valor(valor)}.")
             lineas = [f"Verificación: {teorema}", "Matriz A:", formatear_matriz(A)]
             if B is not None:
                 lineas.extend(["Matriz B:", formatear_matriz(B)])
@@ -1466,8 +1802,19 @@ class ModuloPropiedades(ctk.CTkFrame):
                 "\n".join(lineas),
                 f"{nombre_izq} = {nombre_der}: {'se cumple' if coincide else 'no se cumple'}",
             )
+            ModuloPropiedades._actualizar_vistas_resultado(
+                self, teorema,
+                f"{nombre_izq} = {nombre_der}: {'se cumple' if coincide else 'no se cumple'}",
+                ("Igualdad verificada" if coincide else "Comprobación no satisfecha",
+                 "success" if coincide else "warning"),
+                matrices_vista, [], "\n".join(lineas), detalle,
+                [("Matriz A", A)] + ([ ("Matriz B", B) ] if B is not None else [])
+                + ([(nombre_izq, lado_izq)] if isinstance(lado_izq, list) else [])
+                + ([(nombre_der, lado_der)] if isinstance(lado_der, list) else []),
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
+            ModuloPropiedades._mostrar_error_propiedades(self, error)
 
     def cargar_ejemplo(self):
         """Carga A, u, v y c y verifica A(u + v) = Au + Av y A(cu) = c(Au)."""
@@ -1480,11 +1827,42 @@ class ModuloPropiedades(ctk.CTkFrame):
         self.verificar()
 
     def limpiar(self):
-        """Reinicia a cero la matriz, los vectores, el escalar y el resultado."""
-        reiniciar_celdas(self.entradas_A, self.entradas_u, self.entradas_v, [self.entry_c])
-        reiniciar_celdas(
+        """Restablece entradas, dimensiones, selectores y resultados del módulo."""
+        self._ocultar_vistas_resultado()
+
+        grupos_matrices = (
+            self.entradas_A,
+            self.entradas_u,
+            self.entradas_v,
             self.entradas_A_transposicion,
             self.entradas_B_transposicion,
-            [self.entries_dim_transposicion["at_c"]],
+            *self.entradas_producto.values(),
+            self.entradas_invertibilidad,
         )
+        reiniciar_celdas(*grupos_matrices)
+
+        campos = (
+            self.entry_m,
+            self.entry_n,
+            *self.entries_dim_transposicion.values(),
+            *self.entries_dim_producto.values(),
+            self.entry_orden_invertibilidad,
+            self.entry_c,
+        )
+        for entrada in campos:
+            entrada.delete(0, "end")
+            entrada.insert(0, "2")
+
+        self.teorema_transposicion_var.set(TEOREMAS_TRANSPOSICION[0])
+        self.teorema_inversa_determinante_var.set(TEOREMAS_INVERSA_DETERMINANTE[0])
+        self.teorema_producto_var.set(TEOREMAS_PRODUCTO[0])
+        self.pestanas_entrada.set("Linealidad")
+        self.pestanas_resultado.set("Resumen")
+
+        # Reconstruye solo las tablas dinámicas para que sus dimensiones
+        # coincidan con los campos restablecidos y todas queden en cero.
+        self.actualizar_entradas()
+        self._actualizar_matrices_transposicion()
+        self._actualizar_matrices_producto()
+        self._actualizar_matriz_invertibilidad()
         reemplazar_texto(self.resultado, "")

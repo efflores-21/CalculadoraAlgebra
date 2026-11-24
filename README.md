@@ -7,16 +7,39 @@ paso a paso cuando corresponde.
 
 ## Inicio rápido
 
-Solo requiere Python 3 instalado (desde python.org, que ya incluye Tkinter).
-Después de clonar el repositorio, ejecuta:
+Requiere Python 3, Tkinter y las dependencias indicadas en `requirements.txt`.
+Después de clonar el repositorio, abre una terminal en la raíz del proyecto.
+Puedes crear y activar un entorno virtual (opcional):
 
 ```text
+python -m venv .venv
+```
+
+Actívalo con el comando correspondiente a tu terminal:
+
+```text
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# Windows cmd.exe
+.venv\Scripts\activate.bat
+
+# Linux o macOS
+source .venv/bin/activate
+```
+
+Instala todas las dependencias declaradas y ejecuta la aplicación:
+
+```text
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-La primera vez, si la computadora no tiene CustomTkinter, `main.py` lo
-instala automáticamente con pip (necesita internet solo esa vez). También
-puede instalarse a mano con `pip install -r requirements.txt`.
+Para verificar el proyecto con sus pruebas:
+
+```text
+python -m unittest discover -s tests -v
+```
 
 El menú principal permite seleccionar un módulo. Este se muestra en la misma
 ventana y ofrece un botón para regresar al menú.

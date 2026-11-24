@@ -5,6 +5,8 @@ Unidad I, Sistemas de ecuaciones lineales [P1 · P2].
 Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
+import re
+
 import customtkinter as ctk
 
 from backend.clasificador import clasificar_sistema, columnas_pivote
@@ -13,6 +15,8 @@ from backend.matriz import formatear_valor, subindice
 from backend.matrices import invertir_gauss_jordan, resolver_cramer
 from backend.operaciones_matriciales import multiplicar_matriz_vector
 from modulos._comun import (
+    COLOR,
+    RADIO,
     llenar,
     Selector,
     boton_primario,
@@ -24,13 +28,52 @@ from modulos._comun import (
     formatear_expresion,
     formatear_matriz,
     formatear_vector,
+    fuente,
+    fuente_mono,
     leer_entero,
     leer_fraccion,
     mensaje_error,
     reemplazar_texto,
     reiniciar_celdas,
     subtitulo,
+    tarjeta,
 )
+
+
+ESTADOS_PRESENTACION = {
+    "unica": ("Solución única", "success", COLOR["ok"]),
+    "infinitas": ("Infinitas soluciones", "info", COLOR["paso"]),
+    "incompatible": ("Sistema incompatible · sin solución", "error", COLOR["mal"]),
+    "no_concluyente": ("Método no concluyente", "warning", COLOR["advertencia"]),
+}
+
+
+def _es_encabezado_resultado(linea):
+    """Reconoce encabezados ya presentes en la explicación del módulo."""
+    texto = linea.strip()
+    if not texto:
+        return False
+    if re.match(r"^Paso\s+\d+\s*:", texto, re.IGNORECASE):
+        return True
+    if texto.startswith(("VERIFICACIÓN", "VERIFICACION", "Clasificacion:", "Solución:",
+                         "Solución final:", "Solución x =", "Conclusión:")):
+        return True
+    letras = [caracter for caracter in texto if caracter.isalpha()]
+    return len(letras) >= 5 and not any(caracter.islower() for caracter in letras)
+
+
+def _organizar_secciones_resultado(texto):
+    """Agrupa el desarrollo por encabezados sin cambiar ni descartar líneas."""
+    secciones = []
+    actual = []
+    for linea in texto.split("\n"):
+        if _es_encabezado_resultado(linea) and actual:
+            secciones.append(tuple(actual))
+            actual = []
+        actual.append(linea)
+    if actual:
+        secciones.append(tuple(actual))
+    return tuple(secciones)
 
 
 def _resolver_por_matriz_inversa(matriz_a, vector_b):
@@ -332,6 +375,7 @@ class ModuloSistemas(ctk.CTkFrame):
                        "las columnas pivote, la solución y su verificación.",
         )
         self.resultado = zonas.resultado
+        self._inicializar_presentacion(zonas.resultado.master)
         contenido = zonas.contenido
 
         controles, entradas = crear_controles(
@@ -359,6 +403,182 @@ class ModuloSistemas(ctk.CTkFrame):
         boton_secundario(zonas.acciones, "Limpiar", self.limpiar, width=100, height=40).pack(
             side="left"
         )
+
+    def _inicializar_presentacion(self, panel):
+        """Prepara las vistas del resultado sin cambiar la salida textual fuente."""
+        self.resultado.respuesta.grid_remove()
+        self.presentacion = ctk.CTkTabview(
+            panel, fg_color=COLOR["tarjeta"], corner_radius=RADIO["md"],
+        )
+        self.presentacion.grid(
+            row=1, column=0, rowspan=2, sticky="nsew", padx=18, pady=(0, 18)
+        )
+        self.presentacion.grid_remove()
+        self.tab_resumen = self.presentacion.add("Resumen")
+        self.tab_datos = self.presentacion.add("Datos")
+        self.tab_procedimiento = self.presentacion.add("Procedimiento")
+
+    def _limpiar_resultado(self):
+        """Restaura la guía compartida cuando cambian los datos o se limpia."""
+        reemplazar_texto(self.resultado, "")
+        self.resultado.respuesta.grid_remove()
+        self.presentacion.grid_remove()
+
+    def _presentar_resultado(
+        self, texto, resumen, estado, metodo, matriz_a, vector_b,
+        solucion="", interpretacion="",
+    ):
+        """Muestra resumen, datos y desarrollo conservando la explicación original."""
+        reemplazar_texto(self.resultado, texto, resumen)
+        self.resultado.respuesta.grid_remove()
+        self.resultado.guia.grid_remove()
+        self._vaciar_vista(self.tab_resumen)
+        self._vaciar_vista(self.tab_datos)
+        self._vaciar_vista(self.tab_procedimiento)
+        self._construir_resumen(estado, metodo, len(matriz_a[0]), solucion, interpretacion)
+        self._construir_datos(matriz_a, vector_b)
+        self._construir_procedimiento(texto)
+        self.presentacion.set("Resumen")
+        self.presentacion.grid()
+
+    @staticmethod
+    def _vaciar_vista(vista):
+        for widget in vista.winfo_children():
+            widget.destroy()
+
+    def _construir_resumen(self, estado, metodo, variables, solucion, interpretacion):
+        nombre, _, color = ESTADOS_PRESENTACION[estado]
+        contenido = ctk.CTkScrollableFrame(self.tab_resumen, fg_color="transparent")
+        contenido.pack(fill="both", expand=True, padx=10, pady=10)
+        tarjeta_estado = tarjeta(contenido)
+        tarjeta_estado.pack(fill="x", pady=(0, 12))
+        tarjeta_estado.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            tarjeta_estado, text=nombre, font=fuente(18, negrita=True),
+            text_color=color, anchor="w", wraplength=430,
+        ).grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 6))
+        ctk.CTkLabel(
+            tarjeta_estado, text=interpretacion, font=fuente(13),
+            text_color=COLOR["texto"], anchor="w", justify="left", wraplength=430,
+        ).grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 14))
+        datos = ctk.CTkFrame(contenido, fg_color="transparent")
+        datos.pack(fill="x", pady=(0, 10))
+        datos.grid_columnconfigure((0, 1), weight=1, uniform="resumen_sistema")
+        for columna, titulo, valor in (
+            (0, "Método", metodo), (1, "Variables", str(variables)),
+        ):
+            bloque = tarjeta(datos)
+            bloque.grid(row=0, column=columna, sticky="nsew", padx=(0, 5) if columna == 0 else (5, 0))
+            etiqueta(bloque, titulo, tamano=11, color="gris").pack(anchor="w", padx=13, pady=(10, 2))
+            ctk.CTkLabel(
+                bloque, text=valor, font=fuente(14, negrita=True),
+                text_color=COLOR["texto"], anchor="w", wraplength=240,
+            ).pack(anchor="w", fill="x", padx=13, pady=(0, 10))
+        tarjeta_solucion = tarjeta(contenido)
+        tarjeta_solucion.pack(fill="x")
+        etiqueta(tarjeta_solucion, "Solución", tamano=12, negrita=True, color="gris").pack(
+            anchor="w", padx=14, pady=(12, 5)
+        )
+        valor_solucion = solucion or (
+            "El método seleccionado no determina una solución del sistema."
+        )
+        etiqueta_solucion = ctk.CTkLabel(
+            tarjeta_solucion, text=valor_solucion, font=fuente_mono(13),
+            text_color=COLOR["texto"], anchor="nw", justify="left", wraplength=470,
+        )
+        etiqueta_solucion.pack(fill="x", padx=14, pady=(0, 14))
+        tarjeta_solucion.bind(
+            "<Configure>",
+            lambda evento: etiqueta_solucion.configure(wraplength=max(180, evento.width - 32)),
+        )
+
+    def _crear_matriz_resultado(self, parent, titulo, texto, filas):
+        marco = tarjeta(parent)
+        marco.pack(fill="x", pady=(0, 10))
+        etiqueta(marco, titulo, tamano=13, negrita=True, color="texto").pack(
+            anchor="w", padx=13, pady=(10, 5)
+        )
+        caja = ctk.CTkTextbox(
+            marco, height=min(max(52, filas * 27 + 12), 220), wrap="word",
+            font=fuente_mono(13), fg_color=COLOR["suave"], text_color=COLOR["texto"],
+        )
+        caja.pack(fill="x", padx=10, pady=(0, 10))
+        caja.insert("1.0", texto)
+        caja.configure(state="disabled")
+
+    def _construir_datos(self, matriz_a, vector_b):
+        contenido = ctk.CTkScrollableFrame(self.tab_datos, fg_color="transparent")
+        contenido.pack(fill="both", expand=True, padx=10, pady=10)
+        etiqueta(
+            contenido,
+            f"Sistema de {len(matriz_a)} ecuaciones y {len(matriz_a[0])} variables",
+            tamano=13, color="gris",
+        ).pack(anchor="w", pady=(0, 10))
+        self._crear_matriz_resultado(
+            contenido, f"Matriz de coeficientes A · {len(matriz_a)} × {len(matriz_a[0])}",
+            formatear_matriz(matriz_a), len(matriz_a),
+        )
+        self._crear_matriz_resultado(
+            contenido, f"Vector independiente b · {len(vector_b)} componentes",
+            formatear_matriz([[valor] for valor in vector_b]), len(vector_b),
+        )
+
+    def _construir_procedimiento(self, texto):
+        contenido = ctk.CTkScrollableFrame(self.tab_procedimiento, fg_color="transparent")
+        contenido.pack(fill="both", expand=True, padx=10, pady=10)
+        for seccion in _organizar_secciones_resultado(texto):
+            encabezado = seccion[0].strip()
+            cuerpo = list(seccion[1:])
+            if not encabezado:
+                encabezado, cuerpo = "Desarrollo", seccion
+            color = COLOR["ok"] if encabezado.startswith("VERIFICACIÓN") else COLOR["paso"]
+            bloque = tarjeta(contenido)
+            bloque.pack(fill="x", pady=(0, 9))
+            etiqueta(bloque, encabezado, tamano=13, negrita=True, color="texto").pack(
+                anchor="w", padx=13, pady=(10, 7)
+            )
+            self._agregar_contenido_seccion(bloque, cuerpo, color)
+
+    def _agregar_contenido_seccion(self, parent, lineas, color):
+        """Envuelve texto explicativo y conserva las columnas de bloques matriciales."""
+        bloques = []
+        actual = []
+        tipo_actual = None
+        for linea in lineas:
+            tipo = "matriz" if linea.lstrip().startswith("[") else "texto"
+            if actual and tipo != tipo_actual:
+                bloques.append((tipo_actual, actual))
+                actual = []
+            tipo_actual = tipo
+            actual.append(linea)
+        if actual:
+            bloques.append((tipo_actual, actual))
+        for tipo, bloque_lineas in bloques:
+            texto = "\n".join(bloque_lineas).strip("\n")
+            if not texto:
+                continue
+            if tipo == "matriz":
+                caja = ctk.CTkTextbox(
+                    parent, height=min(max(42, len(bloque_lineas) * 25 + 10), 220),
+                    wrap="word", font=fuente_mono(12), fg_color=COLOR["suave"],
+                    text_color=COLOR["texto"],
+                )
+                caja.pack(fill="x", padx=10, pady=(0, 9))
+                caja.insert("1.0", texto)
+                caja.configure(state="disabled")
+            else:
+                etiqueta_texto = ctk.CTkLabel(
+                    parent, text=texto, font=fuente(13), text_color=COLOR["texto"],
+                    anchor="w", justify="left", wraplength=460,
+                )
+                etiqueta_texto.pack(fill="x", padx=13, pady=(0, 8))
+                parent.bind(
+                    "<Configure>",
+                    lambda evento, widget=etiqueta_texto: widget.configure(
+                        wraplength=max(180, evento.width - 30)
+                    ),
+                    add="+",
+                )
 
     def actualizar_entradas(self):
         """Valida m,n y construye las entradas que representan A y b."""
@@ -389,7 +609,7 @@ class ModuloSistemas(ctk.CTkFrame):
             entry_b.grid(row=i + 1, column=n, padx=(18, 3), pady=3)
             self.entradas_A.append(fila)
             self.entradas_b.append(entry_b)
-        reemplazar_texto(self.resultado, "")
+        self._limpiar_resultado()
 
     def resolver(self):
         """Resuelve A*x=b y muestra las operaciones de fila y clasificación."""
@@ -521,7 +741,26 @@ class ModuloSistemas(ctk.CTkFrame):
                 resumen = "Solución única:   " + ",   ".join(
                     f"x{subindice(j + 1)} = {formatear_valor(expresiones[j][0])}" for j in range(n)
                 )
-            reemplazar_texto(self.resultado, "\n".join(lineas) + "\n", resumen)
+            inicio_solucion = lineas.index("Solución:") if "Solución:" in lineas else None
+            fin_solucion = next(
+                (indice for indice, linea in enumerate(lineas)
+                 if indice > (inicio_solucion if inicio_solucion is not None else -1)
+                 and linea.startswith("VERIFICACIÓN")),
+                len(lineas),
+            )
+            solucion_vista = (
+                "\n".join(lineas[inicio_solucion:fin_solucion])
+                if inicio_solucion is not None else "El sistema no tiene solución."
+            )
+            estado_vista = {
+                "Consistente Determinado": "unica",
+                "Consistente Indeterminado": "infinitas",
+                "Inconsistente": "incompatible",
+            }[clase["tipo"]]
+            self._presentar_resultado(
+                "\n".join(lineas) + "\n", resumen, estado_vista, self.metodo.get(),
+                matriz_a, vector_b, solucion_vista, clase["descripcion"],
+            )
         except (ValueError, ZeroDivisionError) as error:
             mensaje_error(error)
 
@@ -541,10 +780,15 @@ class ModuloSistemas(ctk.CTkFrame):
                 "Si det(A) = 0, A es singular: sus filas o columnas son dependientes y no existe A⁻¹.",
                 "Por tanto, x = A⁻¹b no se puede usar para resolver este sistema.",
             ]
-            reemplazar_texto(
-                self.resultado,
+            self._presentar_resultado(
                 "\n".join(lineas) + "\n",
                 "A es singular: no tiene inversa.",
+                "no_concluyente", "Matriz inversa", matriz_a, vector_b,
+                interpretacion=(
+                    "El método de matriz inversa no aplica porque A es singular. "
+                    "Este resultado no determina si el sistema es incompatible "
+                    "o tiene infinitas soluciones."
+                ),
             )
             return
         lineas = [
@@ -691,11 +935,16 @@ class ModuloSistemas(ctk.CTkFrame):
                 "Como cada componente calculado coincide con el de b, "
                 "la solución satisface todas las ecuaciones del sistema."
             )
-        reemplazar_texto(
-            self.resultado,
+        solucion_texto = "Solución x = (" + ", ".join(
+            formatear_valor(v) for v in solucion
+        ) + ")"
+        self._presentar_resultado(
             "\n".join(lineas) + "\n",
             "Solución por matriz inversa: ("
             + ", ".join(formatear_valor(v) for v in solucion) + ")",
+            "unica", "Matriz inversa", matriz_a, vector_b, solucion_texto,
+            "A es invertible; x = A⁻¹b es la solución única del sistema. "
+            + ("La comprobación Ax = b se cumple." if cumple else "La comprobación Ax = b no se cumple."),
         )
 
     def _mostrar_cramer(self, matriz_a, vector_b):
@@ -731,10 +980,14 @@ class ModuloSistemas(ctk.CTkFrame):
                 "D = 0: la regla de Cramer no determina una solución única y no se puede dividir entre D.",
                 "El sistema puede ser incompatible o tener infinitas soluciones; este cálculo no distingue esos casos.",
             ])
-            reemplazar_texto(
-                self.resultado,
+            self._presentar_resultado(
                 "\n".join(lineas) + "\n",
                 "D = 0: Cramer no determina una solución única.",
+                "no_concluyente", "Cramer", matriz_a, vector_b,
+                interpretacion=(
+                    "Como det(A) = 0, la regla de Cramer no clasifica el sistema. "
+                    "Puede ser incompatible o tener infinitas soluciones."
+                ),
             )
             return
 
@@ -789,10 +1042,16 @@ class ModuloSistemas(ctk.CTkFrame):
             "Conclusión: la solución satisface todas las ecuaciones originales."
             if cumple else "Conclusión: la solución no satisface todas las ecuaciones originales."
         )
-        reemplazar_texto(
-            self.resultado,
+        self._presentar_resultado(
             "\n".join(lineas) + "\n",
             "Solución única por Cramer: " + ",  ".join(valores_x),
+            "unica", "Cramer", matriz_a, vector_b,
+            "Solución final: (" + ", ".join(
+                formatear_valor(valor) for valor in datos["solucion"]
+            ) + ")",
+            "Cramer entrega una solución única. "
+            + ("La sustitución en las ecuaciones originales se cumple." if cumple
+               else "La sustitución en las ecuaciones originales no se cumple."),
         )
 
     def _verificar_solucion(self, matriz_a, vector_b, expresiones, libres):
@@ -848,4 +1107,4 @@ class ModuloSistemas(ctk.CTkFrame):
     def limpiar(self):
         """Reinicia a cero los coeficientes y términos independientes."""
         reiniciar_celdas(self.entradas_A, self.entradas_b)
-        reemplazar_texto(self.resultado, "")
+        self._limpiar_resultado()

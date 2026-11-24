@@ -13,7 +13,13 @@ from backend.metodos_iterativos import (
     solucion_referencia,
 )
 from modulos._comun import MARCAS
-from modulos.modulo_iterativos import CASOS, resumen, texto_resultado
+from modulos.modulo_iterativos import (
+    CASOS,
+    _texto_iteraciones,
+    _texto_procedimiento,
+    resumen,
+    texto_resultado,
+)
 
 A1 = [[10, -1, 2, 0], [-1, 11, -1, 3], [2, -1, 10, -1], [0, 3, -1, 8]]
 B1 = [6, 25, -11, 15]
@@ -107,6 +113,23 @@ class JacobiGaussSeidel(unittest.TestCase):
         self.assertEqual(len(CASOS), 3)
         self.assertEqual(MARCAS["iterativos"], "P8")
         self.assertIn("iterativos", [clave for clave, *_ in main.MODULOS])
+
+    def test_vistas_de_iteraciones_muestran_trayectoria_error_y_estado_reales(self):
+        datos = resolver(A1, B1, [0, 0, 0, 0], 1e-6, 100)
+        for metodo in ("jacobi", "gauss_seidel"):
+            with self.subTest(metodo=metodo):
+                texto = _texto_iteraciones(datos, metodo)
+                self.assertIn("error por iteración", texto.lower())
+                self.assertIn("Convergencia alcanzada", texto)
+                self.assertIn("Residuo final ||Ax − b||∞", texto)
+                self.assertIn(str(datos[metodo]["tabla"][-1]["k"]), texto)
+
+    def test_procedimiento_explica_diferencia_y_terminacion(self):
+        datos = resolver(A1, B1, [0, 0, 0, 0], 1e-6, 100)
+        texto = _texto_procedimiento(datos)
+        self.assertIn("exclusivamente x de la iteración anterior", texto)
+        self.assertIn("se usa de inmediato", texto)
+        self.assertIn("error ||x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾||∞ ≤ ε", texto)
 
 
 if __name__ == "__main__":

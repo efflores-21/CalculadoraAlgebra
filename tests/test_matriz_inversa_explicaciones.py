@@ -13,7 +13,11 @@ from modulos.modulo_sistemas import ModuloSistemas, _resolver_por_matriz_inversa
 class ExplicacionesMatrizInversa(unittest.TestCase):
     def presentar(self, A, b):
         with patch("modulos.modulo_sistemas.reemplazar_texto") as reemplazar:
-            ModuloSistemas._mostrar_inversa(SimpleNamespace(resultado=object()), A, b)
+            instancia = SimpleNamespace(resultado=object())
+            instancia._presentar_resultado = lambda texto, resumen, estado, metodo, matriz, vector, *extra, **kwargs: reemplazar(
+                instancia.resultado, texto, resumen
+            )
+            ModuloSistemas._mostrar_inversa(instancia, A, b)
         return reemplazar.call_args.args[1]
 
     def test_singularidad_se_explica_y_no_intenta_formar_la_solucion(self):

@@ -17,6 +17,7 @@ from backend.metodos_iterativos import MAX_ITERACIONES, resolver
 from modulos._comun import (
     COLOR,
     Selector,
+    TarjetaResultado,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -24,6 +25,7 @@ from modulos._comun import (
     entrada_numero,
     etiqueta,
     formatear_matriz,
+    fuente_mono,
     leer_entero,
     leer_fraccion,
     llenar,
@@ -228,6 +230,38 @@ def resumen(datos):
     return "   ·   ".join(partes)
 
 
+def _texto_iteraciones(datos, metodo):
+    """Presenta la trayectoria real de un método en su propia vista."""
+    resultado = datos[metodo]
+    lineas = [f"MÉTODO DE {NOMBRES[metodo].upper()}",
+              "Error por iteración: ||x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾||∞",
+              "", *_tabla(datos, resultado), "",
+              f"Estado: {_estado(resultado, datos['tolerancia'])}"]
+    if resultado["residuo"] is not None:
+        lineas.append(f"Residuo final ||Ax − b||∞ = {resultado['residuo']:.3e}")
+    return "\n".join(lineas)
+
+
+def _texto_procedimiento(datos):
+    """Explica las reglas de actualización aplicadas con los datos ingresados."""
+    lineas = _texto_validaciones(datos) + [""]
+    for metodo in ("jacobi", "gauss_seidel"):
+        if metodo == "jacobi":
+            idea = "Todos los componentes nuevos usan exclusivamente x de la iteración anterior."
+            formula = "xᵢ⁽ᵏ⁺¹⁾ = (bᵢ − Σⱼ≠ᵢ aᵢⱼ xⱼ⁽ᵏ⁾) / aᵢᵢ"
+        else:
+            idea = "Cada componente nuevo se usa de inmediato en las ecuaciones siguientes."
+            formula = "xᵢ⁽ᵏ⁺¹⁾ = (bᵢ − Σⱼ<ᵢ aᵢⱼ xⱼ⁽ᵏ⁺¹⁾ − Σⱼ>ᵢ aᵢⱼ xⱼ⁽ᵏ⁾) / aᵢᵢ"
+        lineas += [f"{NOMBRES[metodo].upper()}", idea, formula,
+                   "Iteración 1 sustituida con los valores ingresados:",
+                   *_formula_primer_paso(datos, metodo), "",
+                   f"Terminación: error ||x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾||∞ ≤ ε = {_num(datos['tolerancia'])}; "
+                   "si no se cumple, se continúa hasta el máximo o hasta detectar divergencia.", ""]
+    lineas += ["COMPROBACIÓN", "El residuo ||Ax − b||∞ mide cuánto satisface cada aproximación el sistema.",
+               "La referencia se obtiene con Gauss-Jordan cuando existe solución única."]
+    return "\n".join(lineas)
+
+
 class ModuloIterativos(ctk.CTkFrame):
     """Panel para resolver Ax = b con Jacobi y Gauss-Seidel y compararlos."""
 
@@ -257,6 +291,7 @@ class ModuloIterativos(ctk.CTkFrame):
                        "la validación con Gauss-Jordan.",
         )
         self.resultado = zonas.resultado
+        self._crear_vistas_resultado()
         contenido = zonas.contenido
         controles, entradas = crear_controles(
             contenido,
@@ -331,7 +366,95 @@ class ModuloIterativos(ctk.CTkFrame):
             return
         self.ultimo = datos
         reemplazar_texto(self.resultado, texto_resultado(datos), resumen(datos))
+        self._actualizar_vistas_resultado(datos)
+        self.resultado.grid_remove()
+        self.vistas_resultado.grid()
         self.dibujar_grafica()
+
+    def _crear_vistas_resultado(self):
+        """Sustituye la salida larga por vistas enfocadas, locales a este módulo."""
+        padre = self.resultado.master
+        self.resultado.grid_remove()
+        self.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+        self.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.vistas_resultado.grid_remove()
+        self.vistas_resultado.grid_columnconfigure(0, weight=1)
+        self.vistas_resultado.grid_rowconfigure(0, weight=1)
+        self.pestanas = ctk.CTkTabview(
+            self.vistas_resultado, fg_color=COLOR["suave"],
+            segmented_button_fg_color=COLOR["tarjeta"],
+            segmented_button_selected_color=COLOR["acento"],
+            segmented_button_selected_hover_color=COLOR["hover"],
+            segmented_button_unselected_color=COLOR["tarjeta"],
+            text_color=COLOR["texto"],
+        )
+        self.pestanas.grid(row=0, column=0, sticky="nsew")
+        for nombre in ("Resumen", "Jacobi", "Gauss-Seidel", "Procedimiento"):
+            self.pestanas.add(nombre)
+        resumen_tab = self.pestanas.tab("Resumen")
+        resumen_tab.grid_columnconfigure((0, 1), weight=1, uniform="metodos")
+        self.tarjetas_metodo = {}
+        for columna, metodo in enumerate(("jacobi", "gauss_seidel")):
+            tarjeta = TarjetaResultado(resumen_tab, NOMBRES[metodo], "—", "Aún sin resolver")
+            tarjeta.grid(row=0, column=columna, sticky="nsew", padx=8, pady=(8, 14))
+            self.tarjetas_metodo[metodo] = tarjeta
+        etiqueta(resumen_tab, "Comparación basada en las iteraciones y métricas observadas", negrita=True).grid(
+            row=1, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 2))
+        self.caja_comparacion = self._crear_caja_resultado(resumen_tab)
+        self.caja_comparacion.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=8, pady=(4, 8))
+        resumen_tab.grid_rowconfigure(2, weight=1)
+        self.cajas_iteraciones = {
+            metodo: self._crear_caja_resultado(self.pestanas.tab(nombre))
+            for metodo, nombre in (("jacobi", "Jacobi"), ("gauss_seidel", "Gauss-Seidel"))
+        }
+        for caja in self.cajas_iteraciones.values():
+            caja.pack(fill="both", expand=True, padx=8, pady=8)
+        self.caja_procedimiento = self._crear_caja_resultado(self.pestanas.tab("Procedimiento"))
+        self.caja_procedimiento.pack(fill="both", expand=True, padx=8, pady=8)
+        # El botón compartido "Cómo usar" se enlaza a la guía de esta pantalla y
+        # también oculta la vista local, sin alterar el helper global.
+        pendientes = list(self.winfo_children())
+        while pendientes:
+            widget = pendientes.pop()
+            pendientes.extend(widget.winfo_children())
+            if isinstance(widget, ctk.CTkButton) and str(widget.cget("text")).startswith("?  Cómo usar"):
+                widget.configure(command=self.mostrar_guia)
+                break
+
+    @staticmethod
+    def _crear_caja_resultado(parent):
+        caja = ctk.CTkTextbox(
+            parent, font=fuente_mono(12), wrap="none",
+            fg_color=COLOR["tarjeta"], text_color=COLOR["texto"],
+            border_width=1, border_color=COLOR["borde"], corner_radius=10,
+        )
+        return caja
+
+    @staticmethod
+    def _escribir_caja(caja, texto):
+        caja.configure(state="normal")
+        caja.delete("1.0", "end")
+        caja.insert("1.0", texto)
+        caja.configure(state="disabled")
+
+    def _actualizar_vistas_resultado(self, datos):
+        for metodo in ("jacobi", "gauss_seidel"):
+            resultado = datos[metodo]
+            detalle = (f"{resultado['iteraciones']} iteraciones · error final "
+                       f"{_num(resultado['tabla'][-1]['error'] if resultado['tabla'] else None)}\n"
+                       f"Residuo ||Ax − b||∞: {_num(resultado['residuo'])}")
+            estado = ("Convergió", "ok") if resultado["estado"] == "converge" else (
+                "Divergió", "mal") if resultado["estado"] == "diverge" else ("Máximo alcanzado", "warning")
+            self.tarjetas_metodo[metodo].actualizar(_vector(resultado["x"]), detalle, estado)
+            self._escribir_caja(self.cajas_iteraciones[metodo], _texto_iteraciones(datos, metodo))
+        comparacion = _texto_comparacion(datos)
+        self._escribir_caja(self.caja_comparacion, "\n".join(comparacion))
+        self._escribir_caja(self.caja_procedimiento, _texto_procedimiento(datos))
+
+    def mostrar_guia(self):
+        """Vuelve a la guía de uso y oculta las vistas del último cálculo."""
+        self.vistas_resultado.grid_remove()
+        reemplazar_texto(self.resultado, "")
 
     def dibujar_grafica(self):
         """Error (escala logarítmica) contra el número de iteración, para ambos métodos."""
@@ -395,5 +518,6 @@ class ModuloIterativos(ctk.CTkFrame):
         """Pone las celdas en cero y borra el resultado y la gráfica."""
         reiniciar_celdas(self.entradas_A, self.entradas_b, self.entradas_x0)
         self.ultimo = None
+        self.vistas_resultado.grid_remove()
         self.dibujar_grafica()
         reemplazar_texto(self.resultado, "")

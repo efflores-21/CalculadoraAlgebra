@@ -11,6 +11,11 @@ import customtkinter as ctk
 from backend.matriz import formatear_valor, subindice
 from backend.transformaciones import analizar, aplicar, esta_en_imagen, verificar_linealidad
 from modulos._comun import (
+    COLOR,
+    MarcoDesplazable,
+    Panel,
+    TarjetaResultado,
+    fuente_mono,
     boton_primario,
     boton_secundario,
     crear_controles,
@@ -27,6 +32,70 @@ from modulos._comun import (
     reiniciar_celdas,
     subtitulo,
 )
+
+
+def _crear_vistas_resultado(modulo):
+    padre = modulo.resultado.master
+    modulo.vistas_resultado = ctk.CTkFrame(padre, fg_color="transparent")
+    modulo.vistas_resultado.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+    modulo.vistas_resultado.grid_remove()
+    modulo.vistas_resultado.grid_columnconfigure(0, weight=1)
+    modulo.vistas_resultado.grid_rowconfigure(0, weight=1)
+    modulo.pestanas_resultado = ctk.CTkTabview(modulo.vistas_resultado, fg_color=COLOR["suave"],
+        segmented_button_fg_color=COLOR["tarjeta"], segmented_button_selected_color=COLOR["acento"],
+        segmented_button_selected_hover_color=COLOR["hover"],
+        segmented_button_unselected_color=COLOR["tarjeta"], text_color=COLOR["texto"])
+    modulo.pestanas_resultado.grid(row=0, column=0, sticky="nsew")
+    for nombre in ("Resumen", "Datos", "Procedimiento"):
+        modulo.pestanas_resultado.add(nombre)
+    modulo.tab_resumen, modulo.tab_datos, modulo.tab_procedimiento = (
+        modulo.pestanas_resultado.tab(nombre) for nombre in ("Resumen", "Datos", "Procedimiento"))
+    for tab in (modulo.tab_resumen, modulo.tab_datos, modulo.tab_procedimiento):
+        tab.grid_columnconfigure(0, weight=1)
+    modulo.tab_resumen.grid_rowconfigure(1, weight=1)
+    modulo.tab_datos.grid_rowconfigure(0, weight=1)
+    modulo.tab_procedimiento.grid_rowconfigure(0, weight=1)
+    modulo.caja_procedimiento = ctk.CTkTextbox(modulo.tab_procedimiento, font=fuente_mono(12), wrap="word",
+        fg_color=COLOR["tarjeta"], text_color=COLOR["texto"], border_width=1,
+        border_color=COLOR["borde"], corner_radius=10)
+    modulo.caja_procedimiento.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+
+def _mostrar_resultado(modulo, texto, resumen, A, u, v, b):
+    reemplazar_texto(modulo.resultado, texto, resumen)
+    if not hasattr(modulo, "vistas_resultado"):
+        return
+    for tab in (modulo.tab_resumen, modulo.tab_datos):
+        for widget in tab.winfo_children():
+            widget.destroy()
+    tarjeta = TarjetaResultado(modulo.tab_resumen, "Transformación lineal T(x) = A·x", resumen,
+        "Incluye las comprobaciones calculadas para las entradas y dimensiones indicadas.", estado="verificado")
+    tarjeta.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+    datos = MarcoDesplazable(modulo.tab_datos, color=COLOR["tarjeta"])
+    datos.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    panel = Panel(datos.interior, titulo="Vectores y entradas")
+    panel.pack(fill="x", padx=8, pady=6)
+    for nombre, vector in (("u", u), ("v", v), ("b", b)):
+        ctk.CTkLabel(panel.contenido, text=f"{nombre} = ({' , '.join(map(str, vector))})",
+            font=fuente_mono(12), text_color=COLOR["texto"], anchor="w").pack(anchor="w", padx=8, pady=3)
+    matriz = Panel(datos.interior, titulo="Matriz A", descripcion=f"{len(A)} × {len(A[0])}")
+    matriz.pack(fill="x", padx=8, pady=6)
+    grilla = ctk.CTkFrame(matriz.contenido, fg_color="transparent")
+    grilla.pack(anchor="w")
+    for i, fila in enumerate(A):
+        for j, valor in enumerate(fila):
+            ctk.CTkLabel(grilla, text=str(valor), width=72, height=32, font=fuente_mono(12),
+                fg_color=COLOR["suave"], text_color=COLOR["texto"]).grid(row=i, column=j, padx=2, pady=2)
+    modulo.caja_procedimiento.configure(state="normal")
+    modulo.caja_procedimiento.delete("1.0", "end")
+    modulo.caja_procedimiento.insert("1.0", texto)
+    modulo.caja_procedimiento.configure(state="disabled")
+    modulo.vistas_resultado.grid()
+
+
+def _ocultar_vistas_resultado(modulo):
+    if hasattr(modulo, "vistas_resultado"):
+        modulo.vistas_resultado.grid_remove()
 
 
 def _r(n):
@@ -219,6 +288,7 @@ class ModuloTransformaciones(ctk.CTkFrame):
             indicacion="Aquí verás cada parte explicada paso a paso, con su comprobación.",
         )
         self.resultado = zonas.resultado
+        _crear_vistas_resultado(self)
         controles, entradas = crear_controles(
             zonas.contenido,
             [("m", "Filas m", "2", 80), ("n", "Columnas n", "3", 90), ("c", "Escalar c", "2", 80, False)],
@@ -256,6 +326,7 @@ class ModuloTransformaciones(ctk.CTkFrame):
             for columna, nombre, tamano in ((0, "u", n), (1, "v", n), (2, "b", m))
         )
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)
 
     @staticmethod
     def _celda(marco, fila, columna):
@@ -296,7 +367,7 @@ class ModuloTransformaciones(ctk.CTkFrame):
             lineas.extend(seccion + [""])
         resumen = (f"{'Lineal ✓' if lineal else 'No lineal'}   ·   rango = {datos['rango']}   ·   "
                    f"nulidad = {datos['nulidad']}   ·   {datos['rango']} + {datos['nulidad']} = {n}")
-        reemplazar_texto(self.resultado, "\n".join(lineas), resumen)
+        _mostrar_resultado(self, "\n".join(lineas), resumen, A, u, v, b)
 
     def cargar_ejemplo(self):
         """Carga T: ℝ⁴ → ℝ³ con rango 2 y nulidad 2, y la analiza."""
@@ -313,3 +384,4 @@ class ModuloTransformaciones(ctk.CTkFrame):
         """Pone todas las celdas en cero y borra el resultado."""
         reiniciar_celdas(self.entradas_A, self.entradas_u, self.entradas_v, self.entradas_b)
         reemplazar_texto(self.resultado, "")
+        _ocultar_vistas_resultado(self)

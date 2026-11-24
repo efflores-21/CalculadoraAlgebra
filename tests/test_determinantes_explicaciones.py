@@ -13,6 +13,8 @@ from modulos.modulo_determinantes import (
     _texto_pasos_cofactores,
     _texto_sarrus,
     _texto_traza_triangular,
+    _interpretacion_determinante,
+    _metodos_determinante,
 )
 from modulos.modulo_matrices import ModuloMatrices
 
@@ -26,6 +28,20 @@ class Celda:
 
 
 class ExplicacionesDeterminantes(unittest.TestCase):
+    def test_interpretacion_y_metodos_presentados_corresponden_al_resultado_real(self):
+        self.assertIn("singular", _interpretacion_determinante(Fraction(0)))
+        self.assertIn("dependientes", _interpretacion_determinante(Fraction(0)))
+        self.assertIn("invertible", _interpretacion_determinante(Fraction(3)))
+        self.assertIn("independientes", _interpretacion_determinante(Fraction(3)))
+        self.assertEqual(_metodos_determinante(2), [
+            "Triangulación (método principal)",
+            "Expansión recursiva por cofactores (comprobación)",
+        ])
+        self.assertIn("Regla de Sarrus (comprobación)", _metodos_determinante(3))
+        self.assertEqual(_metodos_determinante(LIMITE_COFACTORES + 1), [
+            "Triangulación (método principal)",
+        ])
+
     def presentar_modulo_determinantes(self, matriz):
         modulo = SimpleNamespace(
             entradas=[[Celda(valor) for valor in fila] for fila in matriz],
