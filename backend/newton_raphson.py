@@ -3,7 +3,11 @@
 import ast
 import math
 
-import sympy as sp
+try:
+    import sympy as sp
+except ImportError:
+    # Sin SymPy la calculadora debe abrir igual: solo Newton-Raphson queda sin derivadas.
+    sp = None
 
 from backend.funciones import compilar_funcion
 
@@ -63,6 +67,9 @@ def _a_simpy(nodo, x):
 
 def preparar_funcion(expresion):
     """Valida f(x), deriva simbólicamente y devuelve expresiones y evaluadores."""
+    if sp is None:
+        raise ValueError("Newton-Raphson necesita la librería SymPy para derivar f(x) y no está instalada. "
+                         "Instálala con:  py -m pip install sympy  y vuelve a abrir la calculadora.")
     funcion = compilar_funcion(expresion)
     x = sp.Symbol("x", real=True)
     try:

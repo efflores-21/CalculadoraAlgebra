@@ -11,6 +11,14 @@ from tkinter import TclError
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
+def _instalar(paquete):
+    """Instala un paquete con pip; sin permisos de administrador, en la carpeta del usuario."""
+    comando = [sys.executable, "-m", "pip", "install", paquete]
+    if subprocess.call(comando) != 0:
+        subprocess.call(comando + ["--user"])
+    importlib.invalidate_caches()
+
+
 def _asegurar_customtkinter():
     """Instala CustomTkinter con pip la primera vez, si hace falta."""
     try:
@@ -19,10 +27,7 @@ def _asegurar_customtkinter():
     except ImportError:
         pass
     print("CustomTkinter no está instalado. Instalándolo (solo la primera vez)...")
-    comando = [sys.executable, "-m", "pip", "install", "customtkinter"]
-    if subprocess.call(comando) != 0:
-        subprocess.call(comando + ["--user"])
-    importlib.invalidate_caches()
+    _instalar("customtkinter")
     try:
         importlib.import_module("customtkinter")
     except ImportError:
@@ -42,7 +47,17 @@ def _asegurar_customtkinter():
         sys.exit(1)
 
 
+def _asegurar_sympy():
+    """Instala SymPy la primera vez; si no se puede, solo Newton-Raphson queda sin derivadas."""
+    try:
+        importlib.import_module("sympy")
+    except ImportError:
+        print("SymPy no está instalado. Instalándolo (solo la primera vez)...")
+        _instalar("sympy>=1.14,<2")
+
+
 _asegurar_customtkinter()
+_asegurar_sympy()
 
 import customtkinter as ctk  # noqa: E402
 
