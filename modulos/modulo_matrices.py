@@ -3,13 +3,15 @@ Pantalla del Módulo III: Álgebra de matrices.
 
 Unidad II, Álgebra de matrices [P3 · P5 · P6]:
 opciones 1–4 (suma, resta, escalar, producto) [P3]; opciones 5–8 (transpuesta,
-determinante, inversa por Gauss-Jordan y por adjunta) [P5]; opción 9 (verificador) [P6].
+determinante, inversa por Gauss-Jordan y por adjunta) [P5]; opción 9 (verificador) [P6];
+opción 10 (clasificación REF/RREF).
 Autores: Grupo 6 (Franklin Callejas, Daniella Rocha, Elías Flores, Daris Mayorga, Yaritza Reyes).
 """
 
 import customtkinter as ctk
 
 from backend.eliminacion import eliminacion_con_pasos
+from backend.clasificador_forma_escalonada import clasificar_forma_escalonada
 from backend.matrices import (
     determinante_cofactores,
     determinante_triangular,
@@ -30,6 +32,7 @@ from backend.operaciones_matriciales import (
 from backend.verificador import verificar_propiedades_matrices
 from modulos._comun import (
     COLOR,
+    ESPACIADO,
     MarcoDesplazable,
     Panel,
     TarjetaResultado,
@@ -92,7 +95,16 @@ _NOMBRES_OPERACION = {
     "inversa": "Inversa por Gauss-Jordan",
     "adjunta": "Inversa por adjunta",
     "propiedades": "Verificador de propiedades",
+    "clasificar": "Clasificador REF / RREF",
 }
+
+_OPERACIONES_BOTON = (
+    ("1. Suma", "suma"), ("2. Resta", "resta"), ("3. Escalar", "escalar"),
+    ("4. Producto", "producto"), ("5. Transpuesta", "transpuesta"),
+    ("6. Determinante", "determinante"), ("7. Inversa G-J", "inversa"),
+    ("8. Inversa adjunta", "adjunta"), ("9. Verificador", "propiedades"),
+    ("10. Clasificar matriz (REF / RREF)", "clasificar"),
+)
 
 
 def _nombres_datos_operacion(operacion):
@@ -104,8 +116,67 @@ def _nombres_datos_operacion(operacion):
     return ("A",)
 
 
+def _texto_clasificacion_ref_rref(datos):
+    """Prepara un procedimiento breve y explícito para la clasificación REF/RREF."""
+    if datos["es_rref"]:
+        resumen = "A está en forma escalonada reducida por filas (RREF)."
+    elif datos["es_ref"]:
+        resumen = "A está en REF, pero no en RREF."
+    else:
+        resumen = "A no está en REF y, por tanto, tampoco está en RREF."
+
+    posiciones = datos["posiciones_pivote"]
+    pivotes = (
+        "; ".join(
+            f"({pivote['fila']}, {pivote['columna']}) = {formatear_valor(pivote['valor'])}"
+            for pivote in posiciones
+        )
+        if posiciones else "No hay pivotes (la matriz es completamente nula)."
+    )
+    filas_nulas = ", ".join(map(str, datos["filas_nulas"])) or "ninguna"
+
+    def estado(codigo):
+        condicion = datos["condiciones"][codigo]
+        marca = "✓ Cumple" if condicion["cumple"] else "✗ No cumple"
+        return f"  {marca}: {condicion['explicacion']}"
+
+    lineas = [
+        "CLASIFICACIÓN DE LA MATRIZ A",
+        f"Dimensiones: {datos['filas']} × {datos['columnas']}",
+        f"Número de pivotes: {datos['numero_pivotes']}",
+        f"Resultado REF: {'Sí' if datos['es_ref'] else 'No'}",
+        f"Resultado RREF: {'Sí' if datos['es_rref'] else 'No'}",
+        f"Posiciones y valores de los pivotes (fila, columna): {pivotes}",
+        "Columnas pivote (numeración desde 1): " + (
+            ", ".join(str(pivote["columna"]) for pivote in posiciones) or "ninguna"
+        ),
+        f"Filas nulas (numeración desde 1): {filas_nulas}",
+        "",
+        "VERIFICACIÓN REF",
+        estado("filas_nulas_al_final"),
+        estado("pivotes_avanzan_derecha"),
+        estado("ceros_debajo_pivotes"),
+        "",
+        "VERIFICACIÓN RREF",
+        estado("cumple_ref"),
+        estado("pivotes_iguales_a_uno"),
+        estado("pivotes_unicos_en_columna"),
+        "",
+        "Conclusión: " + datos["conclusion"],
+    ]
+    return lineas, resumen
+
+
+def _ajustar_wrap_tarjeta_clasificador(evento, tarjeta):
+    """Ajusta ambas etiquetas al ancho real de la tarjeta, respetando su padding."""
+    escala = ctk.ScalingTracker.get_widget_scaling(tarjeta)
+    ancho = max(int(evento.width / escala) - 2 * ESPACIADO["md"], 180)
+    tarjeta.valor.configure(wraplength=ancho)
+    tarjeta.detalle.configure(wraplength=ancho)
+
+
 class ModuloMatrices(ctk.CTkFrame):
-    """Panel del Módulo III con las nueve operaciones del menú y los teoremas clave."""
+    """Panel del Módulo III con operaciones matriciales, clasificación y teoremas clave."""
 
     def __init__(self, master, on_back):
         """Construye la pantalla con A, B y C de 2 × 2."""
@@ -184,21 +255,18 @@ class ModuloMatrices(ctk.CTkFrame):
             boton_secundario(fila, texto, accion, width=ancho, height=30).pack(side="left", padx=(0, 5))
 
     def _crear_botones(self, acciones):
-        """Botones 1 a 9, 0 y Limpiar, en tres columnas para no tapar las tablas."""
+        """Botones de operaciones, teoremas y limpieza en tres columnas."""
         acciones.grid_columnconfigure((0, 1, 2), weight=1, uniform="ops")
-        operaciones = [
-            ("1. Suma", "suma"), ("2. Resta", "resta"), ("3. Escalar", "escalar"),
-            ("4. Producto", "producto"), ("5. Transpuesta", "transpuesta"), ("6. Determinante", "determinante"),
-            ("7. Inversa G-J", "inversa"), ("8. Inversa adjunta", "adjunta"), ("9. Verificador", "propiedades"),
-        ]
-        for indice, (texto, operacion) in enumerate(operaciones):
+        for indice, (texto, operacion) in enumerate(_OPERACIONES_BOTON):
             boton_primario(acciones, texto, lambda op=operacion: self.calcular(op), height=32).grid(
-                row=indice // 3, column=indice % 3, sticky="ew", padx=(0 if indice % 3 == 0 else 6, 0), pady=(0, 5)
+                row=indice // 3, column=indice % 3,
+                columnspan=3 if operacion == "clasificar" else 1,
+                sticky="ew", padx=(0 if indice % 3 == 0 else 6, 0), pady=(0, 5)
             )
         boton_secundario(acciones, "0. Teoremas clave", self._ver_teoremas, height=30).grid(
-            row=3, column=0, columnspan=2, sticky="ew")
+            row=4, column=0, columnspan=2, sticky="ew")
         boton_secundario(acciones, "Limpiar", self.limpiar, height=30).grid(
-            row=3, column=2, sticky="ew", padx=(6, 0))
+            row=4, column=2, sticky="ew", padx=(6, 0))
 
     def _ver_teoremas(self):
         """Opción 0: abre los teoremas clave del módulo."""
@@ -244,6 +312,7 @@ class ModuloMatrices(ctk.CTkFrame):
             "producto": self._producto, "transpuesta": self._transpuesta,
             "determinante": self._determinante, "inversa": self._inversa_gauss_jordan,
             "adjunta": self._inversa_adjunta, "propiedades": self._verificador,
+            "clasificar": self._clasificar,
         }
         self.ultima_matriz_resultado = None
         try:
@@ -342,6 +411,12 @@ class ModuloMatrices(ctk.CTkFrame):
                 self.tab_resumen, "Resultado principal", resumen,
                 "El procedimiento y las condiciones aplicables están en la pestaña Procedimiento.",
             )
+            if operacion == "clasificar":
+                tarjeta.bind(
+                    "<Configure>",
+                    lambda evento, destino=tarjeta: _ajustar_wrap_tarjeta_clasificador(evento, destino),
+                    add="+",
+                )
             tarjeta.grid(row=1, column=0, sticky="ew", padx=8, pady=6)
         if operacion == "escalar":
             detalle = f"Escalar utilizado: k = {formatear_valor(leer_fraccion(self.entry_escalar, 'el escalar k'))}"
@@ -560,6 +635,11 @@ class ModuloMatrices(ctk.CTkFrame):
         no_aplican = sum(len(p) for _, p in categorias) - evaluadas
         resumen = f"Se cumplen {cumplen} de {evaluadas} propiedades evaluadas"
         return lineas, resumen + (f"   ·   {no_aplican} no aplican" if no_aplican else "")
+
+    def _clasificar(self, A):
+        """Opción 10: analiza las condiciones de forma escalonada y reducida."""
+        datos = clasificar_forma_escalonada(A)
+        return _texto_clasificacion_ref_rref(datos)
 
     def cargar_ejemplo(self):
         """Carga A, B y C de 2 × 2 y calcula A · B; las demás opciones usan los mismos datos."""

@@ -16,6 +16,9 @@ from backend.errores_numericos import (
 from backend.graficador import muestrear_funcion
 from backend.newton_raphson import resolver_newton_raphson
 from backend.notacion_posicional import binario_a_decimal, decimal_a_binario, descomponer_decimal
+from backend.funciones import identificar_variables
+from backend.propagacion_errores import propagar_errores
+from backend.series_maclaurin import MAX_TERMINOS_MACLAURIN, calcular_maclaurin
 from modulos._comun import (
     COLOR,
     Panel,
@@ -184,6 +187,65 @@ def _texto_procedimiento_newton(datos, indice):
     return "\n".join(lineas)
 
 
+def _texto_terminos_maclaurin(datos):
+    """Presenta los datos de cada término sin omitir coeficientes nulos."""
+    lineas = ["n | Derivada | Derivada en 0 | Factorial | Coeficiente | Término"]
+    for termino in datos["terminos"]:
+        lineas.extend((
+            f"n = {termino['orden']}",
+            f"Derivada: {termino['derivada']}",
+            f"Derivada en 0: {termino['derivada_en_cero']}",
+            f"Factorial: {termino['orden']}! = {termino['factorial']}",
+            f"Coeficiente: {termino['derivada_en_cero']} / {termino['factorial']} = {termino['coeficiente']}",
+            f"Término: {termino['termino']}",
+            "",
+        ))
+    return "\n".join(lineas)
+
+
+def _texto_procedimiento_maclaurin(datos):
+    """Construye una explicación basada solo en valores entregados por el backend."""
+    lineas = [
+        "Fórmula general: f(x) = Σ[n=0..∞] (f⁽ⁿ⁾(0) / n!) xⁿ",
+        f"Función: f(x) = {datos['expresion']}",
+        f"Se usan N = {datos['numero_terminos']} términos; el orden máximo incluido es N − 1 = {datos['numero_terminos'] - 1}.",
+    ]
+    for termino in datos["terminos"]:
+        n = termino["orden"]
+        lineas.extend((
+            f"\nOrden n = {n}",
+            f"f⁽{n}⁾(x) = {termino['derivada']}",
+            f"f⁽{n}⁾(0) = {termino['derivada_en_cero']}",
+            f"Coeficiente = f⁽{n}⁾(0) / {n}! = {termino['derivada_en_cero']} / {termino['factorial']} = {termino['coeficiente']}",
+            f"Término = {termino['coeficiente']}·x^{n} = {termino['termino']}",
+        ))
+    lineas.extend((
+        f"\nPolinomio: P_{datos['numero_terminos']}(x) = {datos['polinomio']}",
+        f"Sustitución: P_{datos['numero_terminos']}({datos['x']:.12g}) = {datos['aproximacion']:.12g}",
+    ))
+    if datos["valor_real"] is not None:
+        lineas.append(f"Valor de la función: f({datos['x']:.12g}) = {datos['valor_real']:.12g}")
+        if datos["error_absoluto"] is not None:
+            lineas.append(
+                f"Error absoluto = |f(x) − P_N(x)| = {datos['error_absoluto']:.12g}"
+            )
+        if datos["aviso_error"]:
+            lineas.append(datos["aviso_error"])
+        elif datos["error_relativo_porcentual"] is None:
+            lineas.append("Error relativo porcentual: no definido porque f(x) = 0.")
+        elif datos["error_absoluto"] is not None:
+            lineas.append(
+                "Error relativo porcentual = error absoluto / |f(x)| × 100 = "
+                f"{datos['error_relativo_porcentual']:.12g}%"
+            )
+    elif datos["aviso_evaluacion"]:
+        lineas.append(datos["aviso_evaluacion"])
+    if datos["aviso_convergencia"]:
+        lineas.append(datos["aviso_convergencia"])
+    lineas.append("\n" + datos["nota_convergencia"])
+    return "\n".join(lineas)
+
+
 class ModuloMetodosNumericos(ctk.CTkFrame):
     """Agrupa las actividades de métodos numéricos en pestañas de una misma pantalla."""
 
@@ -207,17 +269,18 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             lambda: mostrar_teoremas(self, "metodos_numericos", "Métodos numéricos"),
         ).pack(side="right")
         boton_texto(barra, "? Cómo usar", self.mostrar_guia, width=110).pack(side="right", padx=8)
-        etiqueta(self, "Bisección · Graficador · Notación posicional · Errores numéricos · Newton-Raphson", tamano=14).pack(
+        etiqueta(self, "Bisección · Graficador · Notación posicional · Errores numéricos · Newton-Raphson · Maclaurin", tamano=14).pack(
             anchor="w", padx=34, pady=(0, 8))
         self.pestanas = ctk.CTkTabview(self, fg_color=COLOR["tarjeta"])
         self.pestanas.pack(fill="both", expand=True, padx=24, pady=(4, 20))
-        for nombre in ("Bisección", "Graficador", "Notación posicional", "Errores numéricos", "Newton-Raphson"):
+        for nombre in ("Bisección", "Graficador", "Notación posicional", "Errores numéricos", "Newton-Raphson", "Series de Maclaurin"):
             self.pestanas.add(nombre)
         self._crear_biseccion(self.pestanas.tab("Bisección"))
         self._crear_graficador(self.pestanas.tab("Graficador"))
         self._crear_notacion(self.pestanas.tab("Notación posicional"))
         self._crear_errores(self.pestanas.tab("Errores numéricos"))
         self._crear_newton_raphson(self.pestanas.tab("Newton-Raphson"))
+        self._crear_maclaurin(self.pestanas.tab("Series de Maclaurin"))
 
     @staticmethod
     def _entrada(parent, titulo, inicial, ancho=150):
@@ -1106,6 +1169,12 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         caja = ctk.CTkTextbox(ventana, wrap="word", font=ctk.CTkFont(size=14))
         caja.pack(fill="both", expand=True, padx=18, pady=18)
         texto = (
+            "SERIES DE MACLAURIN\n"
+            "Introduce f(x), el punto x y una cantidad de términos entre 1 y "
+            f"{MAX_TERMINOS_MACLAURIN}. El desarrollo se centra en cero; con N términos, "
+            "el mayor orden es N−1. Usa ** para potencias y funciones permitidas como sin(x), "
+            "cos(x), exp(x) y log(x). El resultado es un polinomio truncado: la convergencia "
+            "depende de la función y del punto evaluado.\n\n"
             "BISECCIÓN\n"
             "Escribe f(x), a<b, tolerancia absoluta positiva y un máximo de iteraciones. "
             "Usa ** para potencias. La fila k registra sus extremos antes de actualizar. "
@@ -1127,6 +1196,152 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         )
         caja.insert("1.0", texto)
         caja.configure(state="disabled")
+
+    def _crear_maclaurin(self, parent):
+        """Añade el formulario y las vistas de resultados al conjunto de métodos numéricos."""
+        marco = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        marco.pack(fill="both", expand=True, padx=10, pady=10)
+        marco.grid_columnconfigure(0, weight=1)
+        etiqueta(marco, "Serie de Maclaurin", tamano=19, negrita=True, color="texto").grid(
+            row=0, column=0, sticky="w", padx=6, pady=(2, 0)
+        )
+        etiqueta(
+            marco,
+            "Aproxima f(x) con sus derivadas evaluadas en cero. Usa ** para potencias y funciones de la sintaxis segura.",
+            tamano=12, color="gris", anchor="w", justify="left", wraplength=900,
+        ).grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 10))
+        entrada = Panel(marco, titulo="Datos de entrada", descripcion="N cuenta los términos desde n = 0.")
+        entrada.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        fila_funcion = ctk.CTkFrame(entrada.contenido, fg_color="transparent")
+        fila_funcion.pack(anchor="w", padx=8)
+        self.mac_expr = self._entrada(fila_funcion, "Función f(x)", "exp(x)", 320)
+        self.mac_x = self._entrada(fila_funcion, "Valor de x", "1", 130)
+        self.mac_n = self._entrada(fila_funcion, "Cantidad de términos N", "5", 170)
+        fila_botones = ctk.CTkFrame(entrada.contenido, fg_color="transparent")
+        fila_botones.pack(anchor="w", padx=8, pady=(0, 6))
+        boton_primario(fila_botones, "Calcular", self.calcular_maclaurin, width=120).pack(side="left", padx=(0, 6))
+        boton_secundario(fila_botones, "Ejemplo", self.ejemplo_maclaurin, width=100).pack(side="left", padx=(0, 6))
+        boton_secundario(fila_botones, "Limpiar", self.limpiar_maclaurin, width=100).pack(side="left")
+        self.mac_estado = ctk.CTkLabel(
+            marco, text="Introduce una función para obtener su desarrollo.",
+            text_color=COLOR["gris"], anchor="w", justify="left", font=ctk.CTkFont(size=13),
+        )
+        self.mac_estado.grid(row=3, column=0, sticky="ew", padx=10, pady=4)
+        self.mac_resultado = ctk.CTkFrame(marco, fg_color="transparent")
+        self.mac_resultado.grid(row=4, column=0, sticky="nsew", padx=6, pady=(2, 10))
+
+    def _vaciar_resultado_maclaurin(self):
+        for widget in self.mac_resultado.winfo_children():
+            widget.destroy()
+
+    def ejemplo_maclaurin(self):
+        for campo, valor in ((self.mac_expr, "exp(x)"), (self.mac_x, "1"), (self.mac_n, "5")):
+            campo.delete(0, "end")
+            campo.insert(0, valor)
+        self._vaciar_resultado_maclaurin()
+        self.mac_estado.configure(text="Ejemplo cargado. Pulsa Calcular para ver el desarrollo.",
+                                  text_color=COLOR["gris"])
+
+    def limpiar_maclaurin(self):
+        for campo, valor in ((self.mac_expr, ""), (self.mac_x, "0"), (self.mac_n, "5")):
+            campo.delete(0, "end")
+            if valor:
+                campo.insert(0, valor)
+        self._vaciar_resultado_maclaurin()
+        self.mac_estado.configure(text="Formulario limpiado.", text_color=COLOR["gris"])
+
+    def calcular_maclaurin(self):
+        self._vaciar_resultado_maclaurin()
+        try:
+            expresion = self.mac_expr.get().strip()
+            if not expresion:
+                raise ValueError("Escribe una función matemática en f(x).")
+            x = _leer_real(self.mac_x.get(), "El valor de x")
+            numero_terminos = _leer_entero(self.mac_n.get(), "La cantidad de términos")
+            datos = calcular_maclaurin(expresion, x, numero_terminos)
+        except (ValueError, OverflowError) as error:
+            self.mac_estado.configure(text="Datos inválidos o función no evaluable en cero.",
+                                      text_color=COLOR["mal"])
+            self._mostrar_error(error)
+            return
+        self._mostrar_resultado_maclaurin(datos)
+
+    def _mostrar_resultado_maclaurin(self, datos):
+        self.mac_estado.configure(
+            text=f"Polinomio P_{datos['numero_terminos']} calculado en x = {_formatear_numero(datos['x'])}.",
+            text_color=COLOR["ok"],
+        )
+        selector = ctk.CTkSegmentedButton(
+            self.mac_resultado, values=("Resumen", "Términos", "Procedimiento"),
+            command=self._cambiar_vista_maclaurin,
+        )
+        selector.pack(pady=(0, 5))
+        area = ctk.CTkFrame(self.mac_resultado, fg_color="transparent")
+        area.pack(fill="both", expand=True)
+        area.grid_rowconfigure(0, weight=1)
+        area.grid_columnconfigure(0, weight=1)
+        textos = {
+            "Resumen": self._resumen_maclaurin(datos),
+            "Términos": _texto_terminos_maclaurin(datos),
+            "Procedimiento": _texto_procedimiento_maclaurin(datos),
+        }
+        self.mac_paneles_vista = {}
+        for nombre, texto in textos.items():
+            panel = ctk.CTkFrame(area, fg_color="transparent")
+            panel.grid(row=0, column=0, sticky="nsew")
+            caja = ctk.CTkTextbox(
+                panel, wrap="word", font=fuente_mono(12), fg_color=COLOR["suave"],
+                text_color=COLOR["texto"], border_width=1, border_color=COLOR["borde"], corner_radius=10,
+            )
+            caja.pack(fill="both", expand=True, padx=4, pady=4)
+            caja.insert("1.0", texto)
+            caja.configure(state="disabled")
+            self.mac_paneles_vista[nombre] = panel
+        selector.configure(command=self._cambiar_vista_maclaurin)
+        selector.set("Resumen")
+        self.mac_selector_vista = selector
+        self._cambiar_vista_maclaurin("Resumen")
+
+    @staticmethod
+    def _resumen_maclaurin(datos):
+        lineas = [
+            f"Función: f(x) = {datos['expresion']}",
+            f"Términos: N = {datos['numero_terminos']} (órdenes 0 a {datos['numero_terminos'] - 1})",
+            f"Evaluación: x = {_formatear_numero(datos['x'])}",
+            f"Polinomio: P_{datos['numero_terminos']}(x) = {datos['polinomio']}",
+            f"Aproximación: P_N(x) = {_formatear_numero(datos['aproximacion'])}",
+        ]
+        if datos["valor_real"] is None:
+            lineas.append(datos["aviso_evaluacion"])
+        else:
+            lineas.extend((
+                f"Valor real de la función: f(x) = {_formatear_numero(datos['valor_real'])}",
+                f"Error absoluto: {_formatear_numero(datos['error_absoluto'])}",
+                "Error relativo porcentual: " + (
+                    datos["aviso_error"] if datos["aviso_error"] else
+                    "no definido porque el valor real es cero."
+                    if datos["error_relativo_porcentual"] is None else
+                    f"{_formatear_numero(datos['error_relativo_porcentual'])}%"
+                ),
+            ))
+            if datos["error_absoluto"] == 0:
+                lineas.append("Conclusión: el polinomio coincide con f(x) en el punto evaluado.")
+            elif datos["error_absoluto"] is not None:
+                lineas.append(
+                    "Conclusión: el polinomio truncado difiere de f(x) en el punto evaluado; "
+                    "la diferencia depende de la función, x y N."
+                )
+            else:
+                lineas.append("Conclusión: no fue posible cuantificar el error dentro del rango numérico finito.")
+        lineas.extend(("", datos["nota_convergencia"]))
+        if datos["aviso_convergencia"]:
+            lineas.insert(-1, datos["aviso_convergencia"])
+        return "\n".join(lineas)
+
+    def _cambiar_vista_maclaurin(self, nombre):
+        panel = getattr(self, "mac_paneles_vista", {}).get(nombre)
+        if panel is not None:
+            panel.tkraise()
 
     def _crear_graficador(self, parent):
         marco = ctk.CTkFrame(parent, fg_color="transparent")
@@ -1467,17 +1682,47 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
         self.e_resultado.contenido.grid_remove()
 
         panel_propagacion = Panel(
-            marco, titulo="Propagación de error · f(x) = sin(x) + x²",
-            descripcion="Compara el cambio real de la función con la aproximación lineal usando x en radianes y la perturbación Δx.",
+            marco, titulo="Propagación general de errores",
+            descripcion="Introduce una función y una incertidumbre absoluta para cada variable; selecciona error máximo o incertidumbre estadística. Para una variable, especifica su Perturbación Δx.",
         )
         panel_propagacion.grid(row=5, column=0, sticky="ew", padx=5, pady=5)
         entrada_propagacion = panel_propagacion.contenido
-        entrada_propagacion.grid_columnconfigure((0, 1), weight=1, uniform="propagacion_campos")
-        self.e_x = self._campo_error(entrada_propagacion, "x (radianes)", "0.5", 0)
-        self.e_dx = self._campo_error(entrada_propagacion, "Perturbación Δx", "0.01", 1)
-        boton_secundario(entrada_propagacion, "Calcular propagación", self.calcular_propagacion).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        entrada_propagacion.grid_columnconfigure((0, 1, 2), weight=1, uniform="propagacion_general")
+        etiqueta(entrada_propagacion, "Función f(variables)", tamano=11, color="gris").grid(
+            row=0, column=0, sticky="w", padx=5, pady=(3, 0)
         )
+        self.pe_funcion = ctk.CTkEntry(entrada_propagacion, height=36, font=fuente_mono(13))
+        self.pe_funcion.insert(0, "sin(x) + x**2")
+        self.pe_funcion.grid(row=1, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 5))
+        etiqueta(entrada_propagacion, "Método de propagación", tamano=11, color="gris").grid(
+            row=2, column=0, sticky="w", padx=5, pady=(2, 0)
+        )
+        self.pe_selector_metodo = ctk.CTkSegmentedButton(
+            entrada_propagacion, values=("Error máximo", "Incertidumbre estadística")
+        )
+        self.pe_selector_metodo.grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=(3, 7))
+        self.pe_selector_metodo.set("Error máximo")
+        self.pe_estado_variables = ctk.CTkLabel(
+            entrada_propagacion, text="", text_color=COLOR["gris"], anchor="w", justify="left",
+            font=ctk.CTkFont(size=11),
+        )
+        self.pe_estado_variables.grid(row=4, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 3))
+        self.pe_marco_variables = ctk.CTkFrame(entrada_propagacion, fg_color="transparent")
+        self.pe_marco_variables.grid(row=5, column=0, columnspan=3, sticky="ew", padx=2)
+        for columna in range(3):
+            self.pe_marco_variables.grid_columnconfigure(columna, weight=1, uniform="campos_variable")
+        self.pe_campos_variables = {}
+        self.pe_funcion.bind("<KeyRelease>", self._actualizar_campos_propagacion, add="+")
+        self._actualizar_campos_propagacion()
+        fila_botones_propagacion = ctk.CTkFrame(entrada_propagacion, fg_color="transparent")
+        fila_botones_propagacion.grid(row=6, column=0, columnspan=3, sticky="w", padx=5, pady=(5, 2))
+        boton_primario(fila_botones_propagacion, "Calcular propagación", self.calcular_propagacion_general).pack(
+            side="left", padx=(0, 6)
+        )
+        boton_secundario(fila_botones_propagacion, "Ejemplo", self.ejemplo_propagacion_general).pack(
+            side="left", padx=(0, 6)
+        )
+        boton_secundario(fila_botones_propagacion, "Limpiar", self.limpiar_propagacion_general).pack(side="left")
         self.e_resultado_propagacion = Panel(
             marco, titulo="Resultados de propagación",
             descripcion="Cambios observados y linealización calculada para los datos ingresados.",
@@ -1571,6 +1816,228 @@ class ModuloMetodosNumericos(ctk.CTkFrame):
             )
         self._procedimiento_error(contenido, "Desarrollo de la propagación", texto, 2, 3)
         contenido.grid()
+
+    def _actualizar_campos_propagacion(self, _evento=None):
+        """Sincroniza campos con variables de una expresión válida y conserva valores coincidentes."""
+        expresion = self.pe_funcion.get().strip()
+        try:
+            variables = identificar_variables(expresion)
+        except ValueError as error:
+            self.pe_estado_variables.configure(
+                text=f"Completa una expresión válida para actualizar las variables. {error}",
+                text_color=COLOR["advertencia"],
+            )
+            return False
+        anteriores = {
+            nombre: {clave: campo.get() for clave, campo in campos.items()}
+            for nombre, campos in self.pe_campos_variables.items()
+        }
+        for widget in self.pe_marco_variables.winfo_children():
+            widget.destroy()
+        self.pe_campos_variables = {}
+        for columna, titulo in enumerate(("Variable", "Valor", "Incertidumbre absoluta")):
+            etiqueta(self.pe_marco_variables, titulo, tamano=11, negrita=True, color="texto").grid(
+                row=0, column=columna, sticky="w", padx=5, pady=(2, 4)
+            )
+        for fila, nombre in enumerate(variables, start=1):
+            etiqueta(self.pe_marco_variables, nombre, tamano=12, color="texto").grid(
+                row=fila, column=0, sticky="w", padx=5, pady=3
+            )
+            valor = ctk.CTkEntry(self.pe_marco_variables, height=32, font=fuente_mono(12))
+            delta = ctk.CTkEntry(self.pe_marco_variables, height=32, font=fuente_mono(12))
+            valor_inicial, delta_inicial = ("0.5", "0.01") if nombre == "x" else ("0", "0.01")
+            valor.insert(0, anteriores.get(nombre, {}).get("valor", valor_inicial))
+            delta.insert(0, anteriores.get(nombre, {}).get("incertidumbre", delta_inicial))
+            valor.grid(row=fila, column=1, sticky="ew", padx=5, pady=3)
+            delta.grid(row=fila, column=2, sticky="ew", padx=5, pady=3)
+            self.pe_campos_variables[nombre] = {"valor": valor, "incertidumbre": delta}
+        self.pe_estado_variables.configure(
+            text=(f"Variables detectadas: {', '.join(variables)}." if variables else
+                  "La expresión es constante; no requiere valores ni incertidumbres."),
+            text_color=COLOR["gris"],
+        )
+        return True
+
+    def ejemplo_propagacion_general(self):
+        self.pe_funcion.delete(0, "end")
+        self.pe_funcion.insert(0, "x**2*y + 3*y")
+        self._actualizar_campos_propagacion()
+        for nombre, valor, delta in (("x", "2", "0.1"), ("y", "3", "0.2")):
+            campos = self.pe_campos_variables.get(nombre)
+            if campos:
+                campos["valor"].delete(0, "end")
+                campos["valor"].insert(0, valor)
+                campos["incertidumbre"].delete(0, "end")
+                campos["incertidumbre"].insert(0, delta)
+        self._limpiar_resultado_propagacion_general()
+
+    def limpiar_propagacion_general(self):
+        self.pe_funcion.delete(0, "end")
+        for widget in self.pe_marco_variables.winfo_children():
+            widget.destroy()
+        self.pe_campos_variables = {}
+        self.pe_selector_metodo.set("Error máximo")
+        self.pe_estado_variables.configure(text="Formulario limpiado.", text_color=COLOR["gris"])
+        self._limpiar_resultado_propagacion_general()
+
+    def _limpiar_resultado_propagacion_general(self):
+        self._limpiar_panel_error(self.e_resultado_propagacion)
+
+    def calcular_propagacion_general(self):
+        """Valida entradas por variable y muestra ambas estimaciones de propagación."""
+        try:
+            if not self._actualizar_campos_propagacion():
+                raise ValueError("Corrige la función antes de calcular.")
+            valores = {
+                nombre: campos["valor"].get()
+                for nombre, campos in self.pe_campos_variables.items()
+            }
+            incertidumbres = {
+                nombre: campos["incertidumbre"].get()
+                for nombre, campos in self.pe_campos_variables.items()
+            }
+            seleccion = self.pe_selector_metodo.get()
+            metodo = "estadistico" if seleccion == "Incertidumbre estadística" else "maximo"
+            datos = propagar_errores(self.pe_funcion.get(), valores, incertidumbres, metodo)
+        except (ValueError, OverflowError) as error:
+            self.pe_estado_variables.configure(text="No se pudo calcular la propagación.", text_color=COLOR["mal"])
+            self._mostrar_error(error)
+            return
+        self._mostrar_resultado_propagacion_general(datos)
+
+    def _mostrar_resultado_propagacion_general(self, datos):
+        self.pe_estado_variables.configure(
+            text=f"Cálculo completado con el método: {datos['nombre_metodo']}.",
+            text_color=COLOR["ok"],
+        )
+        contenido = self.e_resultado_propagacion.contenido
+        self._limpiar_panel_error(self.e_resultado_propagacion)
+        selector = ctk.CTkSegmentedButton(
+            contenido,
+            values=("Resumen", "Datos", "Procedimiento", "Contribuciones"),
+            command=self._cambiar_vista_propagacion_general,
+        )
+        selector.grid(row=0, column=0, columnspan=3, pady=(2, 7))
+        area = ctk.CTkFrame(contenido, fg_color="transparent")
+        area.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=4, pady=3)
+        contenido.grid_rowconfigure(1, weight=1)
+        contenido.grid_columnconfigure(0, weight=1)
+        textos = {
+            "Resumen": self._resumen_propagacion_general(datos),
+            "Datos": self._datos_propagacion_general(datos),
+            "Procedimiento": self._procedimiento_propagacion_general(datos),
+            "Contribuciones": self._contribuciones_propagacion_general(datos),
+        }
+        self.pe_paneles_resultado = {}
+        area.grid_rowconfigure(0, weight=1)
+        area.grid_columnconfigure(0, weight=1)
+        for nombre, texto in textos.items():
+            panel = ctk.CTkFrame(area, fg_color="transparent")
+            panel.grid(row=0, column=0, sticky="nsew")
+            caja = ctk.CTkTextbox(
+                panel, height=190, wrap="word", font=fuente_mono(12),
+                fg_color=COLOR["suave"], text_color=COLOR["texto"],
+                border_width=1, border_color=COLOR["borde"], corner_radius=10,
+            )
+            caja.pack(fill="both", expand=True, padx=4, pady=4)
+            caja.insert("1.0", texto)
+            caja.configure(state="disabled")
+            self.pe_paneles_resultado[nombre] = panel
+        self.pe_selector_resultado = selector
+        selector.set("Resumen")
+        self._cambiar_vista_propagacion_general("Resumen")
+        contenido.grid()
+
+    def _cambiar_vista_propagacion_general(self, nombre):
+        panel = getattr(self, "pe_paneles_resultado", {}).get(nombre)
+        if panel is not None:
+            panel.tkraise()
+
+    @staticmethod
+    def _resumen_propagacion_general(datos):
+        inferior, superior = datos["intervalo"]
+        relativa = ("No definida porque f = 0." if datos["error_relativo_porcentual"] is None
+                    else f"{datos['error_relativo_porcentual']:.10g}%")
+        variables_texto = ", ".join(
+            "{}={:.10g} ± {:.10g}".format(
+                nombre, datos["valores"][nombre], datos["incertidumbres"][nombre]
+            )
+            for nombre in datos["variables"]
+        ) or "ninguna"
+        return "\n".join((
+            f"Función: f = {datos['expresion']}",
+            f"Variables: {variables_texto}",
+            f"Método: {datos['nombre_metodo']}",
+            f"Valor de la función: f = {_formatear_numero(datos['valor_funcion'])}",
+            f"Error máximo de primer orden: {_formatear_numero(datos['error_maximo'])}",
+            f"Incertidumbre estadística: {_formatear_numero(datos['incertidumbre_estadistica'])}",
+            f"Resultado: f ≈ {_formatear_numero(datos['valor_funcion'])} ± {_formatear_numero(datos['incertidumbre_resultado'])}",
+            f"Intervalo aproximado: [{_formatear_numero(inferior)}, {_formatear_numero(superior)}]",
+            f"Error relativo porcentual del método seleccionado: {relativa}",
+            "Conclusión: estimación lineal de primer orden; el intervalo no es un intervalo de confianza.",
+            datos["interpretacion"],
+        ))
+
+    @staticmethod
+    def _datos_propagacion_general(datos):
+        lineas = [f"Función: f = {datos['expresion']}", f"Método: {datos['nombre_metodo']}"]
+        lineas.extend(
+            f"{nombre} = {_formatear_numero(datos['valores'][nombre])} ± "
+            f"{_formatear_numero(datos['incertidumbres'][nombre])}"
+            for nombre in datos["variables"]
+        )
+        return "\n".join(lineas)
+
+    @staticmethod
+    def _procedimiento_propagacion_general(datos):
+        lineas = [
+            "Fórmula de error máximo: Δf ≈ Σ |∂f/∂xᵢ| Δxᵢ",
+            "Fórmula estadística (variables independientes): σf ≈ √Σ (∂f/∂xᵢ · σxᵢ)²",
+            f"Función original: f = {datos['expresion']}",
+        ]
+        expresion_sustituida = datos["expresion"]
+        for nombre in datos["variables"]:
+            valor = datos["valores"][nombre]
+            delta = datos["incertidumbres"][nombre]
+            expresion_sustituida = re.sub(
+                rf"\b{re.escape(nombre)}\b", f"({valor:.10g})", expresion_sustituida
+            )
+            lineas.append(f"{nombre} = {valor:.10g}; incertidumbre absoluta = {delta:.10g}")
+        lineas.append(f"Sustitución en f: {expresion_sustituida} = {_formatear_numero(datos['valor_funcion'])}")
+        for fila in datos["contribuciones"]:
+            nombre = fila["variable"]
+            lineas.extend((
+                f"\n∂f/∂{nombre} = {fila['derivada']}",
+                f"Evaluación en los datos = {fila['derivada_evaluada']:.10g}",
+                f"Contribución máxima = |{fila['derivada_evaluada']:.10g}|·{fila['incertidumbre']:.10g} = {fila['contribucion_maxima']:.10g}",
+                f"Contribución estadística = |{fila['derivada_evaluada']:.10g}|·{fila['incertidumbre']:.10g} = {fila['contribucion_estadistica']:.10g}",
+            ))
+        if datos["metodo"] == "maximo":
+            suma = " + ".join(f"{fila['contribucion_maxima']:.10g}" for fila in datos["contribuciones"]) or "0"
+            lineas.append(f"\nΔf ≈ Σ contribuciones = {suma} = {datos['error_maximo']:.10g}")
+        else:
+            suma = " + ".join(f"({fila['contribucion_estadistica']:.10g})²" for fila in datos["contribuciones"]) or "0"
+            lineas.append(f"\nσf ≈ √({suma}) = {datos['incertidumbre_estadistica']:.10g}")
+        lineas.append(
+            f"Resultado: {_formatear_numero(datos['valor_funcion'])} ± "
+            f"{_formatear_numero(datos['incertidumbre_resultado'])}"
+        )
+        lineas.append(datos["interpretacion"])
+        return "\n".join(lineas)
+
+    @staticmethod
+    def _contribuciones_propagacion_general(datos):
+        lineas = ["Variable | Valor | Incertidumbre | Derivada parcial | Evaluada | Error máx. | Estadística"]
+        for fila in datos["contribuciones"]:
+            lineas.extend((
+                f"{fila['variable']} = {fila['valor']:.10g} ± {fila['incertidumbre']:.10g}",
+                f"  ∂f/∂{fila['variable']} = {fila['derivada']}",
+                f"  Evaluada = {fila['derivada_evaluada']:.10g}",
+                f"  Contribución máx. = {fila['contribucion_maxima']:.10g}",
+                f"  Contribución estadística = {fila['contribucion_estadistica']:.10g}",
+                "",
+            ))
+        return "\n".join(lineas)
 
     @staticmethod
     def _procedimiento_error(parent, titulo, texto, fila, columnas):
